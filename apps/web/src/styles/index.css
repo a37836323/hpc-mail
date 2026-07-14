@@ -1,0 +1,122 @@
+@import 'tailwindcss';
+
+/* HPC Mail 设计系统「Graphite + Indigo」——浅色单主题。
+   颜色/圆角/阴影/字体的唯一真源。业务 JSX 只引语义令牌，禁任意色值。 */
+@theme {
+  --font-sans:
+    'PingFang SC', 'HarmonyOS Sans SC', 'Noto Sans SC', 'Segoe UI', system-ui,
+    -apple-system, 'Microsoft YaHei', sans-serif;
+  --font-mono:
+    ui-monospace, 'SFMono-Regular', 'SF Mono', 'Menlo', 'Consolas',
+    'Liberation Mono', monospace;
+
+  /* 中性 */
+  --color-canvas: oklch(97.8% 0.002 247);
+  --color-surface: oklch(100% 0 0);
+  --color-surface-hover: oklch(96.6% 0.003 247);
+  --color-surface-active: oklch(94.4% 0.005 247);
+
+  /* 文字 */
+  --color-ink: oklch(22% 0.012 260);
+  --color-ink-secondary: oklch(45% 0.012 260);
+  --color-ink-tertiary: oklch(60% 0.01 260);
+
+  /* 线 */
+  --color-line: oklch(92% 0.004 260);
+  --color-line-strong: oklch(85% 0.006 260);
+
+  /* 品牌靛蓝 */
+  --color-accent: oklch(50% 0.19 268);
+  --color-accent-hover: oklch(44% 0.19 268);
+  --color-accent-soft: oklch(95% 0.03 268);
+  --color-on-accent: oklch(100% 0 0);
+  --color-focus: oklch(55% 0.19 268);
+
+  /* 语义状态 */
+  --color-positive: oklch(56% 0.13 155);
+  --color-positive-soft: oklch(95% 0.04 155);
+  --color-caution: oklch(64% 0.13 70);
+  --color-caution-soft: oklch(96% 0.05 80);
+  --color-critical: oklch(55% 0.2 25);
+  --color-critical-soft: oklch(96% 0.03 25);
+
+  /* 验证码高亮（琥珀系，产品第一场景专用） */
+  --color-otp-bg: oklch(97% 0.045 82);
+  --color-otp-border: oklch(84% 0.1 78);
+  --color-otp-ink: oklch(45% 0.11 66);
+
+  /* 遮罩 */
+  --color-scrim: oklch(22% 0.02 260 / 0.45);
+
+  /* 圆角四档 */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+
+  /* 阴影三档（低调） */
+  --shadow-xs: 0 1px 2px oklch(22% 0.02 260 / 0.06), 0 1px 1px oklch(22% 0.02 260 / 0.04);
+  --shadow-md: 0 4px 14px oklch(22% 0.02 260 / 0.1);
+  --shadow-lg: 0 18px 48px oklch(22% 0.02 260 / 0.18);
+
+  /* 动效 */
+  --ease-out: cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html {
+    color-scheme: light;
+    min-width: 320px;
+    background: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100dvh;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+    color: inherit;
+  }
+
+  button:not(:disabled),
+  [role='button']:not([aria-disabled='true']) {
+    cursor: pointer;
+  }
+
+  ::selection {
+    background: var(--color-accent);
+    color: var(--color-on-accent);
+  }
+
+  * {
+    scrollbar-color: var(--color-line-strong) transparent;
+    scrollbar-width: thin;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

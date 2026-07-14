@@ -1,0 +1,201 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { MoreHorizontal } from 'lucide-react';
+import { useState } from 'react';
+import type { AdminUser } from '@hpc-mail/shared';
+import { queryKeys } from '@/api/query-keys';
+import { adminApi } from '@/api/resources';
+import { PageHeader } from '@/components/page-header';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { CopyButton } from '@/components/ui/copy-button';
+import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader } from '@/components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { IconButton } from '@/components/ui/icon-button';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { toast } from '@/components/ui/toast';
+import { formatDateTime, formatRelativeTime } from '@/lib/format';
+import { useCurrentUser } from '@/lib/use-session';
+
+function generatePassword(length = 14): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+  const values = new Uint32Array(length);
+  crypto.getRandomValues(values);
+  let result = '';
+  for (const value of values) result += chars[value % chars.length];
+  return result;
+}
+
+function ResetPasswordDialog({ target, onClose }: { target: AdminUser | null; onClose: () => void }) {
+  const queryClient = useQueryClient();
+  const [password] = useState(generatePassword);
+
+  const mutation = useMutation({
+    mutationFn: (id: number) => adminApi.updateUser(id, { password }),
+    onSuccess: () => {
+      toast({ title: '密码已重置', variant: 'success' });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.admin.users });
+    },
+    onError: () => toast({ title: '重置失败，请重试', variant: 'error' }),
+  });
+
+  return (
+    <Dialog open={target !== null} onOpenChange={(next) => !next && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader title="重置密码" description={target ? `为用户 ${target.username} 生成临时密码` : undefined} />
+        <DialogBody className="flex flex-col gap-3">
+          <p className="text-sm text-ink-secondary">下方为临时密码，请复制并转交用户。确认后原密码立即失效。</p>
+          <div className="flex items-center gap-2 rounded-md border border-line bg-canvas px-3 py-2">
+            <code className="min-w-0 flex-1 break-all font-mono text-sm text-ink">{password}</code>
+            <CopyButton value={password} size="sm" />
+          </div>
+        </DialogBody>
+        <DialogFooter>
+          <Button variant="secondary" onClick={onClose}>
+            取消
+          </Button>
+          <Button
+            loading={mutation.isPending}
+            onClick={() => target && mutation.mutate(target.id, { onSuccess: onClose })}
+          >
+            确认重置
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+export function UsersPage() {
+  const currentUser = useCurrentUser();
+  const queryClient = useQueryClient();
+  const { data, isLoading } = useQuery({ queryKey: queryKeys.admin.users, queryFn: () => adminApi.listUsers() });
+  const [resetting, setResetting] = useState<AdminUser | null>(null);
+  const [deleting, setDeleting] = useState<AdminUser | null>(null);
+
+  const update = useMutation({
+    mutationFn: ({ id, patch }: { id: number; patch: Parameters<typeof adminApi.updateUser>[1] }) =>
+      adminApi.updateUser(id, patch),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: queryKeys.admin.users }),
+    onError: () => toast({ title: '操作失败，请重试', variant: 'error' }),
+  });
+
+  const remove = useMutation({
+    mutationFn: (id: number) => adminApi.deleteUser(id),
+    onSuccess: () => {
+      toast({ title: '用户已删除', variant: 'success' });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.admin.users });
+      setDeleting(null);
+    },
+    onError: () => toast({ title: '删除失败，请重试', variant: 'error' }),
+  });
+
+  const users = data ?? [];
+
+  return (
+    <div className="mx-auto max-w-5xl">
+      <PageHeader title="用户管理" description="管理平台账户的角色、状态与密码。" />
+
+      {isLoading ? (
+        <Skeleton className="h-48 w-full rounded-lg" />
+      ) : (
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>用户名</TableHead>
+              <TableHead>角色</TableHead>
+              <TableHead>状态</TableHead>
+              <TableHead>邮箱数</TableHead>
+              <TableHead>最近登录</TableHead>
+              <TableHead className="text-right">操作</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {users.map((user) => {
+              const isSelf = user.id === currentUser.id;
+              return (
+                <TableRow key={user.id}>
+                  <TableCell className="font-medium">{user.username}</TableCell>
+                  <TableCell>
+                    <Badge tone={user.role === 'admin' ? 'accent' : 'neutral'}>
+                      {user.role === 'admin' ? '管理员' : '普通用户'}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <Badge tone={user.status === 'active' ? 'positive' : 'critical'}>
+                      {user.status === 'active' ? '正常' : '已禁用'}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-ink-secondary">{user.mailboxCount}</TableCell>
+                  <TableCell className="text-ink-tertiary" title={user.lastLoginAt ? formatDateTime(user.lastLoginAt) : ''}>
+                    {user.lastLoginAt ? formatRelativeTime(user.lastLoginAt) : '从未'}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex justify-end">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <IconButton size="sm" aria-label="更多操作">
+                            <MoreHorizontal className="size-4" />
+                          </IconButton>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent>
+                          <DropdownMenuItem
+                            disabled={isSelf}
+                            onSelect={() =>
+                              update.mutate({ id: user.id, patch: { role: user.role === 'admin' ? 'user' : 'admin' } })
+                            }
+                          >
+                            {user.role === 'admin' ? '降为普通用户' : '设为管理员'}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            disabled={isSelf}
+                            onSelect={() =>
+                              update.mutate({
+                                id: user.id,
+                                patch: { status: user.status === 'active' ? 'disabled' : 'active' },
+                              })
+                            }
+                          >
+                            {user.status === 'active' ? '禁用账户' : '启用账户'}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onSelect={() => setResetting(user)}>重置密码</DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem tone="danger" disabled={isSelf} onSelect={() => setDeleting(user)}>
+                            删除用户
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      )}
+
+      <ResetPasswordDialog target={resetting} onClose={() => setResetting(null)} />
+      <ConfirmDialog
+        open={deleting !== null}
+        onOpenChange={(next) => !next && setDeleting(null)}
+        title="删除该用户？"
+        description={
+          deleting
+            ? `删除 ${deleting.username} 后，其认领的所有地址将被释放，可供他人重新认领。此操作不可撤销。`
+            : undefined
+        }
+        confirmLabel="删除"
+        tone="danger"
+        loading={remove.isPending}
+        onConfirm={() => deleting && remove.mutate(deleting.id)}
+      />
+    </div>
+  );
+}

@@ -1,0 +1,169 @@
+import type { Settings } from '@hpc-mail/shared';
+import { hmacSha256Base64 } from '../lib/crypto.js';
+import { AppError } from '../lib/errors.js';
+import type { Env } from '../types.js';
+
+const FEISHU_WEBHOOK_HOSTS = new Set(['open.feishu.cn', 'open.larksuite.com']);
+const FEISHU_WEBHOOK_PATH = /^\/open-apis\/bot\/v2\/hook\/[A-Za-z0-9_-]{16,200}$/;
+const SUMMARY_LIMIT = 800;
+
+/** 白名单校验飞书 webhook URL（防 SSRF），非法抛错 */
+export function validateFeishuWebhookUrl(value: string): string {
+  if (!value.trim()) throw new AppError('validation_failed', '飞书 webhook 为空');
+  let url: URL;
+  try {
+    url = new URL(value.trim());
+  } catch {
+    throw new AppError('validation_failed', '飞书 webhook 格式非法');
+  }
+  if (
+    url.protocol !== 'https:' ||
+    !FEISHU_WEBHOOK_HOSTS.has(url.hostname) ||
+    url.port ||
+    url.username ||
+    url.password ||
+    url.search ||
+    url.hash ||
+    !FEISHU_WEBHOOK_PATH.test(url.pathname)
+  ) {
+    throw new AppError('validation_failed', '飞书 webhook 非法');
+  }
+  return url.toString();
+}
+
+/** 飞书签名：HMAC-SHA256(key=`${timestamp}\n${secret}`, data='')，base64 */
+export async function generateFeishuSignature(timestamp: string, secret: string): Promise<string> {
+  if (!secret) return '';
+  const stringToSign = `${timestamp}\n${secret}`;
+  return hmacSha256Base64(new TextEncoder().encode(stringToSign), '');
+}
+
+function cleanText(value: string | undefined | null, limit: number): string {
+  return String(value || '')
+    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, limit);
+}
+
+export interface FeishuMailInfo {
+  subject: string;
+  fromAddress: string;
+  fromName: string;
+  toAddress: string;
+  code: string;
+  preview: string;
+}
+
+export function buildFeishuEmailCard(info: FeishuMailInfo, test = false): unknown {
+  const subject = cleanText(info.subject, 200) || '(无主题)';
+  const senderAddress = cleanText(info.fromAddress, 254) || '未知';
+  const senderName = cleanText(info.fromName, 100);
+  const recipient = cleanText(info.toAddress, 254) || '未知';
+  const code = cleanText(info.code, 64);
+  const summary = cleanText(info.preview, SUMMARY_LIMIT) || '（无纯文本摘要）';
+
+  const elements: unknown[] = [
+    {
+      tag: 'div',
+      text: {
+        tag: 'plain_text',
+        content: `发件人：${senderName ? `${senderName} <${senderAddress}>` : senderAddress}`,
+      },
+    },
+    { tag: 'div', text: { tag: 'plain_text', content: `收件邮箱：${recipient}` } },
+  ];
+  if (code) {
+    elements.push({
+      tag: 'div',
+      text: { tag: 'lark_md', content: `**验证码：**<font color='red'>${code}</font>` },
+    });
+  }
+  elements.push(
+    { tag: 'hr' },
+    { tag: 'div', text: { tag: 'plain_text', content: `内容摘要：${summary}` } },
+  );
+
+  return {
+    msg_type: 'interactive',
+    card: {
+      header: {
+        template: test ? 'blue' : 'turquoise',
+        title: {
+          tag: 'plain_text',
+          content: `${test ? '配置测试 · ' : '新邮件 · '}${subject}`,
+        },
+      },
+      elements,
+    },
+  };
+}
+
+async function postToFeishu(
+  webhookUrl: string,
+  secret: string,
+  payload: Record<string, unknown>,
+): Promise<void> {
+  const timestamp = Math.floor(Date.now() / 1000).toString();
+  const body: Record<string, unknown> = { ...payload };
+  if (secret) {
+    body.timestamp = timestamp;
+    body.sign = await generateFeishuSignature(timestamp, secret);
+  }
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10_000);
+  let response: Response;
+  try {
+    response = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
+      redirect: 'manual',
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
+  const responseText = await response.text();
+  if (!response.ok) throw new Error(`HTTP ${response.status}: ${responseText.slice(0, 300)}`);
+  let parsed: { code?: number; StatusCode?: number; msg?: string };
+  try {
+    parsed = JSON.parse(responseText);
+  } catch {
+    throw new Error('飞书返回非法 JSON');
+  }
+  if (parsed.code !== 0 && parsed.StatusCode !== 0) {
+    throw new Error(`飞书 API ${parsed.code ?? parsed.StatusCode}: ${String(parsed.msg ?? '')}`);
+  }
+}
+
+/** 发送收件卡片；throwOnError=false 时静默失败（供 waitUntil 使用） */
+export async function sendFeishuNotification(
+  _env: Env,
+  settings: Settings,
+  info: FeishuMailInfo,
+  options: { test?: boolean; force?: boolean; throwOnError?: boolean } = {},
+): Promise<boolean> {
+  const { test = false, force = false, throwOnError = false } = options;
+  try {
+    const feishu = settings.feishu;
+    if (!force && !feishu.enabled) return false;
+    if (!feishu.webhookUrl) {
+      if (throwOnError) throw new AppError('validation_failed', '飞书 webhook 未配置');
+      return false;
+    }
+    const safeUrl = validateFeishuWebhookUrl(feishu.webhookUrl);
+    await postToFeishu(safeUrl, feishu.secret, buildFeishuEmailCard(info, test) as Record<
+      string,
+      unknown
+    >);
+    return true;
+  } catch (error) {
+    console.error('飞书通知失败:', error instanceof Error ? error.message : error);
+    if (throwOnError) {
+      if (error instanceof AppError) throw error;
+      throw new AppError('internal', '飞书 webhook 调用失败');
+    }
+    return false;
+  }
+}
