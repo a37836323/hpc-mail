@@ -1,158 +1,205 @@
 <p align="center">
-    <img src="doc/demo/logo.png" width="80px" />
-    <h1 align="center">Cloud Mail</h1>
-    <p align="center">基于 Cloudflare 的简约响应式邮箱服务，支持邮件发送、附件收发 🎉</p> 
-    <p align="center">
-        简体中文 | <a href="/README-en.md" style="margin-left: 5px">English </a>
-    </p>
-    <p align="center">
-        <a href="https://github.com/maillab/cloud-mail/tree/main?tab=MIT-1-ov-file" target="_blank" >
-            <img src="https://img.shields.io/badge/license-MIT-green" />
-        </a>    
-        <a href="https://github.com/maillab/cloud-mail/releases" target="_blank" >
-            <img src="https://img.shields.io/github/v/release/maillab/cloud-mail" alt="releases" />
-        </a>  
-        <a href="https://github.com/maillab/cloud-mail/issues" >
-            <img src="https://img.shields.io/github/issues/maillab/cloud-mail" alt="issues" />
-        </a>  
-        <a href="https://github.com/maillab/cloud-mail/stargazers" target="_blank">
-            <img src="https://img.shields.io/github/stars/maillab/cloud-mail" alt="stargazers" />
-        </a>  
-        <a href="https://github.com/maillab/cloud-mail/forks" target="_blank" >
-            <img src="https://img.shields.io/github/forks/maillab/cloud-mail" alt="forks" />
-        </a>
-    </p>
-    <p align="center">
-        <a href="https://trendshift.io/repositories/20459" target="_blank" >
-            <img src="https://trendshift.io/api/badge/repositories/20459" alt="trendshift" >
-        </a>
-    </p>
+  <img src="doc/demo/logo.png" width="88" alt="HPC Mail 标志">
 </p>
 
+<h1 align="center">HPC Mail</h1>
 
-## 项目简介
+<p align="center">
+  基于 Cloudflare Workers 构建的现代化多域名邮件系统
+</p>
 
-只需要一个域名，就可以创建多个不同的邮箱，类似各大邮箱平台，本项目支持署到 Cloudflare Workers ，降低服务器成本，搭建自己的邮箱服务
+<p align="center">
+  <a href="https://github.com/riba2534/hpc-mail/actions/workflows/deploy-cloudflare.yml"><img src="https://github.com/riba2534/hpc-mail/actions/workflows/deploy-cloudflare.yml/badge.svg" alt="部署状态"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/许可证-MIT-22c55e.svg" alt="MIT 许可证"></a>
+  <a href="https://hpc.email"><img src="https://img.shields.io/badge/在线服务-hpc.email-6366f1.svg" alt="在线服务"></a>
+</p>
 
-## 项目展示
+HPC Mail 将 Cloudflare Email Routing、Workers、D1、KV 与 R2 组合成一套可自行部署的邮件服务。系统支持多域名统一收件、独立用户名与密码认证，并允许用户使用“任意合法前缀 + 已配置域名”作为发件地址。
 
-- [在线演示](https://skymail.ink)<br>
-- [部署文档](https://doc.skymail.ink)<br>
+> 在线地址：[https://hpc.email](https://hpc.email)
 
-| ![](/doc/demo/demo1.png) | ![](/doc/demo/demo2.png) |
-|-----------------------|-----------------------|
-| ![](/doc/demo/demo3.png) | ![](/doc/demo/demo4.png) |
+## 核心特性
 
+- **多域名收件**：通过 Cloudflare Email Routing Catch-all 接收多个域名的邮件，并在同一界面集中管理。
+- **独立账号体系**：使用用户名和密码登录，登录身份不再与单一邮箱地址绑定；一个用户可以管理多个邮箱账号。
+- **灵活发件地址**：发送邮件时可自由填写合法前缀，并从管理员配置且用户有权使用的域名中选择后缀。
+- **完整邮件体验**：支持收发邮件、附件、内嵌图片、草稿、已发送状态和响应式阅读界面。
+- **自动转发与通知**：可按配置将来信转发至外部邮箱或 Telegram。
+- **服务端无状态部署**：业务运行在 Cloudflare Workers，数据分别存储于 D1、KV 与 R2，无需维护传统邮件服务器。
+- **管理与权限控制**：提供用户、邮箱、域名、配额、注册方式和系统参数管理。
+- **安全默认值**：密码使用 PBKDF2-SHA256，登录与令牌接口具备限流，会话支持过期与撤销，邮件 HTML 在前后端均进行净化处理。
+- **自动化交付**：推送到 `main` 后，由 GitHub Actions 自动完成测试、依赖审计、构建、部署、数据库迁移和线上健康检查。
 
+## 系统架构
 
-
-## 功能介绍
-
-- **💰 低成本使用**： 可部署到 Cloudflare Workers 降低服务器成本
-
-- **💻 响应式设计**：响应式布局自动适配PC和大部分手机端浏览器
-
-- **📧 邮件发送**：集成Resend发送邮件，支持群发，内嵌图片和附件发送，发送状态查看
-
-- **🛡️ 管理员功能**：可以对用户，邮件进行管理，RABC权限控制对功能及使用资源限制
-
-- **📦 附件收发**：支持收发附件，使用R2对象存储保存和下载文件
-
-- **🔔 邮件推送**：接收邮件后可以转发到TG机器人或其他服务商邮箱
-
-- **📡 开放API**：支持使用API批量生成用户，多条件查询邮件 
-
-- **🔢 验证码识别**：使用Workers AI，自动识别邮件验证码 
-
-- **📈 数据可视化**：使用ECharts对系统数据详情，用户邮件增长可视化显示
-
-- **🎨 个性化设置**：可以自定义网站标题，登录背景，透明度
-
-- **🤖 人机验证**：集成Turnstile人机验证，防止人机批量注册
-
-- **📜 更多功能**：正在开发中...
-
-
+```mermaid
+flowchart LR
+    Sender["外部发件人"] --> Routing["Cloudflare Email Routing"]
+    Routing --> Worker["HPC Mail Worker"]
+    Browser["Web / PWA"] <--> Worker
+    Worker <--> D1["D1 · 业务数据"]
+    Worker <--> KV["KV · 会话与缓存"]
+    Worker <--> R2["R2 · 邮件附件"]
+    Worker --> AI["Workers AI · 内容分析"]
+    Worker --> Forward["外部邮箱 / Telegram"]
+    Worker --> Provider["Cloudflare Email / Resend"]
+    Provider --> Recipient["邮件收件人"]
+```
 
 ## 技术栈
 
-- **平台**：[Cloudflare Workers](https://developers.cloudflare.com/workers/)
+| 层级 | 技术 |
+| --- | --- |
+| 前端 | Vue 3、Vite、Element Plus、Pinia、Vue Router、PWA |
+| 后端 | Cloudflare Workers、Hono、Drizzle ORM |
+| 数据 | Cloudflare D1、KV、R2 |
+| 邮件 | Cloudflare Email Routing、Email Workers、Send Email Binding、Resend |
+| 智能分析 | Cloudflare Workers AI |
+| 工程化 | pnpm、Vitest、GitHub Actions |
 
-- **Web框架**：[Hono](https://hono.dev/)
+## 快速开始
 
-- **ORM：**[Drizzle](https://orm.drizzle.team/)
+### 环境要求
 
-- **前端框架**：[Vue3](https://vuejs.org/) 
+- Node.js 22
+- pnpm 10
+- Cloudflare 账户及已接入 Cloudflare 的域名
+- 已启用的 Cloudflare Email Routing
+- D1 数据库、KV 命名空间和 R2 存储桶
 
-- **UI框架**：[Element Plus](https://element-plus.org/) 
+### 获取代码
 
-- **邮件推送：** [Resend](https://resend.com/)
+```bash
+git clone https://github.com/riba2534/hpc-mail.git
+cd hpc-mail
+```
 
-- **缓存**：[Cloudflare KV](https://developers.cloudflare.com/kv/)
+### 安装依赖并验证
 
-- **数据库**：[Cloudflare D1](https://developers.cloudflare.com/d1/)
+```bash
+pnpm --dir mail-worker install --frozen-lockfile
+pnpm --dir mail-vue install --frozen-lockfile
 
-- **文件存储**：[Cloudflare R2](https://developers.cloudflare.com/r2/)
+pnpm --dir mail-worker run test:unit
+pnpm --dir mail-vue test
+pnpm --dir mail-vue run build
+```
+
+### 本地开发
+
+1. 根据自己的 Cloudflare 资源修改 `mail-worker/wrangler-dev.toml`。
+2. 启动 Worker 开发服务：
+
+   ```bash
+   pnpm --dir mail-worker dev
+   ```
+
+3. 在另一个终端启动前端：
+
+   ```bash
+   pnpm --dir mail-vue dev
+   ```
+
+4. 访问 [http://localhost:3001](http://localhost:3001)。前端开发环境默认请求 `http://127.0.0.1:8787/api`。
+
+## GitHub Actions 自动部署
+
+项目提供 [`.github/workflows/deploy-cloudflare.yml`](.github/workflows/deploy-cloudflare.yml)。推荐将生产参数配置到 GitHub 仓库的 **Settings → Secrets and variables → Actions**，不要把凭据直接写入配置文件或提交到版本库。
+
+### 必需 Secrets
+
+| 名称 | 说明 |
+| --- | --- |
+| `CLOUDFLARE_API_TOKEN` | 具备 Workers、D1、KV、R2、路由和脚本部署权限的 Cloudflare API Token |
+| `JWT_SECRET` | URL 安全、至少 43 个字符的高强度随机值 |
+
+### 必需 Variables
+
+| 名称 | 示例 | 说明 |
+| --- | --- | --- |
+| `NAME` | `hpc-mail` | Worker 名称 |
+| `CUSTOM_DOMAIN` | `mail.example.com` | Web 服务使用的自定义域名 |
+| `DOMAIN` | `["example.com","example.net"]` | 可收发邮件的域名，必须是 JSON 字符串数组 |
+| `ADMIN` | `admin@example.com` | 初始管理员邮箱 |
+| `CLOUDFLARE_ACCOUNT_ID` | `xxxxxxxx` | Cloudflare 账户 ID |
+| `D1_DATABASE_ID` | `xxxxxxxx` | D1 数据库 ID |
+| `KV_NAMESPACE_ID` | `xxxxxxxx` | KV 命名空间 ID |
+| `R2_BUCKET_NAME` | `hpc-mail-r2` | R2 存储桶名称 |
+
+### 可选 Variables 与 Secrets
+
+| 名称 | 默认值 | 说明 |
+| --- | --- | --- |
+| `CF_EMAIL` | `false` | 设为 `true` 时启用 Cloudflare Send Email Binding；否则可在后台按域名配置 Resend Token |
+| `AI_MODEL` | `@cf/meta/llama-3.1-8b-instruct` | Workers AI 模型 |
+| `ANALYSIS_CACHE` | `false` | 是否缓存邮件智能分析结果 |
+| `PROJECT_LINK` | `false` | 是否在站点展示项目链接 |
+| `LINUXDO_SWITCH` | `false` | 是否启用 LinuxDo OAuth 登录 |
+| `LINUXDO_CLIENT_ID` | 空 | LinuxDo OAuth Client ID |
+| `LINUXDO_CALLBACK_URL` | 空 | LinuxDo OAuth 回调地址 |
+| `LINUXDO_CLIENT_SECRET` | 空 | LinuxDo OAuth Client Secret；应配置为 Secret |
+
+推送 `mail-worker/**`、`mail-vue/**` 或工作流文件到 `main` 后会自动部署，也可以在 GitHub Actions 页面手动触发。工作流依次执行：
+
+1. 校验部署参数；
+2. 安装依赖并运行前后端测试；
+3. 审计生产依赖并构建前端；
+4. 执行 Wrangler Dry Run；
+5. 部署 Worker 与静态资源；
+6. 同步 Worker Secrets；
+7. 执行幂等数据库迁移；
+8. 检查首页和公开配置接口的线上健康状态。
+
+## Cloudflare 邮件路由
+
+部署 Worker 后，还需要在每个邮件域名的 Cloudflare 控制台中完成以下配置：
+
+1. 启用 **Email Routing**；
+2. 将 Catch-all 操作设置为“发送到 Worker”；
+3. 选择当前部署的 HPC Mail Worker；
+4. 如使用 Cloudflare Send Email Binding，按 Cloudflare 要求验证允许使用的发件域名和目标地址；
+5. 如使用 Resend，在管理后台为对应域名保存 Resend Token 并完成域名验证。
 
 ## 目录结构
 
-```
-cloud-mail
-├── mail-worker				    # worker后端项目
-│   ├── src                  
-│   │   ├── api	 			    # api接口层			
-│   │   ├── const  			    # 项目常量
-│   │   ├── dao                 # 数据访问层
-│   │   ├── email			    # 邮件处理接收
-│   │   ├── entity			    # 数据库实体
-│   │   ├── error			    # 自定义异常
-│   │   ├── hono			    # web框架配置、拦截器、全局异常等
-│   │   ├── i18n			    # 语言国际化
-│   │   ├── init			    # 数据库缓存初始化
-│   │   ├── model			    # 响应体数据封装
-│   │   ├── security			# 身份权限认证
-│   │   ├── service			    # 业务服务层
-│   │   ├── template			# 消息模板
-│   │   ├── utils			    # 工具类
-│   │   └── index.js			# 入口文件
-│   ├── pageckge.json			# 项目依赖
-│   └── wrangler.toml			# 项目配置
-│
-├── mail-vue				    # vue前端项目
-│   ├── src
-│   │   ├── axios 			    # axios配置
-│   │   ├── components			# 自定义组件
-│   │   ├── echarts			    # echarts组件导入
-│   │   ├── i18n			    # 语言国际化
-│   │   ├── init			    # 入站初始化
-│   │   ├── layout			    # 主体布局组件
-│   │   ├── perm			    # 权限认证
-│   │   ├── request			    # api接口
-│   │   ├── router			    # 路由配置
-│   │   ├── store			    # 全局状态管理
-│   │   ├── utils			    # 工具类
-│   │   ├── views			    # 页面组件
-│   │   ├── app.vue			    # 入口组件
-│   │   ├── main.js			    # 入口js
-│   │   └── style.css			# 全局css
-│   ├── package.json			# 项目依赖
-└── └── env.release				# 项目配置
+```text
+hpc-mail/
+├── .github/workflows/        # GitHub Actions 自动部署
+├── design-system/            # 视觉规范与设计令牌
+├── doc/                      # 项目文档与资源
+├── mail-vue/                 # Vue 3 前端应用
+│   ├── public/               # 公共静态资源
+│   ├── src/                  # 页面、组件、状态与请求层
+│   └── test/                 # 前端测试
+├── mail-worker/              # Cloudflare Worker 后端
+│   ├── src/                  # API、服务、存储与邮件处理
+│   ├── test/                 # Worker 单元测试
+│   └── wrangler*.toml        # 本地、测试与部署配置
+├── LICENSE
+└── README.md
 ```
 
-## 赞助
+## 安全说明
 
-<a href="https://doc.skymail.ink/support.html" >
-<img width="170px" src="./doc/images/support.png" alt="">
-</a>
+- 不要提交 API Token、JWT Secret、OAuth Secret、Resend Token 或其他生产凭据。
+- 首次部署后请立即修改默认管理员密码，并仅为可信用户开放注册。
+- 建议为 Cloudflare 和 GitHub 账户启用双因素认证，并定期轮换部署凭据。
+- 邮件属于不受信任输入；若扩展邮件渲染逻辑，请继续保留 HTML 净化、远程资源限制与附件 MIME 校验。
+- 如发现安全问题，请不要公开披露凭据或用户数据，可通过仓库所有者的私密联系方式报告。
+
+## 参与贡献
+
+欢迎提交 Issue 或 Pull Request。建议在提交前：
+
+1. 先说明问题、使用场景和预期行为；
+2. 保持改动聚焦，并为业务逻辑补充测试；
+3. 确保前后端测试、构建与依赖审计通过；
+4. 不在提交中包含真实邮箱、生产资源 ID 或任何敏感信息。
+
+## 上游与致谢
+
+HPC Mail 基于 [maillab/cloud-mail](https://github.com/maillab/cloud-mail) 持续开发，并针对多域名账号体系、灵活发件地址、现代化界面、安全性和自动化部署进行了重构。感谢原项目及其贡献者。
 
 ## 许可证
 
-本项目采用 [MIT](LICENSE) 许可证	
-
-
-## 交流
-
-[Telegram](https://t.me/cloud_mail_tg)
-
-
-
+本项目基于 [MIT License](LICENSE) 开源。使用本项目时，请同时遵守 Cloudflare、Resend 及其他所接入服务的条款与当地适用法律。
