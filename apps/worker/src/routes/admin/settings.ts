@@ -38,7 +38,7 @@ app.post('/feishu-test', async (c) => {
     },
     { force: true, throwOnError: true, test: true },
   );
-  return ok(c, { success: true });
+  return ok(c, { ok: true });
 });
 
 export default app;

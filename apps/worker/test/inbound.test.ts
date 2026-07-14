@@ -67,6 +67,12 @@ describe('收件链路 handleInbound', () => {
   });
 
   it('转发关闭时不调用 forward', async () => {
+    // 本地 workerd 无法调 AI 绑定（Binding ai needs to be run remotely），
+    // 正文无验证码会触发 AI 兜底，必须显式关掉
+    await updateSettings(env, {
+      gmail_forward: { enabled: false, addresses: [] },
+      code_extract: { enabled: true, aiEnabled: false },
+    });
     const forward = vi.fn(async () => {});
     const msg = mockMessage('hello@hpc.email', 'Hi there', 'no codes here', async () => {});
     msg.forward = forward;

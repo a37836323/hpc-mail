@@ -16,6 +16,7 @@ async function request(path: string, init?: RequestInit): Promise<Response> {
 
 async function seedAdmin(): Promise<void> {
   const db = createDb(env);
+  // 同文件多个用例共享存储，重复 seed 直接忽略
   await db
     .insert(users)
     .values({
@@ -23,7 +24,8 @@ async function seedAdmin(): Promise<void> {
       passwordHash: await hashPassword('admin-pass-123'),
       role: 'admin',
       status: 'active',
-    });
+    })
+    .onConflictDoNothing();
 }
 
 describe('信封与鉴权链路', () => {

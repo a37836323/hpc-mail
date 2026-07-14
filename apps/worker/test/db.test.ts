@@ -80,21 +80,22 @@ describe('mailbox 认领唯一冲突', () => {
 });
 
 describe('message 可见性 user vs admin', () => {
+  // 地址与「认领唯一冲突」用例错开——同文件共享存储，test1@ 已被 alice 占用
   beforeEach(async () => {
-    await seedInbound('test1@claude-router.cc', 'claimed message');
+    await seedInbound('carol@claude-router.cc', 'claimed message');
     await seedInbound('other@hpc.email', 'unclaimed message');
   });
 
   it('user 只看自己认领地址', async () => {
     const uid = await seedUser('carol', 'user');
-    await claimMailbox(env, uid, { localPart: 'test1', domain: 'claude-router.cc' });
+    await claimMailbox(env, uid, { localPart: 'carol', domain: 'claude-router.cc' });
     const page = await listMessages(
       env,
       { userId: uid, role: 'user' },
       { limit: 30 } as never,
     );
     expect(page.items).toHaveLength(1);
-    expect(page.items[0]!.address).toBe('test1@claude-router.cc');
+    expect(page.items[0]!.address).toBe('carol@claude-router.cc');
   });
 
   it('admin 默认看全站，scope=mine 只看自己', async () => {
