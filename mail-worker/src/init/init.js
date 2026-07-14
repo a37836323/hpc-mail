@@ -290,7 +290,8 @@ async function hasApplicationTables(c) {
 	const row = await c.env.db.prepare(`
 		SELECT name FROM sqlite_master
 		WHERE type = 'table'
-		  AND name NOT LIKE 'sqlite_%'
+		  AND name NOT GLOB 'sqlite_*'
+		  AND name NOT GLOB '_cf_*'
 		LIMIT 1
 	`).first();
 	return Boolean(row);
@@ -320,7 +321,9 @@ async function clearRuntimeState(c) {
 async function dropSchema(c) {
 	const { results = [] } = await c.env.db.prepare(`
 		SELECT name FROM sqlite_master
-		WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
+		WHERE type = 'table'
+		  AND name NOT GLOB 'sqlite_*'
+		  AND name NOT GLOB '_cf_*'
 	`).all();
 	const present = new Set(results.map(row => row.name));
 	const ordered = [

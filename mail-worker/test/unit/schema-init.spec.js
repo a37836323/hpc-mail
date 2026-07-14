@@ -98,12 +98,16 @@ describe('versioned clean database initialization', () => {
 
 	it('requires explicit rebuild permission for a legacy database', async () => {
 		const database = new DatabaseSync(':memory:');
-		database.exec(`CREATE TABLE user (user_id INTEGER PRIMARY KEY, email TEXT NOT NULL)`);
+		database.exec(`
+			CREATE TABLE user (user_id INTEGER PRIMARY KEY, email TEXT NOT NULL);
+			CREATE TABLE _cf_KV (key TEXT PRIMARY KEY, value BLOB)
+		`);
 		const c = initContext(database);
 		vi.spyOn(settingService, 'refresh').mockResolvedValue();
 
 		await expect(dbInit.init(c, initPayload())).rejects.toMatchObject({ code: 409 });
 		const rebuilt = await dbInit.init(c, initPayload({ rebuild: true }));
 		expect(rebuilt).toMatchObject({ schemaVersion: SCHEMA_VERSION, rebuilt: true });
+		expect(database.prepare(`SELECT name FROM sqlite_master WHERE name = '_cf_KV'`).get()).toEqual({ name: '_cf_KV' });
 	});
 });
