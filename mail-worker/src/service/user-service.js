@@ -2,7 +2,7 @@ import BizError from '../error/biz-error';
 import accountService from './account-service';
 import orm from '../entity/orm';
 import user from '../entity/user';
-import { and, asc, count, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, inArray, or, sql } from 'drizzle-orm';
 import { emailConst, isDel, roleConst, userConst } from '../const/entity-const';
 import kvConst from '../const/kv-const';
 import KvConst from '../const/kv-const';
@@ -18,6 +18,15 @@ import { t } from '../i18n/i18n'
 import reqUtils from '../utils/req-utils';
 import {oauth} from "../entity/oauth";
 import oauthService from "./oauth-service";
+import verifyUtils from '../utils/verify-utils';
+import { configuredDomains } from '../utils/sender-utils';
+import {
+	buildLegacyAuthEmail,
+	isValidUsername,
+	normalizeUsername,
+	usernameBase,
+	USERNAME_MAX_LENGTH
+} from '../utils/auth-utils';
 
 const userService = {
 
@@ -30,17 +39,21 @@ const userService = {
 		}
 
 		const [account, roleRow, permKeys] = await Promise.all([
-			accountService.selectByEmailIncludeDel(c, userRow.email),
+			accountService.selectDefaultByUserId(c, userRow.userId, userRow.email),
 			roleService.selectById(c, userRow.type),
 			userRow.email === c.env.admin ? Promise.resolve(['*']) : permService.userPermKeys(c, userId)
 		]);
 
 		const user = {};
+		const hasLegacyEmail = typeof userRow.email === 'string' && !userRow.email.toLowerCase().endsWith('@auth.invalid');
 		user.userId = userRow.userId;
 		user.sendCount = userRow.sendCount;
-		user.email = userRow.email;
+		user.email = hasLegacyEmail ? userRow.email : null;
+		user.legacyEmail = hasLegacyEmail ? userRow.email : null;
+		user.username = userRow.username;
+		user.displayName = userRow.displayName || '';
 		user.account = account;
-		user.name = account.name;
+		user.name = userRow.displayName || account?.name || userRow.username;
 		user.permKeys = permKeys;
 		user.role = roleRow;
 		user.type = userRow.type;
@@ -65,6 +78,10 @@ const userService = {
 		await orm(c).update(user).set({ password: hash, salt: salt }).where(eq(user.userId, userId)).run();
 	},
 
+	async updatePasswordHash(c, userId, password, salt) {
+		await orm(c).update(user).set({ password, salt }).where(eq(user.userId, userId)).run();
+	},
+
 	selectByEmail(c, email) {
 		return orm(c).select().from(user).where(
 			and(
@@ -80,6 +97,23 @@ const userService = {
 
 	selectByEmailIncludeDel(c, email) {
 		return orm(c).select().from(user).where(sql`${user.email} COLLATE NOCASE = ${email}`).get();
+	},
+
+	selectByUsernameIncludeDel(c, username) {
+		return orm(c).select().from(user).where(sql`${user.username} COLLATE NOCASE = ${username}`).get();
+	},
+
+	async findAvailableUsername(c, preferred) {
+		const base = usernameBase(preferred);
+		let candidate = base;
+		let suffixNumber = 2;
+
+		while (await this.selectByUsernameIncludeDel(c, candidate)) {
+			const suffix = `-${suffixNumber++}`;
+			candidate = `${base.slice(0, USERNAME_MAX_LENGTH - suffix.length)}${suffix}`;
+		}
+
+		return candidate;
 	},
 
 	selectByIdIncludeDel(c, userId) {
@@ -109,7 +143,7 @@ const userService = {
 
 	async list(c, params) {
 
-		let { num, size, email, timeSort, status } = params;
+		let { num, size, email, username, timeSort, status } = params;
 
 		size = Number(size);
 		num = Number(num);
@@ -130,7 +164,16 @@ const userService = {
 
 
 		if (email) {
-			conditions.push(sql`${user.email} COLLATE NOCASE LIKE ${'%'+ email + '%'}`);
+			conditions.push(
+				or(
+					sql`${user.email} COLLATE NOCASE LIKE ${'%' + email + '%'}`,
+					sql`${user.username} COLLATE NOCASE LIKE ${'%' + email + '%'}`
+				)
+			);
+		}
+
+		if (username) {
+			conditions.push(sql`${user.username} COLLATE NOCASE LIKE ${'%' + username + '%'}`);
 		}
 
 
@@ -141,10 +184,10 @@ const userService = {
 
 		const query = orm(c).select({
 			...user,
-			username: oauth.username,
+			oauthUsername: oauth.username,
 			trustLevel: oauth.trustLevel,
 			avatar: oauth.avatar,
-			name: oauth.name
+			oauthName: oauth.name
 		}).from(user).leftJoin(oauth, eq(oauth.userId, user.userId))
 			.where(and(...conditions));
 
@@ -184,6 +227,8 @@ const userService = {
 		const delAccountMap = Object.fromEntries(delAccountCounts.map(item => [item.userId, item.count]));
 
 		for (const user of list) {
+			delete user.password;
+			delete user.salt;
 
 			const userId = user.userId;
 
@@ -304,27 +349,45 @@ const userService = {
 
 	async add(c, params) {
 
-		const { email, type, password } = params;
+		let { email, username, displayName, type, password } = params;
+		const useUsernameIdentity = Boolean(normalizeUsername(username));
 
-		if (!c.env.domain.includes(emailUtils.getDomain(email))) {
-			throw new BizError(t('notEmailDomain'));
-		}
-
-		if (password.length < 6) {
+		if (typeof password !== 'string' || password.length < 6) {
 			throw new BizError(t('pwdMinLength'));
 		}
 
-		const accountRow = await accountService.selectByEmailIncludeDel(c, email);
-
-		if (accountRow && accountRow.isDel === isDel.DELETE) {
-			throw new BizError(t('isDelUser'));
+		if (password.length > 30) {
+			throw new BizError(t('pwdLengthLimit'));
 		}
 
-		if (accountRow) {
-			throw new BizError(t('isRegAccount'));
+		if (useUsernameIdentity) {
+			username = normalizeUsername(username);
+			if (!isValidUsername(username)) {
+				throw new BizError(t('invalidUsername'));
+			}
+			if (await this.selectByUsernameIncludeDel(c, username)) {
+				throw new BizError(t('usernameExists'));
+			}
+			email = buildLegacyAuthEmail(username);
+			if (await this.selectByEmailIncludeDel(c, email)) {
+				throw new BizError(t('usernameExists'));
+			}
+		} else {
+			if (!verifyUtils.isEmail(email) || !configuredDomains(c.env.domain).includes(emailUtils.getDomain(email).toLowerCase())) {
+				throw new BizError(t('notEmailDomain'));
+			}
+
+			const accountRow = await accountService.selectByEmailIncludeDel(c, email);
+			if (accountRow && accountRow.isDel === isDel.DELETE) {
+				throw new BizError(t('isDelUser'));
+			}
+			if (accountRow) {
+				throw new BizError(t('isRegAccount'));
+			}
+			username = await this.findAvailableUsername(c, emailUtils.getName(email));
 		}
 
-		const role = roleService.selectById(c, type);
+		const role = await roleService.selectById(c, type);
 
 		if (!role) {
 			throw new BizError(t('roleNotExist'));
@@ -332,11 +395,22 @@ const userService = {
 
 		const { salt, hash } = await saltHashUtils.hashPassword(password);
 
-		const userId = await userService.insert(c, { email, password: hash, salt, type });
+		const userId = await userService.insert(c, {
+			email,
+			username,
+			displayName: typeof displayName === 'string' ? displayName.trim() : username,
+			password: hash,
+			salt,
+			type
+		});
 
 		await userService.updateUserInfo(c, userId, true);
 
-		await accountService.insert(c, { userId: userId, email, type, name: emailUtils.getName(email) });
+		if (!useUsernameIdentity) {
+			await accountService.insert(c, { userId: userId, email, type, name: emailUtils.getName(email) });
+		}
+
+		return { userId, username };
 	},
 
 	async resetDaySendCount(c) {
@@ -368,7 +442,7 @@ const userService = {
 
 	listByRegKeyId(c, regKeyId) {
 		return orm(c)
-			.select({email: user.email,createTime: user.createTime})
+			.select({ email: user.email, username: user.username, displayName: user.displayName, createTime: user.createTime })
 			.from(user)
 			.where(eq(user.regKeyId, regKeyId))
 			.orderBy(desc(user.userId))

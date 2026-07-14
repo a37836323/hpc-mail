@@ -1,788 +1,507 @@
 <template>
-  <div class="send" v-show="show">
-    <div class="write-box">
-      <div class="title">
-        <div class="title-left">
-          <span class="title-text">
-            <Icon icon="hugeicons:quill-write-01" width="28" height="28"/>
-          </span>
-          <span class="sender">{{ $t('sender') }}:</span>
-          <span class="sender-name">{{ form.name }}</span>
-          <span class="send-email"><{{ form.sendEmail }}></span>
-        </div>
-        <div @click="close" style="cursor: pointer;">
-          <Icon icon="material-symbols-light:close-rounded" width="22" height="22"/>
-        </div>
-      </div>
-      <div class="container">
-        <el-input-tag  @add-tag="addTagChange" tag-type="primary" @input="inputChange" size="default" v-model="form.receiveEmail" >
-          <template #prefix>
-            <div class="item-title" >{{ $t('recipient') }}</div>
-            <el-select
-                ref="mySelect"
-                class="write-select"
-                popper-class="write-select"
-                :show-arrow="false"
-                :no-match-text="' '"
-                :no-data-text="' '"
-                @visible-change="selectStatusChange"
-                @change="selectChange"
-            >
-              <el-option
-                  v-for="item in selectRecipientList"
-                  :key="item"
-                  :label="item"
-                  :value="item"
-                  style="color: #999896;"
-              />
-            </el-select>
-          </template>
-          <template #suffix>
-            <div style="display: flex;margin-right: 3px;">
-              <Icon icon="fa7-solid:user-plus" width="20" height="20" class="add-contact" @click.stop="openContacts" />
-            </div>
-          </template>
-        </el-input-tag>
-        <el-input v-model="form.subject" :placeholder="t('subject')" />
-        <tinyEditor :def-value="defValue" ref="editor" @change="change" @focus="focusChange" />
-        <div class="button-item">
-          <div class="att-add" @click="chooseFile">
-            <Icon icon="iconamoon:attachment-fill" width="24" height="24"/>
-          </div>
-          <div class="att-clear" @click="clearContent">
-            <Icon icon="icon-park-outline:clear-format" width="24" height="24 "/>
-          </div>
-          <div class="att-list">
-            <div class="att-item" v-for="(item,index) in form.attachments" :key="index">
-              <Icon v-bind="getIconByName(item.filename)"/>
-              <span class="att-filename">{{ item.filename }}</span>
-              <span class="att-size">{{ formatBytes(item.size) }}</span>
-              <Icon style="cursor: pointer;" icon="material-symbols-light:close-rounded" @click="delAtt(index)"
-                    width="22" height="22"/>
-            </div>
-          </div>
+  <DialogRoot :open="show" @update:open="handleOpenChange">
+    <DialogPortal>
+      <DialogOverlay class="compose-overlay" />
+      <DialogContent
+        class="compose-dialog"
+        :aria-describedby="undefined"
+        @pointer-down-outside.prevent
+        @interact-outside.prevent
+        @keydown.meta.enter.prevent="handleSendShortcut"
+        @keydown.ctrl.enter.prevent="handleSendShortcut"
+      >
+        <header class="compose-header">
           <div>
-            <el-button type="primary" @click="sendEmail" v-if="form.sendType === 'reply'">{{ $t('reply') }}</el-button>
-            <el-button type="primary" @click="sendEmail" v-else-if="form.sendType === 'forward'">{{ $t('forward') }}</el-button>
-            <el-button type="primary" @click="sendEmail" v-else>{{ $t('send') }}</el-button>
+            <DialogTitle>{{ form.sendType === 'reply' ? $t('replyMessage') : form.sendType === 'forward' ? $t('forwardMessage') : $t('composeMessage') }}</DialogTitle>
+            <p>{{ $t('composeDescription') }}</p>
           </div>
-        </div>
-      </div>
-    </div>
-    <el-dialog top="10vh" v-model="showContacts" @closed="clearSelectContact" :title="t('recentContacts')">
-      <el-table ref="contactsTabRef" row-key="email" :data="contacts" style="height: 445px">
-        <el-table-column type="selection" width="32" />
-        <el-table-column property="email" :label="t('emailAccount')" >
-          <template #default="props">
-            <div class="email-row">{{ props.row.email }}</div>
-          </template>
-        </el-table-column>
-        <el-table-column width="55" label="" >
-          <template #default>
-            <div style="display: flex;">
-              <Icon icon="mage:user" style="color: var(--el-text-color-primary)" width="22" height="22" color="#606266" />
+          <IconButton :label="$t('closeComposer')" @click="requestClose"><X :size="20" /></IconButton>
+        </header>
+
+        <div class="compose-body">
+          <section class="sender-section" aria-labelledby="sender-heading">
+            <div class="sender-section__heading">
+              <div><h2 id="sender-heading">{{ $t('senderIdentity') }}</h2><p>{{ $t('senderIdentityDescription') }}</p></div>
+              <select v-if="recentSenders.length" class="recent-sender" :aria-label="$t('recentSenderAddresses')" @change="applyRecentSender($event.target.value)">
+                <option value="">{{ $t('recentSender') }}</option>
+                <option v-for="sender in recentSenders" :key="sender.address" :value="sender.address">{{ sender.address }}</option>
+              </select>
             </div>
-          </template>
-        </el-table-column>
+            <div class="sender-grid">
+              <FormField :label="$t('displayNameOptional')" for-id="sender-name">
+                <div class="compose-input"><UserRound :size="17" /><input id="sender-name" v-model.trim="form.name" autocomplete="name" :placeholder="$t('displayNameExample')" @input="markDirty" /></div>
+              </FormField>
+              <FormField :label="$t('emailPrefix')" for-id="sender-local" :error="senderErrors.localPart">
+                <div class="compose-input"><AtSign :size="17" /><input id="sender-local" ref="localPartRef" v-model.trim="form.localPart" autocomplete="off" autocapitalize="none" spellcheck="false" :placeholder="$t('senderLocalPartExample')" :aria-invalid="Boolean(senderErrors.localPart)" :disabled="!availableDomains.length" @input="markDirty" @blur="validateLocalPart" /></div>
+              </FormField>
+              <FormField :label="$t('domain')" for-id="sender-domain" :error="senderErrors.domain">
+                <div class="compose-input compose-select"><Globe2 :size="17" /><select id="sender-domain" v-model="form.domain" :aria-invalid="Boolean(senderErrors.domain)" :disabled="!availableDomains.length" @change="markDirty(); validateDomain()"><option disabled value="">{{ $t('selectDomain') }}</option><option v-for="domain in availableDomains" :key="domain" :value="domain">{{ domain }}</option></select><ChevronDown :size="16" /></div>
+              </FormField>
+            </div>
+            <p v-if="!availableDomains.length" class="domain-empty" role="alert"><CircleAlert :size="17" aria-hidden="true" /><span><strong>{{ $t('noAuthorizedSenderDomains') }}</strong>{{ $t('noAuthorizedSenderDomainsDescription') }}</span></p>
+            <div class="sender-preview" :class="{ 'sender-preview--valid': senderValid }" aria-live="polite">
+              <CheckCircle2 v-if="senderValid" :size="18" aria-hidden="true" />
+              <CircleAlert v-else :size="18" aria-hidden="true" />
+              <span><small>{{ senderValid ? $t('readyToSendFrom') : $t('senderPreview') }}</small><strong>{{ senderAddress || $t('senderAddressIncomplete') }}</strong></span>
+            </div>
+            <p v-if="senderFallbackNotice" class="sender-fallback" role="status"><Info :size="16" />{{ senderFallbackNotice }}</p>
+          </section>
+
+          <section class="message-fields" :aria-label="$t('messageDetails')">
+            <div class="recipient-row">
+              <label for="compose-recipient">{{ $t('recipient') }}</label>
+              <el-input-tag id="compose-recipient" v-model="form.receiveEmail" tag-type="primary" :placeholder="$t('recipientPlaceholder')" :aria-invalid="Boolean(fieldErrors.recipient)" @add-tag="addTagChange" @input="markDirty" />
+              <IconButton :label="$t('recentContacts')" @click="openContacts"><ContactRound :size="19" /></IconButton>
+            </div>
+            <p v-if="fieldErrors.recipient" class="compose-error" role="alert">{{ fieldErrors.recipient }}</p>
+            <div class="subject-row"><label for="compose-subject">{{ $t('subject') }}</label><input id="compose-subject" v-model="form.subject" :placeholder="$t('subjectPlaceholderModern')" @input="markDirty" /></div>
+            <p v-if="fieldErrors.subject" class="compose-error" role="alert">{{ fieldErrors.subject }}</p>
+          </section>
+
+          <section class="editor-section" :aria-label="$t('messageBody')">
+            <TinyEditor :def-value="defValue" ref="editor" @change="changeEditor" />
+          </section>
+          <p v-if="fieldErrors.content" class="compose-error compose-error--body" role="alert">{{ fieldErrors.content }}</p>
+
+          <section v-if="form.attachments.length" class="attachments" :aria-label="$t('attachments')">
+            <div v-for="(item, index) in form.attachments" :key="`${item.filename}-${index}`" class="attachment-item">
+              <Paperclip :size="18" /><span><strong>{{ item.filename }}</strong><small>{{ formatBytes(item.size) }}</small></span><IconButton :label="$t('removeAttachment', { name: item.filename })" @click="deleteAttachment(index)"><X :size="17" /></IconButton>
+            </div>
+          </section>
+        </div>
+
+        <footer class="compose-footer">
+          <div class="compose-footer__tools">
+            <input ref="fileInput" class="sr-only" type="file" multiple @change="filesSelected" />
+            <IconButton :label="$t('addAttachment')" @click="fileInput?.click()"><Paperclip :size="20" /></IconButton>
+            <IconButton :label="$t('clearContent')" @click="clearContent"><Eraser :size="20" /></IconButton>
+          </div>
+          <p class="draft-status" role="status">
+            <LoaderCircle v-if="draftSaving" :size="15" class="spin" />
+            <Check v-else-if="form.draftId && !dirty" :size="15" />
+            <span>{{ draftStatusText }}</span>
+          </p>
+          <div class="compose-footer__actions">
+            <button v-if="form.draftId" type="button" class="discard-action" @click="confirmDiscard"><Trash2 :size="17" /><span>{{ $t('deleteDraft') }}</span></button>
+            <AppButton :loading="sending" :disabled="!canSend" @click="sendEmail">
+              <template #icon><Send :size="18" /></template>
+              {{ form.sendType === 'reply' ? $t('reply') : form.sendType === 'forward' ? $t('forward') : $t('send') }}
+            </AppButton>
+          </div>
+        </footer>
+      </DialogContent>
+    </DialogPortal>
+  </DialogRoot>
+
+  <el-dialog v-model="showContacts" :title="$t('recentContacts')" width="480" @closed="clearSelectedContacts">
+    <div class="contacts-dialog">
+      <el-table ref="contactsTable" row-key="email" :data="contacts" height="360" empty-text="">
+        <el-table-column type="selection" width="48" />
+        <el-table-column property="email" :label="$t('emailAccount')"><template #default="scope"><span class="contact-email">{{ scope.row.email }}</span></template></el-table-column>
       </el-table>
-      <div class="contacts-bottom">
-        <el-button type="default" @click="deleteContact">{{t('clear')}}</el-button>
-        <el-button type="primary" @click="chooseContact">{{t('selectContacts')}}</el-button>
-      </div>
-    </el-dialog>
-  </div>
+      <div v-if="!contacts.length" class="contacts-empty"><ContactRound :size="26" /><p>{{ $t('noRecentContacts') }}</p></div>
+      <div class="contacts-actions"><AppButton variant="ghost" @click="deleteContacts">{{ $t('clearSelected') }}</AppButton><AppButton @click="chooseContacts">{{ $t('addRecipients') }}</AppButton></div>
+    </div>
+  </el-dialog>
 </template>
+
 <script setup>
-import tinyEditor from '@/components/tiny-editor/index.vue'
-import {h, nextTick, onMounted, onUnmounted, reactive, ref, toRaw, computed} from "vue";
-import {Icon} from "@iconify/vue";
-import {useUserStore} from "@/store/user.js";
-import {emailSend} from "@/request/email.js";
-import {isEmail} from "@/utils/verify-utils.js";
-import {useAccountStore} from "@/store/account.js";
-import {useEmailStore} from "@/store/email.js";
-import {fileToBase64, formatBytes} from "@/utils/file-utils.js";
-import {getIconByName} from "@/utils/icon-utils.js";
-import sendPercent from "@/components/send-percent/index.vue"
-import {toOssDomain} from "@/utils/convert.js";
-import {formatDetailDate} from "@/utils/day.js";
-import {useSettingStore} from "@/store/setting.js";
-import {userDraftStore} from "@/store/draft.js";
-import {useWriterStore} from "@/store/writer.js";
-import db from "@/db/db.js";
-import dayjs from "dayjs";
-import {useI18n} from "vue-i18n";
-import router from "@/router/index.js";
-import {ElMessageBox} from "element-plus";
+import { computed, h, nextTick, onBeforeUnmount, reactive, ref, toRaw, watch } from 'vue'
+import { AtSign, Check, CheckCircle2, ChevronDown, CircleAlert, ContactRound, Eraser, Globe2, Info, LoaderCircle, Paperclip, Send, Trash2, UserRound, X } from '@lucide/vue'
+import { DialogContent, DialogOverlay, DialogPortal, DialogRoot, DialogTitle } from 'reka-ui'
+import { useI18n } from 'vue-i18n'
+import dayjs from 'dayjs'
+import AppButton from '@/components/ui/AppButton.vue'
+import FormField from '@/components/ui/FormField.vue'
+import IconButton from '@/components/ui/IconButton.vue'
+import TinyEditor from '@/components/tiny-editor/index.vue'
+import db from '@/db/db.js'
+import { emailSend } from '@/request/email.js'
+import router from '@/router/index.js'
+import { useAccountStore } from '@/store/account.js'
+import { userDraftStore } from '@/store/draft.js'
+import { useEmailStore } from '@/store/email.js'
+import { useSettingStore } from '@/store/setting.js'
+import { useUserStore } from '@/store/user.js'
+import { useWriterStore } from '@/store/writer.js'
+import { formatDetailDate } from '@/utils/day.js'
+import { fileToBase64, formatBytes } from '@/utils/file-utils.js'
+import { isEmail } from '@/utils/verify-utils.js'
+import { toOssDomain } from '@/utils/convert.js'
+import { normalizeDomain, resolveAuthorizedDomains } from '@/utils/domain.js'
 
-defineExpose({
-  open,
-  openReply,
-  openForward,
-  openDraft
-})
+defineExpose({ open, openReply, openForward, openDraft })
 
-const {t} = useI18n()
-const writerStore = useWriterStore();
-const draftStore = userDraftStore()
-const settingStore = useSettingStore()
-const emailStore = useEmailStore();
+const { t } = useI18n()
 const accountStore = useAccountStore()
-const editor = ref({})
-const userStore = useUserStore();
-const show = ref(false);
-const percent = ref(0)
-let percentMessage = null
-let sending = false
+const draftStore = userDraftStore()
+const emailStore = useEmailStore()
+const settingStore = useSettingStore()
+const userStore = useUserStore()
+const writerStore = useWriterStore()
+const show = ref(false)
+const sending = ref(false)
+const draftSaving = ref(false)
+const dirty = ref(false)
 const defValue = ref('')
-const contactsTabRef = ref({})
+const editor = ref(null)
+const localPartRef = ref(null)
+const fileInput = ref(null)
 const showContacts = ref(false)
-const mySelect = ref()
-let selectStatus = false
-const backReply = reactive({
-  receiveEmail: [],
-  subject: '',
-  content: '',
-  sendType: ''
-})
+const contactsTable = ref(null)
+const senderFallbackNotice = ref('')
+const senderErrors = reactive({ localPart: '', domain: '' })
+const fieldErrors = reactive({ recipient: '', subject: '', content: '' })
+let autosaveTimer = null
+let suspendAutosave = false
 const form = reactive({
-  sendEmail: '',
-  receiveEmail: [],
-  accountId: -1,
-  name: '',
-  subject: '',
-  content: '',
-  sendType: '',
-  text: '',
-  emailId: 0,
-  attachments: [],
-  draftId: null,
+  name: '', localPart: '', domain: '', sendEmail: '', accountId: 0,
+  receiveEmail: [], subject: '', content: '', text: '', sendType: '', emailId: 0,
+  attachments: [], draftId: null, createTime: '',
+})
+const initialReply = reactive({ receiveEmail: [], subject: '', content: '', sendType: '' })
+const availableDomains = computed(() => resolveAuthorizedDomains(
+  settingStore.domainList,
+  userStore.user?.role?.availDomain,
+  (userStore.user?.permKeys || []).includes('*'),
+))
+const senderAddress = computed(() => form.localPart && form.domain ? `${form.localPart}@${form.domain}` : '')
+const senderValid = computed(() => !senderErrors.localPart && !senderErrors.domain && Boolean(form.localPart && form.domain && availableDomains.value.includes(form.domain)))
+const canSend = computed(() => senderValid.value && form.receiveEmail.length > 0 && Boolean(form.subject.trim()) && !sending.value)
+const recentSenders = computed(() => (writerStore.senderHistory || [])
+  .map(item => typeof item === 'string' ? { address: item, name: '' } : item)
+  .filter(item => {
+    const parsed = item.address && parseAddress(item.address)
+    return parsed && availableDomains.value.includes(parsed.domain)
+  }))
+const contacts = computed(() => (writerStore.sendRecipientRecord || []).map(email => ({ email })))
+const draftStatusText = computed(() => draftSaving.value ? t('savingDraft') : dirty.value ? t('draftPending') : form.draftId ? t('draftSaved') : t('draftAutoSaveHint'))
+
+watch(form, () => {
+  if (!show.value || suspendAutosave) return
+  dirty.value = true
+  scheduleAutosave()
+}, { deep: true })
+watch(availableDomains, domains => {
+  if (!show.value || domains.includes(form.domain)) return
+  chooseDefaultSender()
+  validateSender()
 })
 
-const selectRecipientList = ref([])
+function handleOpenChange(opened) { if (!opened && show.value) requestClose() }
+function markDirty() { dirty.value = true; scheduleAutosave() }
+function scheduleAutosave() {
+  window.clearTimeout(autosaveTimer)
+  if (!hasMeaningfulContent()) return
+  autosaveTimer = window.setTimeout(() => persistDraft(true), 2000)
+}
+function hasMeaningfulContent() { return Boolean(form.content || form.subject || form.receiveEmail.length || form.attachments.length) }
 
-const contacts = computed(() => writerStore.sendRecipientRecord.map(item => ({email: item})))
+function parseAddress(address) {
+  if (!address || typeof address !== 'string') return null
+  const clean = address.trim().replace(/^<|>$/g, '')
+  const index = clean.lastIndexOf('@')
+  if (index <= 0) return null
+  return { localPart: clean.slice(0, index), domain: normalizeDomain(clean.slice(index + 1)) }
+}
+function setSenderFromAddress(address, name = '', accountId = 0) {
+  const parsed = parseAddress(address)
+  if (!parsed || !availableDomains.value.includes(parsed.domain)) return false
+  form.localPart = parsed.localPart
+  form.domain = parsed.domain
+  form.name = name || writerStore.senderName || userStore.user?.displayName || userStore.user?.name || ''
+  form.accountId = accountId || 0
+  form.sendEmail = `${parsed.localPart}@${parsed.domain}`
+  validateSender()
+  return true
+}
+function chooseDefaultSender(preferredAddress = '') {
+  senderFallbackNotice.value = ''
+  if (!availableDomains.value.length) {
+    form.domain = ''
+    form.sendEmail = ''
+    form.accountId = 0
+    return false
+  }
+  if (preferredAddress && setSenderFromAddress(preferredAddress)) return true
+  const history = recentSenders.value.find(item => setSenderFromAddress(item.address, item.name))
+  if (history) return true
+  const account = accountStore.currentAccount || {}
+  if (setSenderFromAddress(account.email, account.name, account.accountId)) return true
+  const legacy = userStore.user?.email
+  if (setSenderFromAddress(legacy, userStore.user?.name, userStore.user?.account?.accountId)) return true
+  form.domain = availableDomains.value[0] || ''
+  form.sendEmail = senderAddress.value
+  form.name = writerStore.senderName || userStore.user?.displayName || userStore.user?.name || ''
+  form.accountId = 0
+  return false
+}
+function applyRecentSender(address) {
+  if (!address) return
+  const recent = recentSenders.value.find(item => item.address === address)
+  setSenderFromAddress(address, recent?.name)
+}
+function validateLocalPart() {
+  const value = form.localPart
+  senderErrors.localPart = !value ? t('localPartRequired') : value.length > 64 || !/^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+$/.test(value) || value.startsWith('.') || value.endsWith('.') || value.includes('..') ? t('localPartInvalid') : ''
+  form.sendEmail = senderAddress.value
+  return !senderErrors.localPart
+}
+function validateDomain() { senderErrors.domain = !form.domain ? t('domainRequired') : !availableDomains.value.includes(form.domain) ? t('domainUnauthorized') : ''; return !senderErrors.domain }
+function validateSender() { return validateLocalPart() && validateDomain() }
 
-function openContacts() {
-  showContacts.value = true
+function open() {
+  if (!form.localPart || !availableDomains.value.includes(form.domain)) chooseDefaultSender()
+  suspendAutosave = true
+  show.value = true
+  validateSender()
   nextTick(() => {
-    form.receiveEmail.forEach(item => {
-      if (writerStore.sendRecipientRecord.includes(item)) {
-        contactsTabRef.value.toggleRowSelection({email: item});
-      }
-    })
+    suspendAutosave = false
+    ;(form.localPart ? editor.value : localPartRef.value)?.focus?.()
   })
 }
-
-function deleteContact() {
-  ElMessageBox.confirm(t('confirmDeletionOfContacts'), {
-    confirmButtonText: t('confirm'),
-    cancelButtonText: t('cancel'),
-    type: 'warning'
-  }).then(() => {
-    const contactList = contactsTabRef.value.getSelectionRows().map(item => item.email);
-    form.receiveEmail = form.receiveEmail.filter(item => !contactList.includes(item));
-    writerStore.sendRecipientRecord = writerStore.sendRecipientRecord.filter(item => !contactList.includes(item));
-  })
+function openReply(email) {
+  resetForm()
+  form.receiveEmail = [email.sendEmail]
+  const subject = email.subject || ''
+  form.subject = /^(Re:|Re：|回复：|回复:)/i.test(subject) ? subject : `Re: ${subject}`
+  form.sendType = 'reply'
+  form.emailId = email.emailId || 0
+  const originalRecipient = Array.isArray(email.toEmail) ? email.toEmail[0] : email.toEmail
+  if (!chooseDefaultSender(originalRecipient) && originalRecipient) senderFallbackNotice.value = t('replySenderUnavailable')
+  else if (originalRecipient && senderAddress.value.toLowerCase() !== String(originalRecipient).toLowerCase()) senderFallbackNotice.value = t('replySenderFallback', { address: senderAddress.value })
+  defValue.value = `<div></div><div><br>${formatDetailDate(email.createTime)} ${escapeHtml(email.name || '')} &lt;${escapeHtml(email.sendEmail || '')}&gt; ${t('wrote')}:</div><blockquote class="mceNonEditable" style="margin:0 0 0 .8ex;border-left:1px solid #ccd2dc;padding-left:1ex">${formatImage(email.content) || `<pre style="font-family:inherit;word-break:break-word;white-space:pre-wrap;margin:0">${escapeHtml(email.text || '')}</pre>`}</blockquote>`
+  open()
+  nextTick(snapshotInitialReply)
 }
-
-function chooseContact() {
-
-  const contactList = contactsTabRef.value.getSelectionRows().map(item => item.email);
-  contactList.forEach(item => {
-    if (!form.receiveEmail.includes(item)) {
-      form.receiveEmail.push(item);
-    }
-  })
-
-  form.receiveEmail = form.receiveEmail.filter(item => {
-    return contactList.includes(item) || !writerStore.sendRecipientRecord.includes(item);
-  });
-
-  showContacts.value = false
+function openForward(email) {
+  resetForm()
+  form.subject = email.subject || ''
+  form.sendType = 'forward'
+  chooseDefaultSender()
+  defValue.value = formatImage(email.content) || `<pre style="font-family:inherit;word-break:break-word;white-space:pre-wrap;margin:0">${escapeHtml(email.text || '')}</pre>`
+  open()
+  nextTick(snapshotInitialReply)
 }
-
-function clearSelectContact() {
-  contactsTabRef.value.clearSelection();
+function openDraft(draft) {
+  resetForm()
+  suspendAutosave = true
+  Object.assign(form, { ...draft, attachments: draft.attachments || [], receiveEmail: draft.receiveEmail || [] })
+  form.domain = normalizeDomain(form.domain)
+  if ((!form.localPart || !availableDomains.value.includes(String(form.domain || '').toLowerCase())) && form.sendEmail) setSenderFromAddress(form.sendEmail, form.name, form.accountId)
+  if (!form.localPart || !availableDomains.value.includes(String(form.domain || '').toLowerCase())) chooseDefaultSender()
+  defValue.value = form.content || ''
+  show.value = true
+  dirty.value = false
+  nextTick(() => { suspendAutosave = false; editor.value?.focus?.() })
 }
+function snapshotInitialReply() { initialReply.content = editor.value?.getContent?.() || ''; initialReply.subject = form.subject; initialReply.receiveEmail = [...form.receiveEmail]; initialReply.sendType = form.sendType; dirty.value = false }
 
-function selectChange(value) {
-  form.receiveEmail.push(value)
+function addTagChange(value) {
+  const values = String(value || '').split(/[,，;；\s]+/).map(item => item.trim()).filter(Boolean)
+  form.receiveEmail = [...new Set(form.receiveEmail.filter(isEmail).concat(values.filter(isEmail)))]
+  fieldErrors.recipient = ''
+  markDirty()
 }
-
-function selectStatusChange(status) {
-  selectStatus = status
+function changeEditor(content, text) { form.content = content; form.text = text; fieldErrors.content = ''; markDirty() }
+async function filesSelected(event) {
+  const files = Array.from(event.target.files || [])
+  for (const file of files) form.attachments.push({ content: await fileToBase64(file), filename: file.name, size: file.size, contentType: file.type })
+  event.target.value = ''; markDirty()
 }
-
-const openSelect = () => {
-  mySelect.value.toggleMenu()
-}
-
-function inputChange(value) {
-
-  selectRecipientList.value = writerStore.sendRecipientRecord.filter(item => value && !form.receiveEmail.includes(item) && item.startsWith(value)).slice(0, 10);
-
-  if (!selectStatus && selectRecipientList.value.length > 0) {
-    openSelect()
-  }
-
-  if (selectStatus && selectRecipientList.value.length === 0) {
-    openSelect()
-  }
-
-}
-
-function addTagChange(val) {
-
-  const emails = Array.from(new Set(
-      val.split(/[,，]/).map(item => item.trim()).filter(item => item)
-  ));
-
-  form.receiveEmail.splice(form.receiveEmail.length - 1, 1)
-
-  let has = false
-  emails.forEach(email => {
-    if (isEmail(email) && !form.receiveEmail.includes(email)) {
-      form.receiveEmail.push(email)
-      has = true
-    }
-  })
-  if (selectStatus && has) openSelect()
-}
-
+function deleteAttachment(index) { form.attachments.splice(index, 1); markDirty() }
 function clearContent() {
-  ElMessageBox.confirm(t('clearContentConfirm'), {
-    confirmButtonText: t('confirm'),
-    cancelButtonText: t('cancel'),
-    type: 'warning'
-  }).then(() => {
-    resetForm()
-  })
-
-}
-
-function delAtt(index) {
-  form.attachments.splice(index, 1);
-}
-
-function chooseFile() {
-  const doc = document.createElement("input")
-  doc.setAttribute("type", "file")
-  doc.multiple = true;
-  doc.click()
-  doc.onchange = async (e) => {
-
-    const fileList = e.target.files;
-
-    for (const file of fileList) {
-
-      const size = file.size
-      const filename = file.name
-      const contentType = file.type
-
-      const content = await fileToBase64(file)
-      form.attachments.push({content, filename, size, contentType})
-
-    }
-
-  }
+  ElMessageBox.confirm(t('clearContentConfirm'), { confirmButtonText: t('clearContent'), cancelButtonText: t('keepEditing'), type: 'warning' }).then(() => { form.content = ''; form.text = ''; editor.value?.clearEditor?.(); markDirty() })
 }
 
 async function sendEmail() {
-
-  if (form.receiveEmail.length === 0) {
-    ElMessage({
-      message: t('emptyRecipientMsg'),
-      type: 'error',
-      plain: true,
-    })
-    return
+  fieldErrors.recipient = form.receiveEmail.length && form.receiveEmail.every(isEmail) ? '' : t('recipientInvalid')
+  fieldErrors.subject = form.subject.trim() ? '' : t('emptySubjectMsg')
+  form.content = editor.value?.getContent?.() || form.content
+  fieldErrors.content = form.content ? '' : t('emptyContentMsg')
+  if (!validateSender() || fieldErrors.recipient || fieldErrors.subject || fieldErrors.content || sending.value) return
+  sending.value = true
+  const payload = {
+    ...toRaw(form),
+    sendEmail: senderAddress.value,
+    accountId: form.accountId || 0,
+    from: { name: form.name || '', localPart: form.localPart, domain: form.domain },
   }
-
-  if (!form.subject) {
-    ElMessage({
-      message: t('emptySubjectMsg'),
-      type: 'error',
-      plain: true,
-    })
-    return
-  }
-
-  if (!form.content) {
-    form.content = editor.value.getContent();
-  }
-
-  if (!form.content) {
-    ElMessage({
-      message: t('emptyContentMsg'),
-      type: 'error',
-      plain: true,
-    })
-    return
-  }
-
-  if (form.manyType === 'divide' && form.attachments.length > 0) {
-    ElMessage({
-      message: t('noSeparateSendMsg'),
-      type: 'error',
-      plain: true,
-    })
-    return
-  }
-
-  if (sending) {
-    ElMessage({
-      message: t('sendingErrorMsg'),
-      type: 'error',
-      plain: true,
-    })
-    return
-  }
-
-  percentMessage = ElMessage({
-    message: () => h(sendPercent, {value: percent.value, desc: t('sending')}),
-    dangerouslyUseHTMLString: true,
-    plain: true,
-    duration: 0,
-    customClass: 'message-bottom'
-  })
-
-  sending = true
-
-  show.value = false
-
-  emailSend(form, (e) => {
-    percent.value = Math.round((e.loaded * 98) / e.total)
-  }).then(emailList => {
-    const email = emailList[0]
-    emailList.forEach(item => {
-      emailStore.sendScroll?.addItem(item)
-    })
-
-    ElNotification({
-      title: t('sendSuccessMsg'),
-      type: "success",
-      message: h('span', {style: 'color: teal'}, email.subject),
-      position: 'bottom-right'
-    })
-
-    userStore.refreshUserInfo();
-
-    addRecipientRecord();
-
-    if (form.draftId) {
-      form.subject = ''
-      form.content = ''
-      form.receiveEmail = []
-      draftStore.setDraft = {...toRaw(form)}
-    }
-
-    show.value = false
-    resetForm();
-  }).catch((e) => {
-    ElNotification({
-      title: t('sendFailMsg'),
-      type: e.code === 403 ? 'warning' : 'error',
-      message: h('span', {style: 'color: teal'}, e.message),
-      position: 'bottom-right'
-    })
-    if (e.code === 401) {
-      localStorage.removeItem('token');
-      router.replace('/login');
-    }
-    show.value = true
-    addRecipientRecord();
-  }).finally(() => {
-    percentMessage.close()
-    percent.value = 0
-    sending = false
-  })
-}
-
-function addRecipientRecord() {
-  writerStore.sendRecipientRecord = writerStore.sendRecipientRecord.filter(
-      email => !form.receiveEmail.includes(email)
-  );
-
-  writerStore.sendRecipientRecord.unshift(...form.receiveEmail);
-  writerStore.sendRecipientRecord = writerStore.sendRecipientRecord.slice(0, 500);
-}
-
-function resetForm() {
-  form.receiveEmail = []
-  form.subject = ''
-  form.content = ''
-  form.manyType = null
-  form.attachments = []
-  form.sendType = ''
-  form.emailId = 0
-  form.draftId = null
-  backReply.content = ''
-  backReply.subject = ''
-  backReply.receiveEmail = []
-  backReply.sendType = ''
-  editor.value.clearEditor()
-}
-
-function change(content, text) {
-  form.content = content;
-  form.text = text
-}
-
-function focusChange() {
-  if (selectStatus) openSelect()
-}
-
-function openForward(email) {
-  resetForm();
-
-  email.subject = email.subject || ''
-
-  form.subject = email.subject
-  form.sendType = 'forward'
-
-  defValue.value = ''
-
-  setTimeout(() => {
-    defValue.value = `
-      ${formatImage(email.content) || `<pre style="font-family: inherit;word-break: break-word;white-space: pre-wrap;margin: 0">${email.text}</pre>`}
-    `
-    open()
-
-    nextTick(() => {
-      backReply.content = editor.value.getContent()
-      backReply.subject = form.subject
-      backReply.receiveEmail = form.receiveEmail
-      backReply.sendType = form.sendType
-    })
-
-  });
-}
-
-function openReply(email) {
-
-  resetForm();
-
-  email.subject = email.subject || ''
-
-  form.receiveEmail.push(email.sendEmail)
-  form.subject = (
-      email.subject.startsWith('Re:') ||
-      email.subject.startsWith('Re：') ||
-      email.subject.startsWith('回复：') ||
-      email.subject.startsWith('回复:')) ? email.subject : 'Re: ' + email.subject
-  form.sendType = 'reply'
-  form.emailId = email.emailId
-
-  defValue.value = ''
-
-  setTimeout(() => {
-    defValue.value = `
-    <div></div>
-    <div>
-    <br>
-        ${formatDetailDate(email.createTime)} ${email.name} &lt${email.sendEmail}&gt ${t('wrote')}:
-    </div>
-    <blockquote class="mceNonEditable" style="margin: 0 0 0 0.8ex;border-left: 1px solid rgb(204,204,204);padding-left: 1ex;">
-      <articl>
-          ${formatImage(email.content) || `<pre style="font-family: inherit;word-break: break-word;white-space: pre-wrap;margin: 0">${email.text}</pre>`}
-      </article>
-    </blockquote>`
-    open()
-
-    nextTick(() => {
-      backReply.content = editor.value.getContent()
-      backReply.subject = form.subject
-      backReply.receiveEmail = form.receiveEmail
-      backReply.sendType = form.sendType
-    })
-  })
-
-}
-
-function formatImage(content) {
-  content = content || '';
-  const domain = settingStore.settings.r2Domain;
-  return content.replace(/{{domain}}/g, toOssDomain(domain) + '/');
-}
-
-function open() {
-  if (!accountStore.currentAccount.email) {
-    form.sendEmail = userStore.user.email;
-    form.accountId = userStore.user.account.accountId;
-    form.name = userStore.user.name;
-  } else {
-    form.sendEmail = accountStore.currentAccount.email;
-    form.accountId = accountStore.currentAccount.accountId;
-    form.name = accountStore.currentAccount.name;
-  }
-  show.value = true;
-  editor.value.focus()
-}
-
-function openDraft(draft) {
-  Object.assign(form, {...draft})
-  defValue.value = ''
-  setTimeout(() => defValue.value = form.content)
-  show.value = true;
-  editor.value.focus()
-}
-
-const handleKeyDown = (event) => {
-  if (event.key === 'Escape') {
-    close()
-  }
-};
-
-onMounted(() => {
-  window.addEventListener('keydown', handleKeyDown);
-});
-
-onUnmounted(() => {
-  window.removeEventListener('keydown', handleKeyDown);
-});
-
-function close() {
-
-  if (selectStatus) openSelect();
-
-  if (!form.content) {
-    form.content = editor.value.getContent();
-  }
-
-  if (form.draftId) {
-    draftStore.setDraft = {...toRaw(form)}
+  try {
+    const emailList = await emailSend(payload, () => {})
+    ;(emailList || []).forEach(item => emailStore.sendScroll?.addItem?.(item))
+    rememberSender()
+    rememberRecipients()
+    if (form.draftId) await deleteDraftRecord(form.draftId)
+    userStore.refreshUserInfo()
+    ElNotification({ title: t('sendSuccessMsg'), type: 'success', message: h('span', { style: 'color:var(--foreground)' }, form.subject), position: 'bottom-right' })
     show.value = false
     resetForm()
-    return;
+  } catch (error) {
+    ElNotification({ title: t('sendFailMsg'), type: error?.code === 403 ? 'warning' : 'error', message: error?.message || t('sendRetryHint'), position: 'bottom-right', duration: 0 })
+    dirty.value = true
+    scheduleAutosave()
+    if (error?.code === 401) { localStorage.removeItem('token'); await router.replace('/login') }
+  } finally { sending.value = false }
+}
+async function handleSendShortcut() {
+  if (!writerStore.shortcutConfirmed) {
+    try {
+      await ElMessageBox.confirm(t('sendShortcutFirstUse'), { confirmButtonText: t('sendNow'), cancelButtonText: t('keepEditing'), type: 'info' })
+      writerStore.shortcutConfirmed = true
+    } catch { return }
   }
+  await sendEmail()
+}
+function rememberSender() {
+  writerStore.senderName = form.name || ''
+  const address = senderAddress.value
+  writerStore.senderHistory = [{ address, name: form.name || '' }, ...recentSenders.value.filter(item => item.address !== address)].slice(0, 8)
+}
+function rememberRecipients() {
+  writerStore.sendRecipientRecord = [...form.receiveEmail, ...writerStore.sendRecipientRecord.filter(email => !form.receiveEmail.includes(email))].slice(0, 500)
+}
 
-  if (!(form.content || form.subject || form.receiveEmail.length > 0)) {
-    show.value = false
-    resetForm()
-    return;
-  }
-
-  if (backReply.sendType === 'reply' || backReply.sendType === 'forward') {
-    let subjectFlag = form.subject === backReply.subject
-    let contentFlag = editor.value.getContent() === backReply.content
-    let receiveFlag = form.receiveEmail.length === 1 && form.receiveEmail[0] === backReply.receiveEmail[0]
-    if (backReply.sendType === 'forward' && form.receiveEmail.length === 0) {
-      receiveFlag = true;
+async function persistDraft(silent = false) {
+  window.clearTimeout(autosaveTimer)
+  if (!hasMeaningfulContent() || sending.value || !show.value) return
+  draftSaving.value = true
+  form.content = editor.value?.getContent?.() || form.content
+  const record = structuredClone(toRaw(form))
+  const attachments = record.attachments
+  delete record.attachments
+  try {
+    if (record.draftId) {
+      const draftId = record.draftId
+      delete record.draftId
+      await db.value.draft.update(draftId, record)
+      await db.value.att.put({ draftId, attachments })
+    } else {
+      record.createTime = dayjs().utc().format('YYYY-MM-DD HH:mm:ss')
+      delete record.draftId
+      form.draftId = await db.value.draft.add(record)
+      form.createTime = record.createTime
+      await db.value.att.put({ draftId: form.draftId, attachments })
     }
-    if (subjectFlag && contentFlag && receiveFlag) {
-      resetForm();
-      close()
-      return;
-    }
-  }
-
-  ElMessageBox.confirm(t('saveDraftConfirm'), {
-    confirmButtonText: t('confirm'),
-    cancelButtonText: t('cancel'),
-    type: 'warning',
-    distinguishCancelAndClose: true
-  }).then(async () => {
-    const formData = {...toRaw(form)};
-    delete formData.draftId
-    delete formData.attachments
-    formData.createTime = dayjs().utc().format('YYYY-MM-DD HH:mm:ss');
-    const draftId = await db.value.draft.add({...formData})
-    db.value.att.add({draftId, attachments: toRaw(form.attachments)})
+    dirty.value = false
     draftStore.refreshList++
-    show.value = false
-    await nextTick(() => {
-      resetForm()
-    })
-  }).catch((action) => {
-    if (action === 'cancel') {
-      show.value = false
-      resetForm()
-    }
-  })
+    if (!silent) ElMessage({ message: t('draftSaved'), type: 'success', plain: true })
+  } finally { draftSaving.value = false }
+}
+async function requestClose() {
+  if (sending.value) return
+  if (!dirty.value) { show.value = false; resetForm(); return }
+  try {
+    await ElMessageBox.confirm(t('saveDraftConfirmModern'), { confirmButtonText: t('saveDraft'), cancelButtonText: t('discardChanges'), distinguishCancelAndClose: true, type: 'warning' })
+    await persistDraft(false)
+    show.value = false; resetForm()
+  } catch (action) {
+    if (action === 'cancel') { if (form.draftId) await deleteDraftRecord(form.draftId); show.value = false; resetForm() }
+  }
+}
+async function confirmDiscard() {
+  try { await ElMessageBox.confirm(t('deleteDraftConfirm'), { confirmButtonText: t('deleteDraft'), cancelButtonText: t('keepEditing'), type: 'warning' }); await deleteDraftRecord(form.draftId); show.value = false; resetForm() } catch {}
+}
+async function deleteDraftRecord(draftId) { if (!draftId) return; await Promise.all([db.value.draft.delete(draftId), db.value.att.delete(draftId)]); draftStore.refreshList++ }
 
+function openContacts() { showContacts.value = true; nextTick(() => form.receiveEmail.forEach(email => { if (writerStore.sendRecipientRecord.includes(email)) contactsTable.value?.toggleRowSelection?.({ email }) })) }
+function chooseContacts() { const selected = contactsTable.value?.getSelectionRows?.().map(item => item.email) || []; form.receiveEmail = [...new Set([...form.receiveEmail, ...selected])]; showContacts.value = false; markDirty() }
+function deleteContacts() { const selected = contactsTable.value?.getSelectionRows?.().map(item => item.email) || []; writerStore.sendRecipientRecord = writerStore.sendRecipientRecord.filter(email => !selected.includes(email)); form.receiveEmail = form.receiveEmail.filter(email => !selected.includes(email)); showContacts.value = false }
+function clearSelectedContacts() { contactsTable.value?.clearSelection?.() }
+function formatImage(content = '') { return content.replace(/{{domain}}/g, `${toOssDomain(settingStore.settings.r2Domain)}/`) }
+function escapeHtml(value) { return String(value).replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char]) }
+function resetForm() {
+  window.clearTimeout(autosaveTimer)
+  suspendAutosave = true
+  Object.assign(form, { name: '', localPart: '', domain: '', sendEmail: '', accountId: 0, receiveEmail: [], subject: '', content: '', text: '', sendType: '', emailId: 0, attachments: [], draftId: null, createTime: '' })
+  Object.assign(senderErrors, { localPart: '', domain: '' }); Object.assign(fieldErrors, { recipient: '', subject: '', content: '' }); Object.assign(initialReply, { receiveEmail: [], subject: '', content: '', sendType: '' })
+  senderFallbackNotice.value = ''; defValue.value = ''; dirty.value = false; editor.value?.clearEditor?.()
+  nextTick(() => { suspendAutosave = false })
 }
 
+onBeforeUnmount(() => window.clearTimeout(autosaveTimer))
 </script>
-<style>
-.write-select .el-select-dropdown__list {
-  padding: 4px 4px !important;
+
+<style scoped>
+.compose-overlay { position: fixed; inset: 0; z-index: var(--z-overlay); background: var(--overlay); animation: fade-in var(--motion-base) var(--ease-out); }
+.compose-dialog { position: fixed; inset-block-start: 50%; inset-inline-start: 50%; z-index: var(--z-modal); width: min(880px, calc(100vw - 48px)); height: min(820px, calc(100dvh - 48px)); display: grid; grid-template-rows: auto minmax(0, 1fr) auto; border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface); box-shadow: var(--shadow-floating); transform: translate(-50%, -50%); overflow: hidden; }
+.compose-header { min-height: 68px; padding: 12px 14px 12px 24px; display: flex; align-items: center; justify-content: space-between; gap: 16px; border-block-end: 1px solid var(--border); }
+.compose-header > div { min-width: 0; }
+.compose-header [role='heading'] { color: var(--foreground); font-size: 1.0625rem; font-weight: 740; }
+.compose-header p { margin-block-start: 2px; color: var(--muted-foreground); font-size: .75rem; }
+.compose-body { min-height: 0; overflow-y: auto; }
+.sender-section { padding: 20px 24px; border-block-end: 1px solid var(--border); background: var(--surface-subtle); }
+.sender-section__heading { margin-block-end: 14px; display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; }
+.sender-section__heading h2 { font-size: .875rem; font-weight: 720; }
+.sender-section__heading p { margin-block-start: 2px; color: var(--muted-foreground); font-size: .75rem; }
+.recent-sender { min-height: 44px; max-width: 260px; padding-inline: 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--muted-foreground); background: var(--surface); font-size: .75rem; }
+.sender-grid { display: grid; grid-template-columns: minmax(0, .85fr) minmax(0, 1fr) minmax(0, 1fr); gap: 12px; align-items: start; }
+.compose-input { min-height: 44px; padding-inline: 12px; display: flex; align-items: center; gap: 9px; border: 1px solid var(--border-strong); border-radius: var(--radius-control); background: var(--surface); }
+.compose-input:focus-within { border-color: var(--focus-ring); box-shadow: 0 0 0 3px color-mix(in oklch, var(--focus-ring) 17%, transparent); }
+.compose-input > svg { flex: 0 0 auto; color: var(--subtle-foreground); }
+.compose-input input, .compose-input select { width: 100%; min-width: 0; height: 42px; border: 0; outline: 0; color: var(--foreground); background: transparent; }
+.compose-select > svg:last-child { pointer-events: none; }
+.sender-preview { margin-block-start: 12px; padding: 9px 11px; display: flex; align-items: center; gap: 10px; border: 1px solid color-mix(in oklch, var(--warning) 30%, var(--border)); border-radius: var(--radius-control); color: var(--warning); background: var(--warning-soft); }
+.sender-preview--valid { border-color: color-mix(in oklch, var(--success) 30%, var(--border)); color: var(--success); background: var(--success-soft); }
+.sender-preview > span { min-width: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
+.sender-preview small { font-size: .6875rem; }
+.sender-preview strong { overflow-wrap: anywhere; color: var(--foreground); font-size: .8125rem; }
+.sender-fallback { margin-block-start: 10px; display: flex; gap: 7px; color: var(--warning); font-size: .75rem; }
+.domain-empty { margin-block-start: 12px; padding: 11px 12px; display: flex; align-items: flex-start; gap: 9px; border: 1px solid color-mix(in oklch, var(--destructive) 30%, var(--border)); border-radius: var(--radius-control); color: var(--destructive); background: var(--destructive-soft); font-size: .75rem; }
+.domain-empty svg { flex: 0 0 auto; }
+.domain-empty span { display: grid; gap: 2px; }
+.domain-empty strong { color: var(--foreground); font-size: .8125rem; }
+.message-fields { padding: 8px 24px 0; }
+.recipient-row, .subject-row { min-height: 54px; display: grid; grid-template-columns: 72px minmax(0, 1fr) auto; align-items: center; gap: 8px; border-block-end: 1px solid var(--border); }
+.subject-row { grid-template-columns: 72px minmax(0, 1fr); }
+.recipient-row label, .subject-row label { color: var(--muted-foreground); font-size: .8125rem; font-weight: 650; }
+.recipient-row :deep(.el-input-tag__wrapper) { min-height: 44px; padding-inline: 0; box-shadow: none !important; border-radius: 0 !important; }
+.subject-row input { width: 100%; height: 50px; border: 0; outline: 0; color: var(--foreground); background: transparent; }
+.compose-error { margin: 4px 0 0 80px; color: var(--destructive); font-size: .75rem; }
+.compose-error--body { margin: 0 24px 8px; }
+.editor-section { height: max(260px, calc(100% - 120px)); min-height: 260px; padding: 6px 18px 0; }
+.attachments { padding: 10px 24px 16px; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; }
+.attachment-item { min-width: 0; min-height: 52px; padding: 4px 4px 4px 12px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--surface-subtle); }
+.attachment-item > svg { color: var(--muted-foreground); }
+.attachment-item span { min-width: 0; display: grid; }
+.attachment-item strong { overflow: hidden; font-size: .75rem; text-overflow: ellipsis; white-space: nowrap; }
+.attachment-item small { color: var(--muted-foreground); font-size: .6875rem; }
+.compose-footer { min-height: 68px; padding: 10px 14px 10px 18px; display: grid; grid-template-columns: auto minmax(100px, 1fr) auto; align-items: center; gap: 12px; border-block-start: 1px solid var(--border); background: var(--surface); }
+.compose-footer__tools, .compose-footer__actions { display: flex; align-items: center; gap: 4px; }
+.compose-footer__actions { justify-content: flex-end; }
+.draft-status { min-width: 0; display: flex; align-items: center; justify-content: center; gap: 6px; color: var(--muted-foreground); font-size: .75rem; }
+.draft-status span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.discard-action { min-height: 44px; padding-inline: 10px; display: inline-flex; align-items: center; gap: 7px; border-radius: var(--radius-control); color: var(--destructive); background: transparent; font-weight: 650; cursor: pointer; }
+.discard-action:hover { background: var(--destructive-soft); }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.spin { animation: spin .8s linear infinite; }
+.contacts-dialog { min-height: 360px; position: relative; }
+.contacts-empty { position: absolute; inset: 50% auto auto 50%; display: grid; justify-items: center; gap: 8px; color: var(--muted-foreground); transform: translate(-50%, -50%); }
+.contacts-actions { margin-block-start: 16px; display: flex; justify-content: space-between; }
+.contact-email { overflow-wrap: anywhere; }
+@keyframes fade-in { from { opacity: 0; } }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+@media (max-width: 767px) {
+  .compose-dialog { inset: 0; width: 100vw; height: 100dvh; border: 0; border-radius: 0; transform: none; padding-block-end: env(safe-area-inset-bottom); }
+  .compose-header { min-height: 60px; padding: 8px 8px 8px 16px; }
+  .compose-header p { display: none; }
+  .sender-section { padding: 16px; }
+  .sender-section__heading { align-items: flex-start; flex-direction: column; gap: 10px; }
+  .recent-sender { width: 100%; max-width: none; }
+  .sender-grid { grid-template-columns: 1fr; }
+  .message-fields { padding-inline: 16px; }
+  .recipient-row, .subject-row { grid-template-columns: 62px minmax(0, 1fr) auto; }
+  .subject-row { grid-template-columns: 62px minmax(0, 1fr); }
+  .compose-error { margin-inline-start: 70px; }
+  .editor-section { padding-inline: 10px; }
+  .attachments { padding-inline: 16px; grid-template-columns: 1fr; }
+  .compose-footer { min-height: 64px; grid-template-columns: auto minmax(0, 1fr) auto; padding-inline: 8px; }
+  .draft-status { justify-content: flex-start; }
+  .discard-action span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 }
-.write-select .el-select-dropdown__item {
-  padding: 0 10px 0 10px;
-}
-
-.write-select .el-select-dropdown {
-  min-width: 0 !important;
-}
-</style>
-<style scoped lang="scss">
-.send {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-
-  .write-box {
-    background: var(--el-bg-color);
-    width: min(1367px, calc(100% - 80px));
-    box-shadow: var(--el-box-shadow-light);
-    border: 1px solid var(--el-border-color-light);
-    transition: var(--el-transition-duration);
-    padding: 15px;
-    border-radius: 8px;
-    display: grid;
-    grid-template-rows: auto 1fr;
-    overflow: hidden;
-    @media (max-width: 1024px) {
-      width: 100%;
-      height: 100%;
-      border-radius: 0;
-      border: 0;
-      padding-top: 10px;
-    }
-
-    @media (min-width: 1025px) {
-      height: min(800px, calc(100vh - 60px));
-    }
-
-    .title {
-      display: flex;
-      justify-content: space-between;
-      margin-bottom: 10px;
-
-      .title-left {
-        align-items: center;
-        display: grid;
-        grid-template-columns: auto auto auto 1fr;
-      }
-
-      .title-text {
-      }
-
-      .sender {
-        margin-left: 8px;
-      }
-
-      .sender-name {
-        margin-left: 8px;
-        font-weight: bold;
-      }
-
-      .send-email {
-        color: #999896;
-        margin-left: 5px;
-        white-space: nowrap;
-        text-overflow: ellipsis;
-        overflow: hidden;
-      }
-
-
-      div {
-        display: flex;
-        align-items: center;
-      }
-    }
-
-    .container {
-      height: 100%;
-      display: grid;
-      grid-template-rows: auto auto 1fr auto;
-      gap: 15px;
-
-      .item-title {
-      }
-
-      .button-item {
-        display: grid;
-        grid-template-columns: auto auto 1fr auto;
-
-        .att-add {
-          cursor: pointer;
-        }
-
-        .att-clear {
-          cursor: pointer;
-          margin-left: 10px;
-        }
-
-        .att-list {
-          display: grid;
-          gap: 5px;
-          grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
-          padding-left: 10px;
-          padding-right: 10px;
-          max-height: 110px;
-          overflow-y: auto;
-          @media (max-width: 450px) {
-            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-          }
-
-          .att-item {
-            display: grid;
-            grid-template-columns: auto 1fr auto auto;
-            gap: 5px;
-            height: 32px;
-            font-size: 14px;
-            padding: 4px 5px;
-            background: var(--light-ill);
-            border-radius: 4px;
-            .att-filename {
-              white-space: nowrap;
-              text-overflow: ellipsis;
-              overflow: hidden;
-            }
-          }
-        }
-      }
-    }
-  }
-
-}
-
-.email-row {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-:deep(.el-dialog) {
-  width: 420px !important;
-  @media (max-width: 460px) {
-    width: calc(100% - 40px) !important;
-    margin-right: 20px !important;
-    margin-left: 20px !important;
-  }
-}
-
-.contacts-bottom {
-  display: flex;
-  justify-content: end;
-  margin-top: 10px;
-}
-
-.add-contact {
-  color: var(--regular-text-color)
-}
-
-.write-select {
-  position: absolute;
-  width: 300px;
-  left: 60px;
-  z-index: 0;
-  opacity: 0;
-  pointer-events: none;
-}
-
-:deep(.el-input-tag__suffix) {
-  padding-right: 4px;
-}
-
-.icon {
-  cursor: pointer;
+@media (max-width: 430px) {
+  .compose-footer__tools > :nth-child(2), .draft-status svg { display: none; }
+  .draft-status { font-size: .6875rem; }
 }
 </style>

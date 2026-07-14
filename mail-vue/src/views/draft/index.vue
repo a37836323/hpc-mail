@@ -78,14 +78,17 @@ function getEmailList() {
 }
 
 async function deleteDraft(draftIds) {
-  await db.value.draft.bulkDelete(draftIds);
+  await Promise.all([
+    db.value.draft.bulkDelete(draftIds),
+    db.value.att.bulkDelete(draftIds)
+  ]);
   draftStore.refreshList++
 }
 
 async function jumpContent(email) {
   const att = await db.value.att.get(email.draftId)
-  email.attachments = att.attachments
-  uiStore.writerRef.openDraft(email);
+  email.attachments = att?.attachments || []
+  uiStore.writerRef?.openDraft?.(email);
 }
 
 </script>

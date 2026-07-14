@@ -1,212 +1,275 @@
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-    -webkit-tap-highlight-color: transparent;
-    scrollbar-width: thin;
-    scrollbar-color: var(--dark-border) transparent;
-}
-
-html, body {
-    width: 100%;
-    height: 100%;
-}
-
-#app {
-    width: 100%;
-    height: 100%;
-}
-
-:deep(.el-input__inner:focus) {
-    background-color: transparent !important;
-    border-color: #dcdfe6 !important;
-}
-
-.el-table thead th {
-    font-weight: bold !important;
-}
-
-body {
-    font-family: -apple-system, Inter, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
-    line-height: 1.5;
-    color: var(--el-text-color-primary);
-    font-size: 14px;
-}
-
-html, body {
-    background: var(--el-bg-color);
-}
-
-ul, ol {
-    list-style: none;
-}
-
-img {
-    max-width: 100%;
-    height: auto;
-    display: block;
-}
-
-button, input, select, textarea {
-    font-family: inherit;
-    font-size: inherit;
-    outline: none;
-    border: none;
-    background: none;
-}
-
-*:focus {
-    outline: none;
-}
-
-.el-message {
-    white-space: nowrap !important;
-}
-
-.message-bottom {
-    top: auto !important;
-    bottom: 20px !important;
-
-    .el-icon {
-        display: none !important;
-    }
-}
-
-.el-input-group__append, .el-input-group__prepend {
-    color: var(--el-text-color-primary) !important;
-}
-
-.tox .tox-dialog__iframe.tox-dialog__iframe--opaque {
-    background-color: var(--el-bg-color) !important;
-}
-
-.tox .tox-dialog--width-lg {
-    height: 850px !important;
-    @media (max-width: 1024px) {
-        height: calc(100% - 40px) !important;
-    }
-}
-
-.tox .tox-dialog__body-content {
-    overflow: initial !important;
-    max-height: min(850px, calc(100vh - 110px)) !important;
-    @media (max-width: 1024px) {
-        box-sizing: initial !important;
-        max-height: min(850px, calc(100% - 40px)) !important;
-    }
-}
-
-.tox-dialog__body-content {
-    height: auto !important;
-    flex-basis: auto !important;
-}
-
-.tox .tox-collection--grid .tox-collection__group {
-    max-height: 220px !important;
-}
-
 :root {
-    --el-color-primary: #1890ff;
-    --el-color-primary-dark-2: #1064c0;
-    --el-color-primary-light-3: #4dabff;
-    --el-color-primary-light-5: #69c0ff;
-    --el-color-primary-light-7: #91d5ff;
-    --el-color-primary-light-9: #e6f7ff;
+    color-scheme: light;
+    --background: oklch(97.5% 0.008 253);
+    --surface: oklch(99.2% 0.004 253);
+    --surface-raised: oklch(99.8% 0.002 253);
+    --surface-subtle: oklch(95.6% 0.012 253);
+    --surface-selected: oklch(93.8% 0.032 253);
+    --foreground: oklch(21% 0.028 253);
+    --muted-foreground: oklch(44% 0.03 253);
+    --subtle-foreground: oklch(54% 0.025 253);
+    --border: oklch(89% 0.018 253);
+    --border-strong: oklch(80% 0.026 253);
+    --primary: oklch(56% 0.205 256);
+    --primary-hover: oklch(49% 0.205 256);
+    --primary-soft: oklch(94% 0.04 256);
+    --primary-foreground: oklch(98.5% 0.006 253);
+    --success: oklch(53% 0.15 148);
+    --success-soft: oklch(94% 0.042 148);
+    --warning: oklch(57% 0.15 63);
+    --warning-soft: oklch(95% 0.045 72);
+    --destructive: oklch(55% 0.205 25);
+    --destructive-soft: oklch(95% 0.035 25);
+    --destructive-foreground: oklch(98% 0.008 25);
+    --focus-ring: oklch(60% 0.19 256);
+    --overlay: oklch(20% 0.025 253 / .48);
+    --shadow-floating: 0 18px 48px oklch(18% 0.03 253 / .16);
+    --shadow-subtle: 0 1px 2px oklch(18% 0.03 253 / .06);
 
-    --extra-light-fill: #FAFCFF;
-    --light-ill: #F5F7FA;
-    --light-border: #E4E7ED;
-    --header-actions-border: inset 0 -1px 0 0 var(--el-border-color-lighter);
-    --aside-backgound: #001529;
-    --loadding-background: rgba(255, 255, 255, 0.8);
-    --dark-border: #CDD0D6;
-    --base-fill: #F0F2F5;
-    --regular-text-color: #585d69;
-    --light-border-color: #e7e9ec;
-    --aside-right-border: 3px 0 5px rgba(0, 21, 41, .35);
-    --choose-account-background: var(--el-color-primary-light-8);
-    --el-text-color-regular: var(--el-text-color-primary);
-    --email-scroll-content-color: rgba(25, 41, 59, 0.4);
-    --email-hover-background: #F2F6FC;
-    --login-border: none;
-    --form-desc-color: #71717a;
-    --login-switch-color: #006be6;
-    --scrollbar-track-color: #A8ABB2;
-    --base-border-color: #DCDFE6;
-    --secondary-text-color: #909399;
-    --message-block-color: rgba(0, 0, 0, 0);
-    --loading-hide-transition: all 200ms;
-    --vt-x: 50%;
-    --vt-y: 50%;
-    --vt-duration: 520ms;
-    --vt-easing: ease-out;
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-6: 24px;
+    --space-8: 32px;
+    --space-12: 48px;
+    --radius-sm: 8px;
+    --radius-control: 10px;
+    --radius-card: 14px;
+    --radius-round: 999px;
+    --motion-fast: 140ms;
+    --motion-base: 200ms;
+    --motion-slow: 260ms;
+    --ease-out: cubic-bezier(.25, 1, .5, 1);
+    --z-dropdown: 30;
+    --z-sticky: 40;
+    --z-overlay: 80;
+    --z-modal: 90;
+    --z-toast: 100;
+    --z-tooltip: 110;
+
+    /* Element Plus remains for legacy management views and is mapped to the same system. */
+    --el-color-primary: var(--primary);
+    --el-color-primary-dark-2: var(--primary-hover);
+    --el-color-primary-light-3: oklch(70% 0.14 256);
+    --el-color-primary-light-5: oklch(79% 0.1 256);
+    --el-color-primary-light-7: oklch(88% 0.06 256);
+    --el-color-primary-light-8: oklch(92% 0.045 256);
+    --el-color-primary-light-9: var(--primary-soft);
+    --el-bg-color: var(--surface);
+    --el-bg-color-page: var(--background);
+    --el-bg-color-overlay: var(--surface-raised);
+    --el-fill-color: var(--surface-subtle);
+    --el-fill-color-light: var(--surface-subtle);
+    --el-fill-color-lighter: var(--background);
+    --el-fill-color-extra-light: var(--surface-raised);
+    --el-fill-color-blank: var(--surface);
+    --el-text-color-primary: var(--foreground);
+    --el-text-color-regular: var(--foreground);
+    --el-text-color-secondary: var(--muted-foreground);
+    --el-text-color-placeholder: var(--subtle-foreground);
+    --el-border-color: var(--border);
+    --el-border-color-light: var(--border);
+    --el-border-color-lighter: color-mix(in oklch, var(--border) 74%, transparent);
+    --el-border-color-extra-light: color-mix(in oklch, var(--border) 48%, transparent);
+    --el-border-radius-base: var(--radius-control);
+    --el-border-radius-small: var(--radius-sm);
+    --el-box-shadow-light: var(--shadow-floating);
+    --el-menu-border-color: var(--border);
+
+    /* aliases used by upstream scoped styles */
+    --extra-light-fill: var(--surface-raised);
+    --light-ill: var(--surface-subtle);
+    --light-border: var(--border);
+    --header-actions-border: inset 0 -1px 0 0 var(--border);
+    --aside-backgound: var(--surface);
+    --loadding-background: color-mix(in oklch, var(--surface) 82%, transparent);
+    --dark-border: var(--border-strong);
+    --base-fill: var(--surface-subtle);
+    --regular-text-color: var(--muted-foreground);
+    --light-border-color: var(--border);
+    --aside-right-border: 1px 0 0 var(--border);
+    --choose-account-background: var(--surface-selected);
+    --email-scroll-content-color: color-mix(in oklch, var(--muted-foreground) 72%, transparent);
+    --email-hover-background: var(--surface-subtle);
+    --login-border: var(--border);
+    --form-desc-color: var(--muted-foreground);
+    --login-switch-color: var(--primary);
+    --scrollbar-track-color: var(--border-strong);
+    --base-border-color: var(--border);
+    --secondary-text-color: var(--muted-foreground);
+    --message-block-color: transparent;
 }
 
-.dark {
-    --extra-light-fill: #191919;
-    --light-ill: #262727;
-    --light-border: #414243;
-    --aside-backgound: #141414;
-    --header-actions-border: inset 0 -1px 0 0 var(--el-border-color-lighter);
-    --loadding-background: rgba(0, 0, 0, 0.3);
-    --dark-border: #636466;
-    --base-fill: #303030;
-    --regular-text-color: #bfbdbc;
-    --light-border-color: #414243;
-    --aside-right-border: 3px 0 5px #0A0A0A;
-    --choose-account-background: #39393A;
-    --email-scroll-content-color: rgba(255, 255, 255, 0.3);
-    --email-hover-background: #1D1E1F;
-    --login-border: none;
-    --form-desc-color: #8D9095;
-    --login-switch-color: rgb(102, 177, 255);
-    --scrollbar-track-color: #8D9095;
-    --base-border-color: #4C4D4F;
-    --secondary-text-color: #A3A6AD;
-    --message-block-color: rgba(30, 30, 30, 0.2);
-    --el-border-color: #414243 !important;
+html.dark {
+    color-scheme: dark;
+    --background: oklch(16% 0.018 253);
+    --surface: oklch(19% 0.021 253);
+    --surface-raised: oklch(23% 0.024 253);
+    --surface-subtle: oklch(24.5% 0.024 253);
+    --surface-selected: oklch(29% 0.055 253);
+    --foreground: oklch(94.5% 0.012 253);
+    --muted-foreground: oklch(72% 0.026 253);
+    --subtle-foreground: oklch(63% 0.025 253);
+    --border: oklch(31% 0.026 253);
+    --border-strong: oklch(40% 0.033 253);
+    --primary: oklch(72% 0.145 253);
+    --primary-hover: oklch(78% 0.115 253);
+    --primary-soft: oklch(27% 0.06 253);
+    --primary-foreground: oklch(18% 0.025 253);
+    --success: oklch(72% 0.135 148);
+    --success-soft: oklch(26% 0.045 148);
+    --warning: oklch(79% 0.14 78);
+    --warning-soft: oklch(27% 0.045 72);
+    --destructive: oklch(72% 0.16 25);
+    --destructive-soft: oklch(27% 0.055 25);
+    --destructive-foreground: oklch(18% 0.02 25);
+    --focus-ring: oklch(76% 0.13 253);
+    --overlay: oklch(8% 0.015 253 / .7);
+    --shadow-floating: 0 18px 48px oklch(7% 0.02 253 / .38);
+    --shadow-subtle: none;
 }
 
-.el-input {
-    --el-input-text-color: var(--el-text-color-primary) !important;
+*, *::before, *::after { box-sizing: border-box; }
+* { margin: 0; scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
+html, body, #app { width: 100%; min-width: 320px; height: 100%; }
+html { background: var(--background); text-rendering: optimizeLegibility; -webkit-text-size-adjust: 100%; }
+body {
+    background: var(--background);
+    color: var(--foreground);
+    font-family: "MiSans", "HarmonyOS Sans SC", "Aptos", "PingFang SC", "Microsoft YaHei", sans-serif;
+    font-size: 1rem;
+    line-height: 1.5;
+    font-kerning: normal;
+    overflow-wrap: anywhere;
+}
+button, input, select, textarea { color: inherit; font: inherit; }
+button { border: 0; }
+a { color: var(--primary); text-underline-offset: 3px; }
+ul, ol { list-style: none; padding: 0; }
+img { max-width: 100%; height: auto; display: block; }
+
+:focus { outline: none; }
+:focus-visible {
+    outline: 2px solid var(--focus-ring) !important;
+    outline-offset: 2px !important;
+}
+::selection { color: var(--foreground); background: var(--primary-soft); }
+
+.skip-link {
+    position: fixed;
+    inset-block-start: 8px;
+    inset-inline-start: 8px;
+    z-index: 999;
+    transform: translateY(-150%);
+    padding: 10px 14px;
+    border-radius: var(--radius-control);
+    color: var(--primary-foreground);
+    background: var(--primary);
+    transition: transform var(--motion-fast) var(--ease-out);
+}
+.skip-link:focus { transform: translateY(0); }
+
+#nprogress .bar { background: var(--primary) !important; height: 2px !important; }
+.el-message { max-width: calc(100vw - 32px); white-space: normal !important; border-radius: var(--radius-control) !important; }
+.message-bottom { inset-block-start: auto !important; inset-block-end: max(20px, env(safe-area-inset-bottom)) !important; }
+.message-bottom .el-icon { display: none !important; }
+
+.el-button {
+    min-height: 40px;
+    border-radius: var(--radius-control);
+    font-weight: 620;
+    transition: transform var(--motion-fast) var(--ease-out), color var(--motion-fast) var(--ease-out), background-color var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out);
+}
+.el-button:not(.is-disabled):active { transform: scale(.98); }
+.el-button + .el-button { margin-inline-start: 8px; }
+.el-input, .el-select, .el-date-editor { --el-component-size: 44px; }
+.el-input__wrapper, .el-select__wrapper, .el-textarea__inner, .el-input-tag__wrapper {
+    min-height: 44px;
+    border-radius: var(--radius-control) !important;
+    box-shadow: 0 0 0 1px var(--border) inset !important;
+    background: var(--surface) !important;
+    transition: box-shadow var(--motion-fast) var(--ease-out), background-color var(--motion-fast) var(--ease-out);
+}
+.el-input__wrapper:hover, .el-select__wrapper:hover, .el-textarea__inner:hover, .el-input-tag__wrapper:hover { box-shadow: 0 0 0 1px var(--border-strong) inset !important; }
+.el-input__wrapper.is-focus, .el-select__wrapper.is-focused, .el-textarea__inner:focus, .el-input-tag__wrapper.is-focus { box-shadow: 0 0 0 2px var(--focus-ring) inset !important; }
+.el-card { border: 1px solid var(--border); border-radius: var(--radius-card); box-shadow: none; background: var(--surface); }
+.el-dialog {
+    max-width: calc(100vw - 32px);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    background: var(--surface-raised);
+    box-shadow: var(--shadow-floating);
+}
+.el-dialog__header { padding-block: 20px 8px; }
+.el-dialog__title { color: var(--foreground); font-size: 1.125rem; font-weight: 680; }
+.el-dialog__headerbtn { width: 44px; height: 44px; inset-block-start: 8px; inset-inline-end: 8px; }
+.el-overlay { background: var(--overlay); }
+.el-popper, .el-dropdown__popper, .el-select__popper { border-color: var(--border) !important; border-radius: var(--radius-card) !important; background: var(--surface-raised) !important; box-shadow: var(--shadow-floating) !important; }
+.el-dropdown-menu { padding: 6px; background: transparent; }
+.el-dropdown-menu__item { min-height: 40px; border-radius: var(--radius-sm); }
+.el-table { --el-table-border-color: var(--border); --el-table-header-bg-color: var(--surface-subtle); --el-table-row-hover-bg-color: var(--surface-subtle); --el-table-bg-color: transparent; --el-table-tr-bg-color: transparent; color: var(--foreground); }
+.el-table th.el-table__cell { color: var(--muted-foreground); font-size: .8125rem; font-weight: 700; letter-spacing: .01em; }
+.el-table .el-table__cell { padding-block: 12px; }
+.el-table__inner-wrapper::before { background-color: var(--border); }
+.el-tag { min-height: 28px; border-radius: var(--radius-round); padding-inline: 10px; font-weight: 600; }
+.el-tabs__item { min-height: 44px; }
+.el-empty__description { color: var(--muted-foreground); }
+.el-pagination button, .el-pager li { min-width: 40px; min-height: 40px; border-radius: var(--radius-sm); }
+.el-message-box { max-width: calc(100vw - 32px); border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface-raised); }
+.el-notification { max-width: calc(100vw - 32px); border-radius: var(--radius-card); border-color: var(--border); background: var(--surface-raised); }
+
+/* Shared structure for every legacy view. */
+.header-actions {
+    min-height: 56px !important;
+    padding-inline: clamp(12px, 2vw, 24px) !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+    border-block-end: 1px solid var(--border) !important;
+    background: var(--surface) !important;
+    box-shadow: none !important;
+}
+.header-actions > .icon, .header-actions .icon {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 11px;
+    border-radius: var(--radius-control);
+    color: var(--muted-foreground);
+    cursor: pointer;
+}
+@media (hover: hover) { .header-actions .icon:hover { color: var(--foreground); background: var(--surface-subtle); } }
+.loading { background: var(--loadding-background) !important; }
+.loading-hide { pointer-events: none; opacity: 0; }
+.email-list-box, .user-box, .perm-box, .reg-key, .setting-box, .analysis, .box { min-width: 0; background: var(--background); }
+.settings-card, .number-item, .picture-item, .picture-cs-item, .code-item {
+    border: 1px solid var(--border) !important;
+    border-radius: var(--radius-card) !important;
+    background: var(--surface) !important;
+    box-shadow: none !important;
+}
+.card-title, .settings-title, .title { color: var(--foreground); }
+
+.tox .tox-dialog__iframe.tox-dialog__iframe--opaque { background: var(--surface) !important; }
+.tox .tox-dialog--width-lg { height: min(850px, calc(100vh - 40px)) !important; }
+.tox .tox-dialog__body-content { overflow: auto !important; max-height: calc(100vh - 110px) !important; }
+.tox-dialog__body-content { height: auto !important; flex-basis: auto !important; }
+.tox .tox-collection--grid .tox-collection__group { max-height: 220px !important; }
+
+@media (max-width: 767px) {
+    body { font-size: 1rem; }
+    .el-button { min-height: 44px; }
+    .el-dialog { width: calc(100vw - 24px) !important; margin-inline: 12px !important; }
+    .header-actions { overflow-x: auto; scrollbar-width: none; }
+    .header-actions::-webkit-scrollbar { display: none; }
+    .settings-card, .number-item, .picture-item, .picture-cs-item, .code-item { border-radius: 12px !important; }
 }
 
-/* 视图过渡，基于径向剪裁 */
-html.dark,
-html:not(.dark) {
-    view-transition-name: root;
-}
-
-::view-transition-old(root),
-::view-transition-new(root) {
-    animation: none;
-    mix-blend-mode: normal;
-}
-
-/* 层级控制，确保对应方向动画在上层可见 */
-html[data-theme-to="dark"]::view-transition-new(root) { z-index: 2; }
-html[data-theme-to="dark"]::view-transition-old(root) { z-index: 1; }
-html[data-theme-to="light"]::view-transition-old(root) { z-index: 2; }
-html[data-theme-to="light"]::view-transition-new(root) { z-index: 1; }
-
-/* 切到暗色：新视图从点击点向外扩散 */
-html[data-theme-to="dark"]::view-transition-new(root) {
-    clip-path: circle(0px at var(--vt-x) var(--vt-y));
-    animation: vt-radial-in var(--vt-duration) var(--vt-easing) forwards;
-}
-
-/* 切到浅色：旧视图向点击点收缩 */
-html[data-theme-to="light"]::view-transition-old(root) {
-    clip-path: circle(var(--vt-end-radius, 0px) at var(--vt-x) var(--vt-y));
-    animation: vt-radial-out var(--vt-duration) var(--vt-easing) forwards;
-}
-
-@keyframes vt-radial-in {
-    from { clip-path: circle(0px at var(--vt-x) var(--vt-y)); }
-    to   { clip-path: circle(var(--vt-end-radius, 0px) at var(--vt-x) var(--vt-y)); }
-}
-
-@keyframes vt-radial-out {
-    from { clip-path: circle(var(--vt-end-radius, 0px) at var(--vt-x) var(--vt-y)); }
-    to   { clip-path: circle(0px at var(--vt-x) var(--vt-y)); }
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        scroll-behavior: auto !important;
+        animation-duration: .01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: .01ms !important;
+    }
 }

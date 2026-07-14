@@ -2,9 +2,12 @@ import { defineStore } from 'pinia'
 
 export const useWriterStore = defineStore('writer', {
     state: () => ({
-        sendRecipientRecord: []
+        sendRecipientRecord: [],
+        senderHistory: [],
+        senderName: '',
+        shortcutConfirmed: false,
     }),
     persist: {
-        pick: ['sendRecipientRecord'],
+        pick: ['sendRecipientRecord', 'senderHistory', 'senderName', 'shortcutConfirmed'],
     },
 })

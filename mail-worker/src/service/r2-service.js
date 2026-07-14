@@ -1,6 +1,7 @@
 import s3Service from './s3-service';
 import settingService from './setting-service';
 import kvObjService from './kv-obj-service';
+import { secureAttachmentMetadata, secureObjectResponse } from '../utils/attachment-security';
 
 const r2Service = {
 
@@ -21,6 +22,7 @@ const r2Service = {
 	},
 
 	async putObj(c, key, content, metadata) {
+		metadata = secureAttachmentMetadata(metadata, key.split('/').pop());
 
 		const storageType = await this.storageType(c);
 
@@ -38,6 +40,10 @@ const r2Service = {
 			await s3Service.putObj(c, key, content, metadata);
 		}
 
+	},
+
+	async toSafeResponse(c, key) {
+		return secureObjectResponse(await this.getObj(c, key), key);
 	},
 
 	async getObj(c, key) {

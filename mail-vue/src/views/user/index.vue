@@ -1,12 +1,12 @@
 <template>
   <div class="user-box">
     <div class="header-actions">
-      <Icon class="icon" icon="ion:add-outline" width="23" height="23" @click="openAdd"/>
+      <AppButton size="sm" @click="openAdd"><template #icon><UserPlus :size="18" /></template>{{ $t('addUser') }}</AppButton>
       <div class="search">
         <el-input
-            v-model="params.email"
+            v-model="params.username"
             class="search-input"
-            :placeholder="$t('searchByEmail')"
+            :placeholder="$t('searchByUsername')"
         >
         </el-input>
       </div>
@@ -17,13 +17,13 @@
         <el-option :key="1" :label="$t('banned')" :value="1"/>
         <el-option :key="-2" :label="$t('deleted')" :value="-2"/>
       </el-select>
-      <Icon class="icon" icon="iconoir:search" @click="search" width="20" height="20"/>
-      <Icon class="icon" @click="changeTimeSort" icon="material-symbols-light:timer-arrow-down-outline"
-            v-if="params.timeSort === 1" width="28" height="28"/>
-      <Icon class="icon" @click="changeTimeSort" icon="material-symbols-light:timer-arrow-up-outline" v-else width="28"
-            height="28"/>
-      <Icon class="icon" icon="ion:reload" width="18" height="18" @click="refresh"/>
-      <Icon class="icon" icon="uiw:delete" width="16" height="16" @click="delUser"/>
+      <IconButton :label="$t('search')" variant="bordered" @click="search"><Search :size="18" /></IconButton>
+      <IconButton :label="params.timeSort === 1 ? $t('sortNewestFirst') : $t('sortOldestFirst')" @click="changeTimeSort">
+        <ArrowDownNarrowWide v-if="params.timeSort === 1" :size="19" />
+        <ArrowUpNarrowWide v-else :size="19" />
+      </IconButton>
+      <IconButton :label="$t('refresh')" @click="refresh"><RefreshCw :size="18" /></IconButton>
+      <IconButton :label="$t('delete')" variant="danger" @click="delUser"><Trash2 :size="18" /></IconButton>
     </div>
     <el-scrollbar ref="scrollbarRef" class="scrollbar">
       <div>
@@ -42,12 +42,12 @@
             :cell-class-name="cellClassName"
         >
           <el-table-column :width="expandWidth" type="selection" :selectable="row => row.type !== 0" />
-          <el-table-column show-overflow-tooltip :tooltip-formatter="tableRowFormatter" :label="$t('tabEmailAddress')"
+          <el-table-column show-overflow-tooltip :tooltip-formatter="tableRowFormatter" :label="$t('username')"
                            :min-width="emailWidth">
             <template #default="props">
-              <div style="display: flex;gap: 5px">
-                <div class="email-row">{{ props.row.email }}</div>
-                <el-tag type="warning" v-if="props.row.username">L</el-tag>
+              <div class="user-identity-cell">
+                <div class="email-row">{{ displayUserIdentity(props.row) }}</div>
+                <small v-if="displayUserSecondary(props.row)">{{ displayUserSecondary(props.row) }}</small>
               </div>
             </template>
           </el-table-column>
@@ -154,38 +154,17 @@
       </div>
     </el-dialog>
     <el-dialog v-model="showAdd" :title="$t('addUser')" @closed="resetAddForm">
-      <div class="container">
-        <el-input v-model="addForm.email" type="text" :placeholder="$t('emailAccount')" autocomplete="off">
-          <template #append>
-            <div @click.stop="openSelect">
-              <el-select
-                  ref="mySelect"
-                  v-model="addForm.suffix"
-                  :placeholder="$t('select')"
-                  class="select"
-              >
-                <el-option
-                    v-for="item in domainList"
-                    :key="item"
-                    :label="item"
-                    :value="item"
-                />
-              </el-select>
-              <div>
-                <span>{{ addForm.suffix }}</span>
-                <Icon class="setting-icon" icon="mingcute:down-small-fill" width="20" height="20"/>
-              </div>
-            </div>
-          </template>
-        </el-input>
-        <el-input type="password" v-model="addForm.password" :placeholder="$t('password')"/>
-        <el-select v-model="addForm.type" :placeholder="$t('perm')">
+      <form class="container" @submit.prevent="submit">
+        <label class="admin-field"><span>{{ $t('username') }}</span><el-input v-model.trim="addForm.username" type="text" :placeholder="$t('usernameExample')" autocomplete="username" /></label>
+        <label class="admin-field"><span>{{ $t('displayNameOptional') }}</span><el-input v-model.trim="addForm.displayName" type="text" :placeholder="$t('displayNameExample')" autocomplete="name" /></label>
+        <label class="admin-field"><span>{{ $t('password') }}</span><el-input type="password" v-model="addForm.password" :placeholder="$t('passwordPlaceholder')" autocomplete="new-password" show-password /></label>
+        <label class="admin-field"><span>{{ $t('perm') }}</span><el-select v-model="addForm.type" :placeholder="$t('perm')">
           <el-option v-for="item in roleList" :label="item.name" :value="item.roleId" :key="item.roleId"/>
-        </el-select>
-        <el-button class="btn" type="primary" @click="submit" :loading="addLoading"
+        </el-select></label>
+        <el-button native-type="submit" class="btn" type="primary" :loading="addLoading"
         >{{ $t('add') }}
         </el-button>
-      </div>
+      </form>
     </el-dialog>
     <el-dialog class="account-dialog" v-model="accountShow" :title="t('userAccount')" @closed="resetAccountList" >
       <el-table :data="accountList" style="height: 480px" v-loading="accountLoading" element-loading-background="transparent" :empty-text="accountLoading ? '' : null">
@@ -227,9 +206,9 @@
     </el-dialog>
     <el-dialog class="account-dialog" v-model="detailsShow" :title="t('userDetails')"  >
       <div class="details">
-        <div v-if="userDetails.username"><span class="details-item-title">LinuxDo:</span>
+        <div v-if="userDetails.oauthUsername"><span class="details-item-title">LinuxDo:</span>
           <el-avatar :src="userDetails.avatar" :size="30" class="linuxdo-avatar"  />
-          <span style="margin: 0 10px">用户名：{{userDetails.username}}</span>
+          <span style="margin: 0 10px">{{ $t('username') }}：{{userDetails.oauthUsername}}</span>
           <span>
                     等级：<el-tag type="success">{{userDetails.trustLevel}}</el-tag>
                   </span>
@@ -380,10 +359,11 @@ import {
 } from '@/request/user.js'
 import {roleSelectUse} from "@/request/role.js";
 import {Icon} from "@iconify/vue";
+import { ArrowDownNarrowWide, ArrowUpNarrowWide, RefreshCw, Search, Trash2, UserPlus } from '@lucide/vue'
+import AppButton from '@/components/ui/AppButton.vue'
+import IconButton from '@/components/ui/IconButton.vue'
 import loading from "@/components/loading/index.vue";
 import {tzDayjs} from "@/utils/day.js";
-import {useSettingStore} from "@/store/setting.js";
-import {isEmail} from "@/utils/verify-utils.js";
 import {useRoleStore} from "@/store/role.js";
 import {useUserStore} from "@/store/user.js";
 import {useI18n} from 'vue-i18n';
@@ -395,7 +375,6 @@ defineOptions({
 const {t, locale} = useI18n();
 const roleStore = useRoleStore()
 const userStore = useUserStore()
-const settingStore = useSettingStore()
 const filteredValue = ['normal', 'del']
 const filters = [{text: t('active'), value: 'normal'}, {text: t('deleted'), value: 'del'}]
 const preserveExpanded = ref(false)
@@ -434,17 +413,15 @@ const triggerRef = ref({
     return position.value;
   }
 })
-const domainList = settingStore.domainList
-
 const addForm = reactive({
-  email: '',
-  suffix: settingStore.domainList[0],
+  username: '',
+  displayName: '',
   password: '',
   type: null,
 })
 
 const params = reactive({
-  email: '',
+  username: '',
   num: 1,
   size: 15,
   timeSort: 0,
@@ -466,7 +443,6 @@ const pagerCount = ref(10)
 const settingLoading = ref(false)
 const tableLoading = ref(true)
 const roleList = reactive([])
-const mySelect = ref({})
 const accountList = reactive([])
 const accountParams = reactive({
   size: 10,
@@ -673,16 +649,25 @@ function setRightStatusName(user) {
 }
 
 const tableRowFormatter = (data) => {
-  return data.row.email
+  return displayUserIdentity(data.row)
 }
 
-const openSelect = () => {
-  mySelect.value.toggleMenu()
+function legacyEmailFor(user) {
+  const value = user?.legacyEmail || user?.email || ''
+  return /@auth\.invalid$/i.test(value) ? '' : value
+}
+
+function displayUserIdentity(user) {
+  return user?.username || legacyEmailFor(user) || '—'
+}
+
+function displayUserSecondary(user) {
+  return user?.displayName || (user?.username ? legacyEmailFor(user) : '')
 }
 
 function resetAddForm() {
-  addForm.email = ''
-  addForm.suffix = settingStore.domainList[0]
+  addForm.username = ''
+  addForm.displayName = ''
   addForm.type = null
   addForm.password = ''
 }
@@ -693,18 +678,18 @@ function openAdd() {
 
 function submit() {
 
-  if (!addForm.email) {
+  if (!addForm.username) {
     ElMessage({
-      message: t('emptyEmailMsg'),
+      message: t('usernameRequired'),
       type: "error",
       plain: true
     })
     return
   }
 
-  if (!isEmail(addForm.email + addForm.suffix)) {
+  if (!/^[A-Za-z0-9._-]{3,32}$/.test(addForm.username) || addForm.username.startsWith('.') || addForm.username.endsWith('.') || addForm.username.includes('..')) {
     ElMessage({
-      message: t('notEmailMsg'),
+      message: t('usernameInvalid'),
       type: "error",
       plain: true
     })
@@ -739,11 +724,10 @@ function submit() {
   }
 
   addLoading.value = true
-  const form = {...addForm}
-  form.email = form.email + form.suffix
-  userAdd(form).then(() => {
+  userAdd({...addForm}).then(() => {
     addLoading.value = false
-    addForm.email = ''
+    addForm.username = ''
+    addForm.displayName = ''
     ElMessage({
       message: t('addSuccessMsg'),
       type: "success",
@@ -793,7 +777,7 @@ function toRoleName(type) {
 
 function resetSendCount(user) {
 
-  ElMessageBox.confirm(t('reSendConfirm', {msg: user.email}), {
+  ElMessageBox.confirm(t('reSendConfirm', {msg: displayUserIdentity(user)}), {
     confirmButtonText: t('confirm'),
     cancelButtonText: t('cancel'),
     type: 'warning'
@@ -832,7 +816,7 @@ function delUser(user) {
 }
 
 function delOneUser(user) {
-  ElMessageBox.confirm(t('delConfirm', {msg: user.email}), {
+  ElMessageBox.confirm(t('delConfirm', {msg: displayUserIdentity(user)}), {
     confirmButtonText: t('confirm'),
     cancelButtonText: t('cancel'),
     type: 'warning'
@@ -856,7 +840,7 @@ function restore(user) {
     confirmButtonText: t('confirm'),
     cancelButtonText: t('cancel'),
     message: () => h('div', [
-      h('div', {class: 'mb-2'}, t('restoreConfirm', {msg: user.email}))
+      h('div', {class: 'mb-2'}, t('restoreConfirm', {msg: displayUserIdentity(user)}))
       // h(ElRadioGroup, {
       //   modelValue: type.value,
       //   'onUpdate:modelValue': (val) => (type.value = val),
@@ -967,7 +951,7 @@ function openSetPwd(user) {
 }
 
 function refresh() {
-  params.email = ''
+  params.username = ''
   params.num = 1
   params.status = -1
   params.timeSort = 0
@@ -1062,6 +1046,7 @@ function adjustWidth() {
 .user-box {
   overflow: hidden;
   height: 100%;
+  background: var(--background);
 }
 
 :deep(.el-dialog) {
@@ -1083,12 +1068,14 @@ function adjustWidth() {
 }
 
 .header-actions {
+  min-height: 62px;
   padding: 9px 15px;
   display: flex;
   gap: 15px;
   flex-wrap: wrap;
   align-items: center;
-  box-shadow: var(--header-actions-border);
+  border-block-end: 1px solid var(--border);
+  background: var(--surface);
   font-size: 18px;
 
   .search-input {
@@ -1105,15 +1092,36 @@ function adjustWidth() {
     }
   }
 
-  .icon {
-    cursor: pointer;
-  }
 }
 
 .container {
   display: grid;
   grid-template-columns: 1fr;
   gap: 15px;
+}
+
+.admin-field {
+  display: grid;
+  gap: 7px;
+
+  > span {
+    color: var(--foreground);
+    font-size: .875rem;
+    font-weight: 650;
+  }
+}
+
+.user-identity-cell {
+  min-width: 0;
+  display: grid;
+
+  small {
+    overflow: hidden;
+    color: var(--muted-foreground);
+    font-size: .75rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 }
 
 .type {

@@ -7,6 +7,7 @@ import userService from '../service/user-service';
 import permService from '../service/perm-service';
 import { t } from '../i18n/i18n'
 import app from '../hono/hono';
+import { isSessionExpired, putAuthInfo } from '../utils/session-utils';
 
 const exclude = [
 	'/login',
@@ -126,9 +127,19 @@ app.use('*', async (c, next) => {
 	if (!authInfo) {
 		throw new BizError(t('authExpired'), 401);
 	}
+	if (isSessionExpired(authInfo)) {
+		await c.env.kv.delete(KvConst.AUTH_INFO + userId);
+		throw new BizError(t('authExpired'), 401);
+	}
 
 	if (!authInfo.tokens.includes(token)) {
 		throw new BizError(t('authExpired'), 401);
+	}
+
+	const containedCredentialMaterial = Boolean(authInfo.user && ('password' in authInfo.user || 'salt' in authInfo.user));
+	if (authInfo.user) {
+		delete authInfo.user.password;
+		delete authInfo.user.salt;
 	}
 
 	const permIndex = requirePerms.findIndex(item => {
@@ -157,8 +168,8 @@ app.use('*', async (c, next) => {
 	if (!nowTime.isSame(refreshTime)) {
 		authInfo.refreshTime = dayjs().toISOString();
 		await userService.updateUserInfo(c, authInfo.user.userId);
-		await c.env.kv.put(KvConst.AUTH_INFO + userId, JSON.stringify(authInfo), { expirationTtl: constant.TOKEN_EXPIRE });
 	}
+	if (!nowTime.isSame(refreshTime) || containedCredentialMaterial) await putAuthInfo(c, userId, authInfo);
 
 	c.set('user',authInfo.user)
 

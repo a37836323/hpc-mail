@@ -25,7 +25,7 @@
             class="search-input"
         >
           <template #prefix>
-            <div @click.stop="openSelect">
+            <div class="search-selector">
               <el-select
                   ref="mySelect"
                   v-model="params.searchType"
@@ -37,10 +37,10 @@
                 <el-option key="1" :label="$t('user')" :value="'user'"/>
                 <el-option key="2" :label="$t('selectEmail')" :value="'account'"/>
               </el-select>
-              <div class="search-type">
+              <button type="button" class="search-type" :aria-label="$t('selectSearchType')" @click.stop="openSelect">
                 <span>{{ selectTitle }}</span>
                 <Icon class="setting-icon" icon="mingcute:down-small-fill" width="20" height="20"/>
-              </div>
+              </button>
             </div>
           </template>
         </el-input>
@@ -51,12 +51,12 @@
           <el-option key="4" :label="$t('selectDeleted')" value="delete"/>
           <el-option key="4" :label="$t('noRecipientTitle')" value="noone"/>
         </el-select>
-        <Icon class="icon" icon="iconoir:search" @click="search" width="20" height="20"/>
-        <Icon class="icon" @click="changeTimeSort" icon="material-symbols-light:timer-arrow-down-outline"
-              v-if="params.timeSort === 0" width="28" height="28"/>
-        <Icon class="icon" @click="changeTimeSort" icon="material-symbols-light:timer-arrow-up-outline" v-else
-              width="28" height="28"/>
-        <Icon class="icon clear" icon="fluent:broom-sparkle-16-regular" width="22" height="22" @click="openBathDelete"/>
+        <IconButton :label="$t('search')" @click="search"><Search :size="18" /></IconButton>
+        <IconButton :label="params.timeSort === 0 ? $t('sortOldestFirst') : $t('sortNewestFirst')" @click="changeTimeSort">
+          <ArrowDownNarrowWide v-if="params.timeSort === 0" :size="19" />
+          <ArrowUpNarrowWide v-else :size="19" />
+        </IconButton>
+        <IconButton :label="$t('clearEmail')" variant="danger" @click="openBathDelete"><Trash2 :size="18" /></IconButton>
       </template>
     </emailScroll>
     <el-dialog v-model="showBathDelete" :title="$t('clearEmail')" width="335"
@@ -99,6 +99,8 @@ import {
   allEmailLatest
 } from "@/request/all-email.js";
 import {Icon} from "@iconify/vue";
+import { ArrowDownNarrowWide, ArrowUpNarrowWide, Search, Trash2 } from '@lucide/vue'
+import IconButton from '@/components/ui/IconButton.vue'
 import router from "@/router/index.js";
 import {useI18n} from 'vue-i18n';
 import {toUtc} from "@/utils/day.js";
@@ -283,7 +285,7 @@ function jumpContent(email) {
   emailStore.contentData.email = email
   emailStore.contentData.delType = 'physics'
   emailStore.contentData.showStar = false
-  emailStore.contentData.showReply = false
+  emailStore.contentData.showReply = true
   router.push({name: 'content'})
 }
 
@@ -412,7 +414,10 @@ async function latest() {
 
 .search-type {
   display: flex;
+  align-items: center;
   color: var(--el-text-color-regular);
+  background: transparent;
+  cursor: pointer;
 }
 
 :deep(.header-actions) {

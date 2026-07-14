@@ -13,19 +13,21 @@ const base64urlDecode = (str) => {
 };
 
 const jwtUtils = {
-	async generateToken(c, payload, expiresInSeconds) {
+	async generateToken(c, payload, expiresInSeconds = 60 * 60 * 24 * 30) {
 		const header = {
 			alg: 'HS256',
 			typ: 'JWT'
 		};
 
 		const now = Math.floor(Date.now() / 1000);
-		const exp = expiresInSeconds ? now + expiresInSeconds : undefined;
+		const lifetime = Number(expiresInSeconds);
+		if (!Number.isFinite(lifetime) || lifetime <= 0) throw new Error('JWT expiration must be positive');
+		const exp = now + Math.floor(lifetime);
 
 		const fullPayload = {
 			...payload,
 			iat: now,
-			...(exp ? { exp } : {})
+			exp
 		};
 
 		const headerStr = base64url(encoder.encode(JSON.stringify(header)));
@@ -74,7 +76,7 @@ const jwtUtils = {
 			const payload = JSON.parse(payloadJson);
 
 			const now = Math.floor(Date.now() / 1000);
-			if (payload.exp && payload.exp < now) return null;
+			if (!Number.isFinite(payload.exp) || payload.exp <= now) return null;
 
 			return payload;
 

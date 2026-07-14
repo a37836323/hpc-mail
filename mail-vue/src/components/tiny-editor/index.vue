@@ -1,7 +1,7 @@
 <template>
   <div class="editor-box" :class="showLoading ? 'editor-box-loading' : ''">
     <loading class="loading" v-if="showLoading"/>
-    <textarea v-else style="outline: none" :id="editorId" ref="editorRef"></textarea>
+    <textarea v-else :id="editorId" ref="editorRef"></textarea>
   </div>
 </template>
 
@@ -100,11 +100,10 @@ function initEditor() {
          --scrollbar-track-color: ${uiStore.dark ? '#141414' : '#FFFFFF'};
          --scrollbar-thumb-color: ${uiStore.dark ? '#8D9095' : '#A8ABB2'};
     }`,
-    plugins: 'link image advlist lists  emoticons fullscreen  table preview code',
-    toolbar: 'bold emoticons forecolor backcolor italic fontsize | alignleft aligncenter alignright alignjustify | outdent indent |  bullist numlist | link image  | table code preview fullscreen',
+    plugins: 'link image advlist lists fullscreen code',
+    toolbar: 'undo redo | bold italic | bullist numlist | link image | removeformat | code fullscreen',
     toolbar_mode: 'scrolling',
-    font_size_formats: '8px 10px 12px 14px 16px 18px 24px 36px',
-    emoticons_search: false,
+    font_size_formats: '12px 14px 16px 18px 24px',
     language: language.value,
     language_load: true,
     menubar: false,
@@ -159,12 +158,12 @@ function initEditor() {
 
 function focus() {
   nextTick(() => {
-    editor.value.focus()
+    editor.value?.focus()
   })
 }
 
 function getContent() {
-  return editor.value.getContent()
+  return editor.value?.getContent() || ''
 }
 
 
@@ -180,6 +179,8 @@ function destroyEditor() {
 .editor-box {
   height: 100%;
   width: 100%;
+  overflow: hidden;
+  border-radius: var(--radius-control);
 }
 
 .loading {
@@ -209,8 +210,24 @@ function destroyEditor() {
 }
 
 :deep(.tox-tinymce) {
-  border: none;
-  border-radius: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+}
+
+:deep(.tox-editor-header) {
+  border-bottom: 1px solid var(--border) !important;
+  box-shadow: none !important;
+}
+
+:deep(.tox-toolbar__primary) {
+  min-height: 44px;
+}
+
+:deep(.tox-tbtn) {
+  width: 36px !important;
+  height: 36px !important;
+  border-radius: 8px !important;
 }
 
 :deep(.tox-toolbar__group) {

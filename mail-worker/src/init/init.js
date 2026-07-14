@@ -1,6 +1,7 @@
 import settingService from '../service/setting-service';
 import emailUtils from '../utils/email-utils';
 import {emailConst} from "../const/entity-const";
+import { migratedUsernamePreference, normalizeUsername, usernameBase, USERNAME_MAX_LENGTH } from '../utils/auth-utils';
 
 const dbInit = {
 	async init(c) {
@@ -29,8 +30,70 @@ const dbInit = {
 		await this.v2_8DB(c);
 		await this.v2_9DB(c);
 		await this.v3_0DB(c);
+		await this.v3_1DB(c);
 		await settingService.refresh(c);
 		return c.text('success');
+	},
+
+	async v3_1DB(c) {
+		const usernameColumn = await c.env.db.prepare(`SELECT name FROM pragma_table_info('user') WHERE name = 'username' LIMIT 1`).first();
+		if (!usernameColumn) {
+			await c.env.db.prepare(`ALTER TABLE user ADD COLUMN username TEXT;`).run();
+		}
+
+		const displayNameColumn = await c.env.db
+			.prepare(`SELECT name FROM pragma_table_info('user') WHERE name = 'display_name' LIMIT 1`)
+			.first();
+		if (!displayNameColumn) {
+			await c.env.db.prepare(`ALTER TABLE user ADD COLUMN display_name TEXT NOT NULL DEFAULT '';`).run();
+		}
+
+		const { results = [] } = await c.env.db
+			.prepare(`
+				SELECT u.user_id, u.email, u.username, u.display_name, a.name AS account_name
+				FROM user AS u
+				LEFT JOIN account AS a
+					ON a.user_id = u.user_id
+					AND a.email COLLATE NOCASE = u.email COLLATE NOCASE
+				ORDER BY u.user_id ASC
+			`)
+			.all();
+		const used = new Set();
+		const updates = [];
+
+		for (const row of results) {
+			const current = normalizeUsername(row.username);
+			const accountName = normalizeUsername(row.account_name);
+			const emailPrefix = emailUtils.getName(row.email || '');
+			const preferred = migratedUsernamePreference(current, accountName, emailPrefix, row.user_id);
+			let candidate = preferred;
+
+			if (used.has(candidate.toLowerCase())) {
+				let suffix = `-${row.user_id}`;
+				let base = usernameBase(preferred, 'user').slice(0, USERNAME_MAX_LENGTH - suffix.length);
+				candidate = `${base}${suffix}`;
+				let counter = 2;
+				while (used.has(candidate.toLowerCase())) {
+					suffix = `-${row.user_id}-${counter++}`;
+					base = usernameBase(preferred, 'user').slice(0, USERNAME_MAX_LENGTH - suffix.length);
+					candidate = `${base}${suffix}`;
+				}
+			}
+
+			used.add(candidate.toLowerCase());
+			const displayName = normalizeUsername(row.display_name) || accountName || candidate;
+			if (candidate !== row.username || displayName !== row.display_name) {
+				updates.push(
+					c.env.db.prepare(`UPDATE user SET username = ?, display_name = ? WHERE user_id = ?`).bind(candidate, displayName, row.user_id)
+				);
+			}
+		}
+
+		for (let index = 0; index < updates.length; index += 50) {
+			await c.env.db.batch(updates.slice(index, index + 50));
+		}
+
+		await c.env.db.prepare(`CREATE UNIQUE INDEX IF NOT EXISTS idx_user_username_nocase ON user (username COLLATE NOCASE);`).run();
 	},
 
 	async v3_0DB(c) {
@@ -566,6 +629,8 @@ const dbInit = {
 		  CREATE TABLE IF NOT EXISTS user (
 			user_id INTEGER PRIMARY KEY AUTOINCREMENT,
 			email TEXT NOT NULL,
+			username TEXT,
+			display_name TEXT NOT NULL DEFAULT '',
 			type INTEGER DEFAULT 1 NOT NULL,
 			password TEXT NOT NULL,
 			salt TEXT NOT NULL,

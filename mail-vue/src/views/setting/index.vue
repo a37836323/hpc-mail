@@ -4,24 +4,28 @@
       <div class="title">{{$t('profile')}}</div>
       <div class="item">
         <div>{{$t('username')}}</div>
+        <div>{{ userStore.user.username || userStore.user.legacyEmail || '—' }}</div>
+      </div>
+      <div class="item">
+        <div>{{$t('displayName')}}</div>
         <div>
           <span v-if="setNameShow" class="edit-name-input">
             <el-input v-model="accountName"  ></el-input>
-            <span class="edit-name" @click="setName">
+            <button type="button" class="edit-name" @click="setName">
              {{$t('save')}}
-            </span>
+            </button>
           </span>
           <span v-else class="user-name">
-            <span >{{ userStore.user.name }}</span>
-            <span class="edit-name" @click="showSetName">
+            <span >{{ userStore.user.displayName || userStore.user.name || '—' }}</span>
+            <button v-if="userStore.user.account?.accountId" type="button" class="edit-name" @click="showSetName">
              {{$t('change')}}
-            </span>
+            </button>
           </span>
         </div>
       </div>
-      <div class="item">
-        <div>{{$t('emailAccount')}}</div>
-        <div>{{ userStore.user.email }}</div>
+      <div v-if="userStore.user.legacyEmail" class="item">
+        <div>{{$t('legacyEmail')}}</div>
+        <div>{{ userStore.user.legacyEmail }}</div>
       </div>
       <div class="item">
         <div>{{$t('password')}}</div>
@@ -84,7 +88,7 @@ defineOptions({
 })
 
 function showSetName() {
-  accountName.value = userStore.user.name
+  accountName.value = userStore.user.displayName || userStore.user.name
   setNameShow.value = true
 }
 
@@ -102,13 +106,16 @@ function setName() {
   setNameShow.value = false
   let name = accountName.value
 
-  if (name === userStore.user.name) {
+  if (name === (userStore.user.displayName || userStore.user.name)) {
     return
   }
 
   userStore.user.name = accountName.value
+  userStore.user.displayName = accountName.value
 
-  accountSetName(userStore.user.account.accountId,name).then(() => {
+  const accountId = userStore.user.account?.accountId
+  if (!accountId) return
+  accountSetName(accountId,name).then(() => {
     ElMessage({
       message: t('saveSuccessMsg'),
       type: 'success',
@@ -207,37 +214,41 @@ function submitPwd() {
 </script>
 <style scoped lang="scss">
 .box {
-  padding: 40px 40px;
-
-  @media (max-width: 767px) {
-    padding: 30px 30px;
-  }
+  width: min(880px, 100%);
+  margin-inline: auto;
+  padding: clamp(24px, 5vw, 56px);
 
   .update-pwd {
-    display: flex;
-    flex-direction: column;
+    display: grid;
     gap: 15px;
   }
 
   .title {
-    font-size: 18px;
-    font-weight: bold;
+    font-size: 1rem;
+    font-weight: 720;
   }
 
   .container {
-    font-size: 14px;
     display: grid;
-    gap: 20px;
-    margin-bottom: 40px;
+    margin-bottom: 32px;
+    border-block: 1px solid var(--border);
 
     .item {
+      min-height: 64px;
+      padding-block: 12px;
       display: grid;
-      grid-template-columns: 50px 1fr;
-      gap: 140px;
+      grid-template-columns: minmax(110px, 160px) minmax(0, 1fr);
+      gap: 24px;
+      align-items: center;
       position: relative;
+      border-block-end: 1px solid var(--border);
+
+      &:last-child { border-block-end: 0; }
+
       .user-name {
-        display: grid;
-        grid-template-columns: auto 1fr;
+        display: flex;
+        align-items: center;
+        gap: 8px;
         span:first-child {
           overflow: hidden;
           white-space: nowrap;
@@ -246,25 +257,28 @@ function submitPwd() {
       }
 
       .edit-name-input {
-        position: absolute;
-        bottom: -6px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
         .el-input {
-          width: min(200px,calc(100vw - 222px));
+          width: min(260px, 100%);
         }
       }
 
       .edit-name {
-        color: #4dabff;
-        padding-left: 10px;
+        min-height: 44px;
+        padding-inline: 8px;
+        display: inline-flex;
+        align-items: center;
+        color: var(--primary);
+        font-weight: 650;
         cursor: pointer;
       }
 
-      @media (max-width: 767px) {
-        gap: 70px;
-      }
-
       div:first-child {
-        font-weight: bold;
+        color: var(--muted-foreground);
+        font-size: .8125rem;
+        font-weight: 650;
       }
 
       div:last-child {
@@ -276,21 +290,30 @@ function submitPwd() {
   }
 
   .language {
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
-    margin-bottom: 40px;
+    padding-block-end: 32px;
+    display: grid;
+    grid-template-columns: minmax(110px, 160px) minmax(0, 1fr);
+    align-items: center;
+    gap: 24px;
+    border-block-end: 1px solid var(--border);
 
     .language-select {
-      width: 100px;
+      width: min(220px, 100%);
     }
   }
 
   .del-email {
-    font-size: 14px;
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
+    padding-block-start: 32px;
+    display: grid;
+    gap: 12px;
+
+    .el-button { color: var(--destructive); border-color: color-mix(in oklch, var(--destructive) 35%, var(--border)); background: var(--destructive-soft); }
+  }
+
+  @media (max-width: 540px) {
+    .container .item, .language { grid-template-columns: 1fr; gap: 7px; }
+    .container .item { padding-block: 16px; }
+    .edit-name-input, .user-name { flex-wrap: wrap; }
   }
 }
 </style>

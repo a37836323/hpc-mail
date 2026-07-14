@@ -7,6 +7,7 @@ import settingService from './setting-service';
 import accountService from './account-service';
 import BizError from '../error/biz-error';
 import emailUtils from '../utils/email-utils';
+import verifyUtils from '../utils/verify-utils';
 import fileUtils from '../utils/file-utils';
 import { Resend } from 'resend';
 import attService from './att-service';
@@ -22,6 +23,10 @@ import domainUtils from '../utils/domain-uitls';
 import account from "../entity/account";
 import { att } from '../entity/att';
 import telegramService from './telegram-service';
+import { assertNoHeaderInjection, buildDynamicSender } from '../utils/sender-utils';
+
+const MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024;
+const MAX_TOTAL_ATTACHMENT_SIZE = 25 * 1024 * 1024;
 
 const emailService = {
 
@@ -34,6 +39,7 @@ const emailService = {
 		timeSort = Number(timeSort);
 		accountId = Number(accountId);
 		allReceive = Number(allReceive);
+		type = Number(type);
 
 		if (size > 50) {
 			size = 50;
@@ -51,8 +57,13 @@ const emailService = {
 
 		if (isNaN(allReceive)) {
 			let accountRow = await accountService.selectById(c, accountId);
-			allReceive = accountRow.allReceive;
+			allReceive = accountRow?.allReceive ?? (accountId === 0 ? 1 : 0);
 		}
+		if (type === emailConst.type.SEND) {
+			allReceive = 1;
+		}
+
+		const accountVisibilityCondition = this.accountVisibilityCondition(type);
 
 		const query = orm(c)
 			.select({
@@ -77,7 +88,7 @@ const emailService = {
 					timeSort ? gt(email.emailId, emailId) : lt(email.emailId, emailId),
 					eq(email.type, type),
 					eq(email.isDel, isDel.NORMAL),
-					eq(account.isDel, isDel.NORMAL)
+					accountVisibilityCondition
 				)
 			);
 
@@ -100,16 +111,19 @@ const emailService = {
 					eq(email.userId, userId),
 					eq(email.type, type),
 					eq(email.isDel, isDel.NORMAL),
-					eq(account.isDel, isDel.NORMAL)
+					accountVisibilityCondition
 				)
 		).get();
 
-		const latestEmailQuery = orm(c).select().from(email).where(
+		const latestEmailQuery = orm(c).select({...email}).from(email)
+			.leftJoin(account, eq(account.accountId, email.accountId))
+			.where(
 			and(
 				allReceive ? eq(1,1) : eq(email.accountId, accountId),
 				eq(email.userId, userId),
 				eq(email.type, type),
-				eq(email.isDel, isDel.NORMAL)
+				eq(email.isDel, isDel.NORMAL),
+				accountVisibilityCondition
 			))
 			.orderBy(desc(email.emailId)).limit(1).get();
 
@@ -134,6 +148,12 @@ const emailService = {
 		return { list, total: totalRow.total, latestEmail };
 	},
 
+	accountVisibilityCondition(type) {
+		return Number(type) === emailConst.type.SEND
+			? eq(1, 1)
+			: or(eq(email.accountId, 0), eq(account.isDel, isDel.NORMAL));
+	},
+
 	async delete(c, params, userId) {
 		const { emailIds } = params;
 		const emailIdList = emailIds.split(',').map(Number);
@@ -155,6 +175,7 @@ const emailService = {
 		let {
 			accountId, //发送账号id
 			name, //发件人名字
+			from, //动态发件人
 			sendType, //发件类型
 			emailId, //邮件id，如果是回复邮件会带
 			receiveEmail, //收件人邮箱
@@ -165,8 +186,25 @@ const emailService = {
 		} = params;
 
 		const { resendTokens, r2Domain, send, domainList } = await settingService.query(c);
+		assertNoHeaderInjection(name);
+		assertNoHeaderInjection(subject);
+
+		if (!Array.isArray(receiveEmail) || receiveEmail.length === 0) {
+			throw new BizError(t('notEmail'));
+		}
+		if (!Array.isArray(attachments)) {
+			throw new BizError(t('attLimit'));
+		}
+		receiveEmail.forEach(item => {
+			assertNoHeaderInjection(item);
+			if (!verifyUtils.isEmail(item)) {
+				throw new BizError(t('notEmail'));
+			}
+		});
+		attachments.forEach(item => assertNoHeaderInjection(item?.filename));
 
 		let { imageDataList, html } = await attService.toImageUrlHtml(c, content);
+		this.validateAttachments(imageDataList, attachments);
 
 		//判断是否关闭发件功能
 		if (send === settingConst.send.CLOSE) {
@@ -211,36 +249,42 @@ const emailService = {
 
 		}
 
-		const accountRow = await accountService.selectById(c, accountId);
+		let sender;
+		if (from !== undefined) {
+			sender = buildDynamicSender(from, c.env.domain, roleRow.availDomain, c.env.admin === userRow.email);
+			accountId = 0;
+			name = sender.name;
+		} else {
+			const accountRow = await accountService.selectById(c, accountId);
 
-		if (!accountRow) {
-			throw new BizError(t('senderAccountNotExist'));
-		}
+			if (!accountRow) {
+				throw new BizError(t('senderAccountNotExist'));
+			}
 
-		if (accountRow.userId !== userId) {
-			throw new BizError(t('sendEmailNotCurUser'));
-		}
+			if (accountRow.userId !== userId) {
+				throw new BizError(t('sendEmailNotCurUser'));
+			}
 
-		if (c.env.admin !== userRow.email) {
-			//用户没有这个域名的使用权限
-			if(!roleService.hasAvailDomainPerm(roleRow.availDomain, accountRow.email)) {
+			if (c.env.admin !== userRow.email && !roleService.hasAvailDomainPerm(roleRow.availDomain, accountRow.email)) {
 				throw new BizError(t('noDomainPermSend'),403)
 			}
 
+			sender = {
+				accountId: accountRow.accountId,
+				accountEmail: accountRow.email,
+				name: name || emailUtils.getName(accountRow.email)
+			};
+			accountId = accountRow.accountId;
+			name = sender.name;
 		}
 
-		const domain = emailUtils.getDomain(accountRow.email);
+		const domain = emailUtils.getDomain(sender.accountEmail);
 		const resendToken = resendTokens[domain];
 		const useCloudflareEmail = !!c.env.email;
 
 		//如果接收方存在站外邮箱，又没有发信服务
 		if (!useCloudflareEmail && !resendToken && !allInternal) {
 			throw new BizError(t('noSendProvider'));
-		}
-
-		//没有发件人名字自动截取
-		if (!name) {
-			name = emailUtils.getName(accountRow.email);
 		}
 
 		let emailRow = {
@@ -256,6 +300,12 @@ const emailService = {
 				throw new BizError(t('notExistEmailReply'));
 			}
 
+			const canReplyNoRecipient = c.env.admin === userRow.email && emailRow.status === emailConst.status.NOONE;
+			if (emailRow.userId !== userId && !canReplyNoRecipient) {
+				throw new BizError(t('notExistEmailReply'), 403);
+			}
+			assertNoHeaderInjection(emailRow.messageId);
+
 		}
 
 		let sendResult = {};
@@ -266,7 +316,7 @@ const emailService = {
 			if (useCloudflareEmail) {
 				sendResult = await this.sendByCloudflareEmail(c, {
 					name,
-					accountEmail: accountRow.email,
+					accountEmail: sender.accountEmail,
 					receiveEmail,
 					subject,
 					text,
@@ -278,7 +328,7 @@ const emailService = {
 			} else {
 				sendResult = await this.sendByResend(resendToken, {
 					name,
-					accountEmail: accountRow.email,
+					accountEmail: sender.accountEmail,
 					receiveEmail,
 					subject,
 					text,
@@ -305,7 +355,7 @@ const emailService = {
 
 		//封装数据保存到数据库
 		const emailData = {};
-		emailData.sendEmail = accountRow.email;
+		emailData.sendEmail = sender.accountEmail;
 		emailData.name = name;
 		emailData.subject = subject;
 		emailData.content = html;
@@ -339,17 +389,11 @@ const emailService = {
 
 		//保存内嵌附件
 		if (imageDataList.length > 0) {
-			if (imageDataList.length > 10) {
-				throw new BizError(t('imageAttLimit'));
-			}
 			await attService.saveArticleAtt(c, imageDataList, userId, accountId, emailResult.emailId);
 		}
 
 		//保存普通附件
 		if (attachments?.length > 0) {
-			if (attachments.length > 10) {
-				throw new BizError(t('attLimit'));
-			}
 			await attService.saveSendAtt(c, attachments, userId, accountId, emailResult.emailId);
 		}
 
@@ -373,6 +417,40 @@ const emailService = {
 		}
 
 		return [ emailResult ];
+	},
+
+	validateAttachments(imageDataList = [], attachments = []) {
+		if (imageDataList.length > 10) {
+			throw new BizError(t('imageAttLimit'));
+		}
+		if (attachments.length > 10) {
+			throw new BizError(t('attLimit'));
+		}
+
+		let totalSize = 0;
+		for (const attachment of [...imageDataList, ...attachments]) {
+			const size = this.attachmentSize(attachment);
+			if (size > MAX_ATTACHMENT_SIZE) {
+				throw new BizError(t('attSizeLimit'));
+			}
+			totalSize += size;
+		}
+
+		if (totalSize > MAX_TOTAL_ATTACHMENT_SIZE) {
+			throw new BizError(t('attTotalSizeLimit'));
+		}
+	},
+
+	attachmentSize(attachment = {}) {
+		const content = attachment.content;
+		if (content instanceof ArrayBuffer) return content.byteLength;
+		if (content instanceof Uint8Array) return content.byteLength;
+		if (typeof content === 'string') {
+			const encoded = (content.split(',')[1] || content).replace(/\s+/g, '');
+			const padding = encoded.endsWith('==') ? 2 : encoded.endsWith('=') ? 1 : 0;
+			return Math.max(0, Math.floor(encoded.length * 3 / 4) - padding);
+		}
+		return Number(attachment.size) || 0;
 	},
 
 	async sendByCloudflareEmail(c, params) {
@@ -701,13 +779,18 @@ const emailService = {
 	},
 
 	async latest(c, params, userId) {
-		let { emailId, accountId, allReceive } = params;
+		let { emailId, accountId, allReceive, type = emailConst.type.RECEIVE } = params;
+		accountId = Number(accountId);
 		allReceive = Number(allReceive);
+		type = Number(type);
 
 		if (isNaN(allReceive)) {
 			let accountRow = await accountService.selectById(c, accountId);
-			allReceive = accountRow.allReceive;
+			allReceive = accountRow?.allReceive ?? (accountId === 0 ? 1 : 0);
 		}
+		if (type === emailConst.type.SEND) allReceive = 1;
+
+		const accountVisibilityCondition = this.accountVisibilityCondition(type);
 
 		let list = await orm(c).select({...email}).from(email)
 			.leftJoin(
@@ -719,9 +802,9 @@ const emailService = {
 					gt(email.emailId, emailId),
 					eq(email.userId, userId),
 					eq(email.isDel, isDel.NORMAL),
-					eq(account.isDel, isDel.NORMAL),
+					accountVisibilityCondition,
 					allReceive ? eq(1,1) : eq(email.accountId, accountId),
-					eq(email.type, emailConst.type.RECEIVE)
+					eq(email.type, type)
 				))
 			.orderBy(desc(email.emailId))
 			.limit(20);

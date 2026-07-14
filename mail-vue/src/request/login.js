@@ -1,7 +1,7 @@
 import http from '@/axios/index.js';
 
-export function login(email, password) {
-    return http.post('/login', {email: email, password: password})
+export function login(username, password) {
+    return http.post('/login', {username, password}, {noMsg: true})
 }
 
 export function logout() {
@@ -9,5 +9,5 @@ export function logout() {
 }
 
 export function register(form) {
-    return http.post('/register', form)
+    return http.post('/register', form, {noMsg: true})
 }

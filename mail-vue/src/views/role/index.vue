@@ -1,9 +1,12 @@
 <template>
-  <div class="perm-box">
-    <div class="header-actions">
-      <Icon class="icon" icon="ion:add-outline" width="23" height="23" @click="openAddRole"/>
-      <Icon class="icon" icon="ion:reload" width="18" height="18" @click="refresh"/>
-    </div>
+  <section class="perm-box" aria-labelledby="role-page-title">
+    <header class="admin-toolbar">
+      <div><h2 id="role-page-title">{{ $t('permissions') }}</h2><p>{{ $t('roleWorkspaceDescription') }}</p></div>
+      <div class="admin-toolbar__actions">
+        <IconButton :label="$t('refresh')" variant="bordered" @click="refresh"><RefreshCw :size="18" /></IconButton>
+        <AppButton @click="openAddRole"><template #icon><Plus :size="18" /></template>{{ $t('addRoleTitle') }}</AppButton>
+      </div>
+    </header>
     <el-scrollbar class="perm-scrollbar">
       <div class="loading" :class="tableLoading ? 'loading-show' : 'loading-hide'"
            :style="first ? 'background: transparent' : ''">
@@ -56,7 +59,7 @@
             placement="bottom"
         >
           <template #reference>
-            <Icon class="warning" icon="fe:warning" width="18" height="18"/>
+            <IconButton class="help-button" :label="$t('featDesc')"><CircleHelp :size="18" /></IconButton>
           </template>
           <div style="font-weight: bold;;margin-bottom: 2px;">{{ t('emailInterception') }}</div>
           <div>{{ t('emailInterceptionDesc') }}</div>
@@ -140,11 +143,13 @@
         </el-button>
       </div>
     </el-dialog>
-  </div>
+  </section>
 </template>
 <script setup>
-import {Icon} from "@iconify/vue";
 import {defineOptions, nextTick, reactive, ref} from "vue";
+import { CircleHelp, Plus, RefreshCw } from '@lucide/vue'
+import AppButton from '@/components/ui/AppButton.vue'
+import IconButton from '@/components/ui/IconButton.vue'
 import {roleAdd, roleDelete, rolePermTree, roleRoleList, roleSet, roleSetDef} from "@/request/role.js";
 import loading from '@/components/loading/index.vue';
 import {useRoleStore} from "@/store/role.js";
@@ -417,13 +422,27 @@ window.onresize = () => {
 
 .perm-box {
   height: 100%;
+  padding: clamp(14px, 2.5vw, 24px);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 16px;
   overflow: hidden;
   width: 100%;
+  background: var(--background);
 
   .perm-scrollbar {
     height: 100%;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    background: var(--surface);
+    box-shadow: var(--shadow-card);
   }
 }
+
+.admin-toolbar { min-width: 0; display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; }
+.admin-toolbar h2 { color: var(--foreground); font-size: 1.25rem; letter-spacing: -.02em; }
+.admin-toolbar p { margin-block-start: 4px; color: var(--muted-foreground); font-size: .8125rem; }
+.admin-toolbar__actions { display: flex; align-items: center; gap: 8px; }
 
 .send-num {
   margin-left: 10px;
@@ -438,36 +457,7 @@ window.onresize = () => {
   height: 20px;
 }
 
-.header-actions {
-  padding: 9px 15px;
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  box-shadow: var(--header-actions-border);
-  font-size: 18px;
-
-  .search {
-    :deep(.el-input-group) {
-      height: 28px;
-    }
-
-    :deep(.el-input__inner) {
-      height: 28px;
-    }
-  }
-
-  .icon {
-    cursor: pointer;
-  }
-}
-
-.warning {
-  position: relative;
-  left: 5px;
-  top: 2px;
-  color: gray;
-  cursor: pointer;
-}
+.help-button { display: inline-flex; margin: -10px 0 -10px 2px; vertical-align: middle; }
 
 :deep(.description) {
   white-space: nowrap;
@@ -547,5 +537,12 @@ window.onresize = () => {
 .btn {
   width: 100%;
   margin-top: 15px;
+}
+@media (max-width: 600px) {
+  .perm-box { padding: 12px; }
+  .admin-toolbar { align-items: flex-start; }
+  .admin-toolbar p { display: none; }
+  .admin-toolbar__actions :deep(.app-button span) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .admin-toolbar__actions :deep(.app-button) { width: 44px; padding: 0; }
 }
 </style>

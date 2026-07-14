@@ -168,6 +168,26 @@ const accountService = {
 			.get();
 	},
 
+	async selectDefaultByUserId(c, userId, legacyEmail = '') {
+		if (legacyEmail) {
+			const legacyAccount = await orm(c).select().from(account).where(
+				and(
+					eq(account.userId, userId),
+					eq(account.isDel, isDel.NORMAL),
+					sql`${account.email} COLLATE NOCASE = ${legacyEmail}`
+				)
+			).get();
+			if (legacyAccount) return legacyAccount;
+		}
+
+		return orm(c).select().from(account).where(
+			and(eq(account.userId, userId), eq(account.isDel, isDel.NORMAL))
+		)
+			.orderBy(desc(account.sort), asc(account.accountId))
+			.limit(1)
+			.get();
+	},
+
 	async insert(c, params) {
 		await orm(c).insert(account).values({ ...params }).returning();
 	},
@@ -259,11 +279,19 @@ const accountService = {
 
 	async setAsTop(c, params, userId) {
 		const { accountId } = params;
-		const userRow = await userService.selectById(c, userId);
-		const mainAccountRow = await accountService.selectByEmailIncludeDel(c, userRow.email);
-		let mainSort = mainAccountRow.sort === 0 ? 2 : mainAccountRow.sort + 1;
-		await orm(c).update(account).set({ sort: mainSort }).where(eq(account.email, userRow.email )).run();
-		await orm(c).update(account).set({ sort: mainSort - 1 }).where(and(eq(account.accountId, accountId),eq(account.userId,userId))).run();
+		const accountRow = await this.selectById(c, accountId);
+		if (!accountRow || accountRow.userId !== userId) {
+			throw new BizError(t('noUserAccount'));
+		}
+
+		const { topSort } = await orm(c)
+			.select({ topSort: sql`COALESCE(MAX(${account.sort}), 0)` })
+			.from(account)
+			.where(and(eq(account.userId, userId), eq(account.isDel, isDel.NORMAL)))
+			.get();
+		await orm(c).update(account).set({ sort: Number(topSort) + 1 }).where(
+			and(eq(account.accountId, accountId), eq(account.userId, userId))
+		).run();
 	}
 };
 

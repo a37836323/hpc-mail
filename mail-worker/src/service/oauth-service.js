@@ -1,38 +1,54 @@
 import BizError from "../error/biz-error";
 import orm from "../entity/orm";
 import {oauth} from "../entity/oauth";
-import { eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import userService from "./user-service";
 import loginService from "./login-service";
 import cryptoUtils from "../utils/crypto-utils";
+import oauthSecurityService from './oauth-security-service';
+import { usernameBase } from '../utils/auth-utils';
 
 const oauthService = {
 
 	async bindUser(c, params) {
 
-		const { email, oauthUserId, code } = params;
-
-		const oauthRow = await this.getById(c, oauthUserId);
-
-		let userRow = await userService.selectByIdIncludeDel(c, oauthRow.userId);
-
-		if (userRow) {
-			throw new BizError('用户已绑定有邮箱')
+		const { username, bindTicket, code } = params;
+		const claim = await oauthSecurityService.claimBindTicket(c, bindTicket);
+		try {
+			const oauthRow = await this.getById(c, claim.oauthUserId);
+			if (!oauthRow || oauthRow.userId !== 0) throw new BizError('OAuth identity is already bound', 409);
+			const created = await loginService.registerUsername(c, { username, password: cryptoUtils.genRandomPwd(), code }, true);
+			const userRow = await userService.selectByUsernameIncludeDel(c, created.username);
+			const bound = await orm(c).update(oauth).set({ userId: userRow.userId }).where(
+				and(eq(oauth.oauthUserId, claim.oauthUserId), eq(oauth.userId, 0))
+			).returning().get();
+			if (!bound) {
+				await userService.physicsDelete(c, { userIds: String(userRow.userId) });
+				throw new BizError('OAuth identity is already bound', 409);
+			}
+			const jwtToken = await loginService.login(c, { username: userRow.username, password: null }, true);
+			return { userInfo: this.publicUserInfo(bound), token: jwtToken };
+		} finally {
+			claim.release();
 		}
+	},
 
-		await loginService.register(c, { email, password: cryptoUtils.genRandomPwd(), code }, true);
-
-		userRow = await userService.selectByEmail(c, email);
-
-		orm(c).update(oauth).set({ userId: userRow.userId }).where(eq(oauth.oauthUserId, oauthUserId)).run();
-		const jwtToken = await loginService.login(c, { email, password: null }, true);
-
-		return { userInfo: oauthRow, token: jwtToken}
+	async linuxDoStart(c) {
+		const state = await oauthSecurityService.createFlow(c);
+		const query = new URLSearchParams({
+			client_id: c.env.linuxdo_client_id,
+			redirect_uri: c.env.linuxdo_callback_url,
+			response_type: 'code',
+			scope: 'openid profile email',
+			state
+		});
+		return { authorizationUrl: `https://connect.linux.do/oauth2/authorize?${query.toString()}` };
 	},
 
 	async linuxDoLogin(c, params) {
 
-		const { code } = params;
+		const { code, state } = params;
+		await oauthSecurityService.consumeFlow(c, state);
 
 		let token = '';
 		let userInfo = {}
@@ -78,11 +94,20 @@ const oauthService = {
 		const userRow = await userService.selectByIdIncludeDel(c, oauthRow.userId);
 
 		if (!userRow) {
-			return { userInfo: oauthRow, token: null }
+			const bindTicket = await oauthSecurityService.issueBindTicket(c, oauthRow.oauthUserId);
+			return { userInfo: this.publicUserInfo(oauthRow), bindTicket, token: null }
 		}
 
 		const JwtToken = await loginService.login(c, { email: userRow.email, password: null }, true);
-		return { userInfo: oauthRow, token: JwtToken }
+		return { userInfo: this.publicUserInfo(oauthRow), token: JwtToken }
+	},
+
+	publicUserInfo(oauthRow) {
+		const oauthUsername = typeof oauthRow?.username === 'string' ? oauthRow.username : '';
+		return {
+			suggestedUsername: usernameBase(oauthUsername || oauthRow?.name || 'user'),
+			oauthUsername
+		};
 	},
 
 	async saveUser(c, userInfo) {

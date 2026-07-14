@@ -156,15 +156,18 @@ const roleService = {
 
 	hasAvailDomainPerm(availDomain, email) {
 
-		availDomain = availDomain.split(',').filter(item => item !== '');
+		availDomain = availDomain.split(',').map(item => item.trim().toLowerCase()).filter(Boolean);
 
 		if (availDomain.length === 0) {
+			return true
+		}
+		if (availDomain.includes('*')) {
 			return true
 		}
 
 		const availIndex = availDomain.findIndex(item => {
 			const domain = emailUtils.getDomain(email.toLowerCase());
-			const availDomainItem = item.toLowerCase();
+			const availDomainItem = item;
 			return domain === availDomainItem
 		})
 

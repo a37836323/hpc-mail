@@ -38,11 +38,13 @@ export async function init() {
         document.title = setting.title;
 
         if (user) {
-            accountStore.currentAccountId = user.account.accountId;
-            accountStore.currentAccount = user.account;
+            const account = user.account || {};
+            accountStore.currentAccountId = account.accountId || 0;
+            accountStore.currentAccount = account;
+            accountStore.hasAccounts = Boolean(account.accountId);
             userStore.user = user;
 
-            const routers = permsToRouter(user.permKeys);
+            const routers = permsToRouter(user.permKeys || []);
             routers.forEach(routerData => {
                 router.addRoute('layout', routerData);
             });

@@ -11,19 +11,14 @@
       <div class="header-left" :style="'padding-left:' + actionLeft">
 
         <slot name="first"></slot>
-        <Icon class="icon reload" icon="ion:reload" width="18" height="18" @click="refresh"/>
-        <Icon v-perm="'email:delete'" class="icon delete" icon="uiw:delete" width="16" height="16"
-              v-if="getSelectedMailsIds().length > 0"
-              @click="handleDelete"/>
-        <Icon v-perm="'email:delete'" class="icon delete" icon="fluent:mail-read-20-regular" width="21" height="21"
-              v-if="getSelectedMailsIds().length > 0 && showUnread"
-              @click="handleRead"/>
+        <IconButton :label="$t('refresh')" @click="refresh"><RefreshCw :size="18" :class="{ spin: loading }" /></IconButton>
+        <IconButton v-if="getSelectedMailsIds().length > 0" v-perm="'email:delete'" :label="$t('delete')" variant="danger" @click="handleDelete"><Trash2 :size="18" /></IconButton>
+        <IconButton v-if="getSelectedMailsIds().length > 0 && showUnread" v-perm="'email:delete'" :label="$t('markAsRead')" @click="handleRead"><MailOpen :size="19" /></IconButton>
       </div>
 
       <div class="header-right">
         <span class="email-count" v-if="total">{{ $t('emailCount', {total: total}) }}</span>
-        <Icon v-if="showAccountIcon" class="more-icon icon" width="16" height="16" icon="akar-icons:dot-grid-fill"
-              @click="changeAccountShow"/>
+        <IconButton v-if="showAccountIcon" class="more-icon" :label="$t('mailboxes')" @click="changeAccountShow"><PanelLeftOpen :size="18" /></IconButton>
       </div>
     </div>
 
@@ -40,7 +35,11 @@
           <template #default="{ data: item, index }" >
             <div :class="'email-row ' + props.type"
                  :data-checked="item.checked"
+                 tabindex="0"
+                 :aria-label="$t('openMessage', { subject: item.subject || $t('noSubject') })"
                  @click="jumpDetails(item)"
+                 @keydown.enter="jumpDetails(item)"
+                 @keydown.space.prevent="jumpDetails(item)"
                  v-if="!item.expand"
                  :key="item.emailId"
                  @contextmenu="handleContextmenu($event, item)"
@@ -48,10 +47,7 @@
             >
               <el-checkbox :class=" props.type === 'all-email' ? 'all-email-checkbox' : 'checkbox'"
                            v-model="item.checked" @click.stop></el-checkbox>
-              <div @click.stop="starChange(item)" class="pc-star" v-if="showStar">
-                <Icon v-if="item.isStar" icon="fluent-color:star-16" width="20" height="20"/>
-                <Icon v-else icon="solar:star-line-duotone" width="18" height="18"/>
-              </div>
+              <button v-if="showStar" type="button" class="pc-star" :aria-label="item.isStar ? $t('removeStar') : $t('star')" @click.stop="starChange(item)"><Star :size="18" :fill="item.isStar ? 'currentColor' : 'none'" /></button>
               <div v-if="!showStar"></div>
               <div class="title" :class="accountShow ? 'title-column' : 'title-column'">
 
@@ -82,7 +78,7 @@
                   <div class="email-text">
                     <span class="email-subject" :style="(item.unread === EmailUnreadEnum.UNREAD && showUnread)  ? 'font-weight: bold' : ''">
                       <div class="unread" v-if="!isMobile && (item.unread === EmailUnreadEnum.UNREAD && showUnread) "/>
-                      <span v-if="item.code" class="code-tag" @click.stop="copyCode(item.code)">[{{ t('codeLabel') }}{{ item.code }}]</span>
+                      <button v-if="item.code" type="button" class="code-tag" :aria-label="$t('copyCode')" @click.stop="copyCode(item.code)">[{{ t('codeLabel') }}{{ item.code }}]</button>
                       <span class="subject-text">
                         <slot name="subject" :email="item" >
                           {{ item.subject || '\u200B' }}
@@ -171,7 +167,7 @@
               </div>
             </template>
           </el-dropdown-item>
-          <el-dropdown-item v-if="['email','star'].includes(props.type)" @click="openReply(rightClickEmail)">
+          <el-dropdown-item v-if="['email','star','all-email'].includes(props.type)" v-perm="'email:send'" @click="openReply(rightClickEmail)">
             <template #default>
               <div class="right-dropdown-item">
                 <Icon icon="la:reply" width="20" height="20"  />
@@ -179,7 +175,7 @@
               </div>
             </template>
           </el-dropdown-item>
-          <el-dropdown-item v-if="['email','send', 'star'].includes(props.type)" @click="openForward(rightClickEmail)">
+          <el-dropdown-item v-if="['email','send', 'star','all-email'].includes(props.type)" v-perm="'email:send'" @click="openForward(rightClickEmail)">
             <template #default>
               <div class="right-dropdown-item">
                 <Icon icon="iconoir:arrow-up-right" width="19" height="19"  />
@@ -235,6 +231,8 @@
 
 <script setup>
 import {Icon} from "@iconify/vue";
+import { MailOpen, PanelLeftOpen, RefreshCw, Star, Trash2 } from '@lucide/vue'
+import IconButton from '@/components/ui/IconButton.vue'
 import skeletonBlock from "@/components/email-scroll/skeleton/index.vue"
 import {computed, onActivated, reactive, ref, watch, nextTick, onMounted, onUnmounted } from "vue";
 import {useEmailStore} from "@/store/email.js";
@@ -1190,6 +1188,7 @@ function loadData() {
         white-space: nowrap;
         text-overflow: ellipsis;
         cursor: pointer;
+        background: transparent;
       }
 
       .subject-text {
@@ -1248,9 +1247,16 @@ function loadData() {
 }
 
 .pc-star {
+  min-height: 44px;
   display: flex;
+  align-items: center;
+  color: var(--muted-foreground);
+  background: transparent;
+  cursor: pointer;
   width: 40px;
 }
+.pc-star:hover { color: var(--warning); }
+.pc-star:focus-visible, .code-tag:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 
 @media (max-width: 1366px) {
   .pc-star {
@@ -1313,10 +1319,11 @@ function loadData() {
   }
 
   .more-icon {
-    margin-top: 8px;
-    margin-left: 15px;
+    margin-left: 8px;
   }
 }
+.spin { animation: email-spin .8s linear infinite; }
+@keyframes email-spin { to { transform: rotate(360deg); } }
 
 .del-status {
   color: var(--el-color-info);

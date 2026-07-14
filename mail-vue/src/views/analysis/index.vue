@@ -4,6 +4,7 @@
   </div>
   <el-scrollbar v-else style="height: 100%;">
     <div class="analysis" :key="boxKey">
+      <header class="analytics-heading"><div><h2>{{ $t('analytics') }}</h2><p>{{ $t('analyticsDescription') }}</p></div><span class="live-indicator"><span />{{ $t('liveOverview') }}</span></header>
       <div class="number">
         <div class="number-item">
           <div class="top">
@@ -15,7 +16,7 @@
             </div>
             <div class="right">
               <div class="count-icon">
-                <Icon icon="hugeicons:mailbox-01" width="25" height="25"></Icon>
+                <Inbox :size="24" aria-hidden="true" />
               </div>
             </div>
           </div>
@@ -34,7 +35,7 @@
             </div>
             <div class="right">
               <div class="count-icon">
-                <Icon icon="cil:send" width="25" height="25"></Icon>
+                <Send :size="24" aria-hidden="true" />
               </div>
             </div>
           </div>
@@ -53,7 +54,7 @@
             </div>
             <div class="right">
               <div class="count-icon">
-                <Icon icon="lets-icons:e-mail" width="23" height="23"></Icon>
+                <AtSign :size="23" aria-hidden="true" />
               </div>
             </div>
           </div>
@@ -72,7 +73,7 @@
             </div>
             <div class="right">
               <div class="count-icon">
-                <Icon icon="iconoir:user" width="25" height="25"></Icon>
+                <Users :size="24" aria-hidden="true" />
               </div>
             </div>
           </div>
@@ -119,7 +120,7 @@
 </template>
 
 <script setup>
-import {Icon} from "@iconify/vue";
+import { AtSign, Inbox, Send, Users } from '@lucide/vue'
 import {useTransition} from "@vueuse/core";
 import {defineOptions, onActivated, onDeactivated, onMounted, reactive, ref, watch, computed} from "vue";
 import echarts from "@/echarts/index.js";
@@ -746,10 +747,10 @@ function createSendGauge() {
 }
 
 .analysis {
-  height: 100%;
+  min-height: 100%;
   padding: 20px 20px 30px;
   gap: 20px;
-  background: var(--extra-light-fill);
+  background: var(--background);
   display: grid;
   grid-auto-rows: min-content;
   @media (max-width: 1024px) {
@@ -758,10 +759,10 @@ function createSendGauge() {
   }
 
   .title {
-    margin-top: 10px;
-    margin-left: 15px;
-    font-size: 18px;
-    font-weight: 500;
+    padding: 20px 20px 0;
+    color: var(--foreground);
+    font-size: .9375rem;
+    font-weight: 700;
   }
 
   .number {
@@ -777,9 +778,10 @@ function createSendGauge() {
     }
 
     .number-item {
-      background: var(--el-bg-color);
-      border-radius: 8px;
-      border: 1px solid var(--el-border-color);
+      background: var(--surface);
+      border-radius: var(--radius-card);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow-card);
       padding: 21px 20px;
 
       .top {
@@ -817,8 +819,8 @@ function createSendGauge() {
             align-items: center;
             padding: 14px;
             border-radius: 8px;
-            background: var(--el-color-primary-light-9);
-            color: var(--el-color-primary);
+            background: var(--primary-soft);
+            color: var(--primary);
           }
         }
 
@@ -835,14 +837,14 @@ function createSendGauge() {
 
         .normal {
           width: fit-content;
-          color: var(--el-color-success);
+          color: var(--success);
           font-weight: bold;;
           margin-left: 3px;
         }
 
         .deleted {
           width: fit-content;
-          color: var(--el-color-danger);
+          color: var(--destructive);
           font-weight: bold;;
           margin-left: 3px;
         }
@@ -863,9 +865,10 @@ function createSendGauge() {
     }
 
     .picture-item {
-      background: var(--el-bg-color);
-      border-radius: 8px;
-      border: 1px solid var(--el-border-color);
+      background: var(--surface);
+      border-radius: var(--radius-card);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow-card);
 
       .source-button {
         padding-right: 15px;
@@ -903,9 +906,10 @@ function createSendGauge() {
     }
 
     .picture-cs-item {
-      background: var(--el-bg-color);
-      border-radius: 8px;
-      border: 1px solid var(--el-border-color);
+      background: var(--surface);
+      border-radius: var(--radius-card);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow-card);
 
       .send-count {
         height: 350px;
@@ -924,8 +928,14 @@ function createSendGauge() {
   }
 }
 
-</style>
+.analytics-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; }
+.analytics-heading h2 { color: var(--foreground); font-size: 1.25rem; letter-spacing: -.02em; }
+.analytics-heading p { margin-block-start: 4px; color: var(--muted-foreground); font-size: .8125rem; }
+.live-indicator { padding: 7px 10px; display: inline-flex; align-items: center; gap: 7px; border: 1px solid color-mix(in oklch, var(--success) 25%, var(--border)); border-radius: 999px; color: var(--success); background: var(--success-soft); font-size: .6875rem; font-weight: 700; }
+.live-indicator > span { width: 7px; height: 7px; border-radius: 50%; background: currentColor; box-shadow: 0 0 0 3px color-mix(in oklch, var(--success) 18%, transparent); }
+@media (max-width: 600px) { .analytics-heading p { display: none; } }
 
+</style>
 
 
 

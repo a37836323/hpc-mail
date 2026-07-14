@@ -3,6 +3,8 @@ import { sql } from 'drizzle-orm';
 const user = sqliteTable('user', {
 	userId: integer('user_id').primaryKey({ autoIncrement: true }),
 	email: text('email').notNull(),
+	username: text('username'),
+	displayName: text('display_name').default('').notNull(),
 	type: integer('type').default(1).notNull(),
 	password: text('password').notNull(),
 	salt: text('salt').notNull(),

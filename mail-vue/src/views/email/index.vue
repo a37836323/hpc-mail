@@ -13,10 +13,10 @@
                @jump="jumpContent"
   >
     <template #first>
-      <Icon class="icon" @click="changeTimeSort" icon="material-symbols-light:timer-arrow-down-outline"
-            v-if="params.timeSort === 0" width="28" height="28"/>
-      <Icon class="icon" @click="changeTimeSort" icon="material-symbols-light:timer-arrow-up-outline" v-else
-            width="28" height="28"/>
+      <IconButton :label="params.timeSort === 0 ? $t('sortOldestFirst') : $t('sortNewestFirst')" @click="changeTimeSort">
+        <ArrowDownNarrowWide v-if="params.timeSort === 0" :size="19" />
+        <ArrowUpNarrowWide v-else :size="19" />
+      </IconButton>
     </template>
 
   </emailScroll>
@@ -32,7 +32,8 @@ import {starAdd, starCancel} from "@/request/star.js";
 import {defineOptions, h, onMounted, reactive, ref, watch} from "vue";
 import {sleep} from "@/utils/time-utils.js";
 import router from "@/router/index.js";
-import {Icon} from "@iconify/vue";
+import { ArrowDownNarrowWide, ArrowUpNarrowWide } from '@lucide/vue'
+import IconButton from '@/components/ui/IconButton.vue'
 import { useRoute } from 'vue-router'
 
 defineOptions({
@@ -89,7 +90,7 @@ async function latest() {
     if (!scroll.value.firstLoad && autoRefresh > 1) {
       try {
         const accountId = accountStore.currentAccountId
-        const allReceive = scroll.value.latestEmail?.allReceive
+        const allReceive = scroll.value.latestEmail?.allReceive ?? accountStore.currentAccount?.allReceive ?? 0
         const curTimeSort = params.timeSort
         let list = []
 
@@ -99,7 +100,7 @@ async function latest() {
         }
 
         //确保请求回来后，账号没有切换，时间排序没有改变，全部邮件类型没变
-        if (accountId === accountStore.currentAccountId && params.timeSort === curTimeSort && allReceive === accountStore.currentAccount.allReceive) {
+        if (accountId === accountStore.currentAccountId && params.timeSort === curTimeSort && allReceive === (accountStore.currentAccount?.allReceive ?? 0)) {
           if (list.length > 0) {
 
             for (let email of list) {
@@ -140,10 +141,12 @@ function cancelStar(email) {
 
 function getEmailList(emailId, size) {
   const accountId =  accountStore.currentAccountId;
-  const allReceive = accountStore.currentAccount.allReceive;
+  const allReceive = accountStore.currentAccount?.allReceive ?? 0;
   return emailList(accountId, allReceive, emailId, params.timeSort, size, 0).then(data => {
-    data.latestEmail.reqAccountId = accountId;
-    data.latestEmail.allReceive = allReceive;
+    if (data.latestEmail) {
+      data.latestEmail.reqAccountId = accountId;
+      data.latestEmail.allReceive = allReceive;
+    }
     return data;
   })
 }

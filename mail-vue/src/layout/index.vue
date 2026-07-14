@@ -1,125 +1,99 @@
 <template>
-  <el-container class="layout">
-    <el-aside
-        class="aside"
-        :class="uiStore.asideShow ? 'aside-show' : 'el-aside-hide'">
+  <a class="skip-link" href="#main-content">{{ $t('skipToContent') }}</a>
+  <div class="app-shell" :class="{ 'app-shell--nav-open': uiStore.asideShow }">
+    <aside class="app-sidebar" :aria-label="$t('primaryNavigation')">
       <Aside />
-    </el-aside>
-    <div
-        :class="(uiStore.asideShow && isMobile)? 'overlay-show':'overlay-hide'"
-        @click="uiStore.asideShow = false"
-    ></div>
-    <el-container class="main-container">
-      <el-main>
-        <el-header>
-            <Header />
-        </el-header>
+    </aside>
+    <button
+      v-if="isMobile && uiStore.asideShow"
+      type="button"
+      class="app-overlay"
+      :aria-label="$t('closeNavigation')"
+      @click="uiStore.asideShow = false"
+    />
+    <div class="app-workspace">
+      <Header />
+      <main id="main-content" class="app-main" tabindex="-1">
         <Main />
-      </el-main>
-    </el-container>
-  </el-container>
-  <writer ref="writerRef" />
+      </main>
+      <nav class="mobile-nav" :aria-label="$t('mobileNavigation')">
+        <RouterLink :to="{ name: 'email' }" class="mobile-nav__item">
+          <Inbox :size="21" aria-hidden="true" />
+          <span>{{ $t('inbox') }}</span>
+        </RouterLink>
+        <RouterLink v-if="canSend" :to="{ name: 'send' }" class="mobile-nav__item">
+          <Send :size="21" aria-hidden="true" />
+          <span>{{ $t('sent') }}</span>
+        </RouterLink>
+        <RouterLink v-if="canViewAllMail" :to="{ name: 'all-email' }" class="mobile-nav__item">
+          <Mails :size="21" aria-hidden="true" />
+          <span>{{ $t('allMail') }}</span>
+        </RouterLink>
+        <RouterLink :to="{ name: 'setting' }" class="mobile-nav__item">
+          <Settings :size="21" aria-hidden="true" />
+          <span>{{ $t('settings') }}</span>
+        </RouterLink>
+      </nav>
+    </div>
+  </div>
+  <Writer ref="writerRef" />
 </template>
 
 <script setup>
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { Inbox, Mails, Send, Settings } from '@lucide/vue'
 import Aside from '@/layout/aside/index.vue'
 import Header from '@/layout/header/index.vue'
 import Main from '@/layout/main/index.vue'
-import { ref, onMounted, onBeforeUnmount } from 'vue'
-import {useUiStore} from "@/store/ui.js";
-import writer from '@/layout/write/index.vue'
+import Writer from '@/layout/write/index.vue'
+import { useUiStore } from '@/store/ui.js'
+import { hasPerm } from '@/perm/perm.js'
 
-const uiStore = useUiStore();
-const writerRef = ref({})
-const isMobile = ref(window.innerWidth < 1025)
-const handleResize = () => {
-  isMobile.value = window.innerWidth < 1025
-  uiStore.asideShow = window.innerWidth > 1024;
-}
+const uiStore = useUiStore()
+const writerRef = ref(null)
+const isMobile = ref(window.innerWidth < 768)
+const canSend = computed(() => hasPerm('email:send'))
+const canViewAllMail = computed(() => hasPerm('all-email:query'))
 
-onMounted(() => {
-  uiStore.writerRef = writerRef
-
-  window.addEventListener('resize', handleResize)
-  handleResize()
-})
-
-onBeforeUnmount(() => {
-  window.removeEventListener('resize', handleResize)
-})
-</script>
-
-<style lang="scss" scoped>
-.el-aside-hide {
-  position: fixed;
-  left: 0;
-  height: 100%;
-  z-index: 100;
-  transform: translateX(-100%);
-  transition: all 100ms ease;
-}
-
-.aside-show {
-  -webkit-box-shadow: var(--aside-right-border);
-  box-shadow: var(--aside-right-border);
-  transform: translateX(0);
-  transition: all 100ms ease;
-  z-index: 101;
-  @media (max-width: 1025px) {
-    position: fixed;
-    top: 0;
-    left: 0;
-    z-index: 101;
-    height: 100%;
-    background: var(--el-bg-color);
+function handleResize() {
+  const wasMobile = isMobile.value
+  isMobile.value = window.innerWidth < 768
+  if (wasMobile !== isMobile.value || window.innerWidth >= 768) {
+    uiStore.asideShow = window.innerWidth >= 768
   }
 }
 
-.el-aside {
-  width: auto;
-  transition: all 100ms ease;
+onMounted(() => {
+  uiStore.writerRef = writerRef.value
+  window.addEventListener('resize', handleResize, { passive: true })
+  handleResize()
+})
+
+onBeforeUnmount(() => window.removeEventListener('resize', handleResize))
+</script>
+
+<style scoped>
+.app-shell { position: fixed; inset: 0; display: grid; grid-template-columns: 0 minmax(0, 1fr); overflow: hidden; background: var(--background); }
+.app-workspace { min-width: 0; height: 100%; display: grid; grid-template-rows: 64px minmax(0, 1fr); }
+.app-main { min-width: 0; min-height: 0; overflow: hidden; background: var(--background); }
+.app-sidebar { width: 240px; height: 100%; border-inline-end: 1px solid var(--border); background: var(--surface); transform: translateX(-100%); transition: transform var(--motion-base) var(--ease-out); z-index: var(--z-overlay); }
+.app-shell--nav-open { grid-template-columns: 240px minmax(0, 1fr); }
+.app-shell--nav-open .app-sidebar { transform: translateX(0); }
+.app-overlay { display: none; }
+.mobile-nav { display: none; }
+
+@media (min-width: 768px) and (max-width: 1023px) {
+  .app-shell, .app-shell--nav-open { grid-template-columns: 76px minmax(0, 1fr); }
+  .app-sidebar { width: 76px; transform: translateX(0); }
 }
 
-.layout {
-  height: 100%;
-  position: fixed;
-  width: 100%;
-  top: 0;
-  left: 0;
-  overflow: hidden;
-}
-
-.main-container {
-  min-height: 100%;
-  background: var(--el-bg-color);
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-}
-
-.el-main {
-  padding: 0;
-}
-
-.el-header {
-  background: var(--el-bg-color);
-  border-bottom: solid 1px var(--el-border-color);
-  padding: 0 0 0 0;
-}
-
-.overlay-show {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  background: rgba(0, 0, 0, 0.4);
-  z-index: 99;
-  transition: all 0.3s;
-}
-
-.overlay-hide {
-  display: flex;
-  pointer-events: none;
-  opacity: 0;
+@media (max-width: 767px) {
+  .app-shell, .app-shell--nav-open { grid-template-columns: minmax(0, 1fr); }
+  .app-workspace { grid-template-rows: calc(56px + env(safe-area-inset-top)) minmax(0, 1fr) calc(64px + env(safe-area-inset-bottom)); }
+  .app-sidebar { position: fixed; inset-block: 0; inset-inline-start: 0; width: min(288px, calc(100vw - 48px)); padding-block-start: env(safe-area-inset-top); box-shadow: var(--shadow-floating); }
+  .app-overlay { display: block; position: fixed; inset: 0; z-index: calc(var(--z-overlay) - 1); border: 0; background: var(--overlay); }
+  .mobile-nav { z-index: var(--z-sticky); min-width: 0; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; align-items: start; padding-block: 5px max(5px, env(safe-area-inset-bottom)); border-block-start: 1px solid var(--border); background: var(--surface); }
+  .mobile-nav__item { min-width: 0; min-height: 54px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; border-radius: var(--radius-sm); color: var(--muted-foreground); font-size: .6875rem; line-height: 1.2; text-decoration: none; }
+  .mobile-nav__item.router-link-active { color: var(--primary); background: var(--primary-soft); font-weight: 680; }
 }
 </style>

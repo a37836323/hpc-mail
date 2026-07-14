@@ -1,19 +1,20 @@
 <template>
-  <div class="reg-key">
-    <div class="header-actions">
-      <Icon class="icon" icon="ion:add-outline" width="23" height="23" @click="openAdd"/>
-      <div class="search">
+  <section class="reg-key" aria-labelledby="reg-key-title">
+    <header class="admin-toolbar">
+      <div class="admin-toolbar__heading"><h2 id="reg-key-title">{{ $t('inviteCode') }}</h2><p>{{ $t('inviteCodeWorkspaceDescription') }}</p></div>
+      <form class="admin-search" role="search" @submit.prevent="search">
         <el-input
             v-model="params.code"
             class="search-input"
             :placeholder="$t('searchRegKeyDesc')"
         >
         </el-input>
-      </div>
-      <Icon class="icon" icon="iconoir:search" @click="search" width="20" height="20"/>
-      <Icon class="icon" icon="ion:reload" width="18" height="18" @click="refresh"/>
-      <Icon class="icon" icon="fluent:broom-sparkle-16-regular" width="22" height="22" @click="clearNotUse"/>
-    </div>
+        <IconButton :label="$t('search')" variant="bordered" @click="search"><Search :size="18" /></IconButton>
+        <IconButton :label="$t('refresh')" variant="bordered" @click="refresh"><RefreshCw :size="18" /></IconButton>
+        <IconButton :label="$t('clearRegKey')" variant="danger" @click="clearNotUse"><Trash2 :size="18" /></IconButton>
+        <AppButton @click="openAdd"><template #icon><Plus :size="18" /></template>{{ $t('addRegKey') }}</AppButton>
+      </form>
+    </header>
 
     <el-scrollbar class="scrollbar">
       <div  class="loading" :class="regKeyLoading ? 'loading-show' : 'loading-hide'" :style="regKeyFirst ? 'background: transparent' : ''">
@@ -24,7 +25,7 @@
           <div class="code-info">
             <div class="info-left">
               <div class="info-left-item">
-                <span class="code" @click="copyCode(item.code)">{{ item.code }}</span>
+                <button type="button" class="code" :aria-label="$t('copyInviteCode', { code: item.code })" @click="copyCode(item.code)">{{ item.code }}<Copy :size="15" aria-hidden="true" /></button>
               </div>
               <div class="info-left-item">
                 <div>{{ $t('remainingUses') }}：</div>
@@ -43,7 +44,7 @@
             </div>
             <div class="info-right">
               <el-dropdown class="setting">
-                <Icon icon="fluent:settings-24-filled" width="21" height="21" color="#909399"/>
+                <IconButton :label="$t('action')"><MoreHorizontal :size="20" /></IconButton>
                 <template #dropdown>
                   <el-dropdown-menu>
                     <el-dropdown-item @click="copyCode(item.code)">{{ $t('copy') }}</el-dropdown-item>
@@ -64,7 +65,7 @@
       <div class="container">
         <el-input v-model="addForm.code" :placeholder="$t('regKey')">
           <template #suffix>
-            <Icon @click.stop="genCode" class="gen-code" icon="bitcoin-icons:refresh-filled" width="24" height="24"/>
+            <IconButton :label="$t('generateInviteCode')" class="gen-code" @click.stop="genCode"><RefreshCw :size="18" /></IconButton>
           </template>
         </el-input>
         <el-select v-model="addForm.roleId" :placeholder="$t('roleDesc')">
@@ -92,12 +93,14 @@
                          :label="$t('date')" fixed="right" :show-overflow-tooltip="true"/>
       </el-table>
     </el-dialog>
-  </div>
+  </section>
 </template>
 
 <script setup>
 import {defineOptions, nextTick, reactive, ref, watch} from "vue"
-import {Icon} from "@iconify/vue";
+import { Copy, MoreHorizontal, Plus, RefreshCw, Search, Trash2 } from '@lucide/vue'
+import AppButton from '@/components/ui/AppButton.vue'
+import IconButton from '@/components/ui/IconButton.vue'
 import loading from "@/components/loading/index.vue";
 import {useSettingStore} from "@/store/setting.js";
 import {roleSelectUse} from "@/request/role.js";
@@ -282,11 +285,9 @@ function genCode() {
 
 function generateRandomCode(length = 8) {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  let result = '';
-  for (let i = 0; i < length; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return result;
+  const random = new Uint8Array(length)
+  crypto.getRandomValues(random)
+  return Array.from(random, value => chars[value % chars.length]).join('')
 }
 
 function clearNotUse() {
@@ -310,7 +311,7 @@ function submit() {
 
   if (!addForm.code) {
     ElMessage({
-      message: $('emptyRegKeyMsg'),
+      message: t('emptyRegKeyMsg'),
       type: "error",
       plain: true
     })
@@ -390,16 +391,28 @@ function openAdd() {
 <style scoped lang="scss">
 .reg-key {
   height: 100%;
+  padding: clamp(14px, 2.5vw, 24px);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 16px;
   overflow: hidden;
+  background: var(--background);
 }
 
+.admin-toolbar { min-width: 0; display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; }
+.admin-toolbar__heading { min-width: 180px; }
+.admin-toolbar h2 { color: var(--foreground); font-size: 1.25rem; letter-spacing: -.02em; }
+.admin-toolbar p { margin-block-start: 4px; color: var(--muted-foreground); font-size: .8125rem; }
+.admin-search { min-width: 0; display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
+.search-input { width: min(240px, 28vw); }
+
 .scrollbar {
-  height: calc(100% - 48px);
+  height: 100%;
   position: relative;
-  background: var(--extra-light-fill);
-  @media (max-width: 372px) {
-    height: calc(100% - 85px);
-  }
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--surface-subtle);
+  box-shadow: var(--shadow-card);
 
   .code-box {
     padding: 15px 15px 25px 15px;
@@ -408,11 +421,11 @@ function openAdd() {
     gap: 15px;
 
     .code-item {
-      background: var(--el-bg-color);
-      border-radius: 8px;
-      border: 1px solid var(--el-border-color);
+      background: var(--surface);
+      border-radius: var(--radius-card);
+      border: 1px solid var(--border);
       transition: all 200ms;
-      padding: 15px;
+      padding: 18px;
 
       .code-info {
         display: flex;
@@ -426,8 +439,17 @@ function openAdd() {
             padding-top: 5px;
 
             .code {
-              font-weight: bold;;
-              font-size: 16px;
+              min-height: 34px;
+              padding: 4px 7px;
+              display: inline-flex;
+              align-items: center;
+              gap: 7px;
+              border-radius: var(--radius-sm);
+              color: var(--primary);
+              background: var(--primary-soft);
+              font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+              font-weight: 720;
+              font-size: .875rem;
               white-space: nowrap;
               overflow: hidden;
               text-overflow: ellipsis;
@@ -522,48 +544,26 @@ function openAdd() {
   }
 }
 
-.setting {
-  cursor: pointer;
-}
-
-.gen-code {
-  color: #606266;
-  cursor: pointer;
-}
-
-.header-actions {
-  padding: 9px 15px;
-  display: flex;
-  gap: 18px;
-  flex-wrap: wrap;
-  align-items: center;
-  box-shadow: inset 0 -1px 0 0 rgba(100, 121, 143, 0.12);
-  font-size: 18px;
-  @media (max-width: 767px) {
-    gap: 15px;
-  }
-
-  .search-input {
-    width: min(200px, calc(100vw - 140px));
-  }
-
-  .search {
-    :deep(.el-input-group) {
-      height: 28px;
-    }
-
-    :deep(.el-input__inner) {
-      height: 28px;
-    }
-  }
-
-  .icon {
-    cursor: pointer;
-  }
-}
+.gen-code { width: 36px; height: 36px; flex-basis: 36px; }
 
 :deep(.el-table__inner-wrapper:before) {
   background: var(--el-bg-color);
+}
+
+@media (max-width: 840px) {
+  .admin-toolbar { align-items: flex-start; }
+  .admin-toolbar__heading p { display: none; }
+  .admin-search { flex-wrap: wrap; }
+  .search-input { width: min(240px, calc(100vw - 170px)); }
+  .admin-search :deep(.app-button span) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .admin-search :deep(.app-button) { width: 44px; padding: 0; }
+}
+@media (max-width: 560px) {
+  .reg-key { padding: 12px; }
+  .admin-toolbar { display: grid; }
+  .admin-search { justify-content: flex-start; }
+  .search-input { flex: 1; width: auto; min-width: 150px; }
+  .scrollbar .code-box { grid-template-columns: minmax(0, 1fr); padding: 10px; }
 }
 
 </style>

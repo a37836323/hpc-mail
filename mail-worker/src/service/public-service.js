@@ -2,18 +2,18 @@ import BizError from '../error/biz-error';
 import orm from '../entity/orm';
 import { v4 as uuidv4 } from 'uuid';
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
-import saltHashUtils from '../utils/crypto-utils';
 import cryptoUtils from '../utils/crypto-utils';
 import emailUtils from '../utils/email-utils';
 import roleService from './role-service';
 import verifyUtils from '../utils/verify-utils';
 import { t } from '../i18n/i18n';
-import reqUtils from '../utils/req-utils';
-import dayjs from 'dayjs';
-import { isDel, roleConst } from '../const/entity-const';
+import { isDel, roleConst, userConst } from '../const/entity-const';
 import email from '../entity/email';
 import userService from './user-service';
 import KvConst from '../const/kv-const';
+import { configuredDomains } from '../utils/sender-utils';
+import { parseLoginIdentifier } from '../utils/auth-utils';
+import loginRateLimitService from './login-rate-limit-service';
 
 const publicService = {
 
@@ -97,37 +97,26 @@ const publicService = {
 	async addUser(c, params) {
 		const { list } = params;
 
-		if (list.length === 0) return;
+		if (!Array.isArray(list) || list.length === 0) return;
+		const domains = configuredDomains(c.env.domain);
+		const roleList = await roleService.roleSelectUse(c);
+		const defRole = roleList.find(roleRow => roleRow.isDefault === roleConst.isDefault.OPEN);
+		if (!defRole) {
+			throw new BizError(t('roleNotExist'));
+		}
 
 		for (const emailRow of list) {
 			if (!verifyUtils.isEmail(emailRow.email)) {
 				throw new BizError(t('notEmail'));
 			}
 
-			if (!c.env.domain.includes(emailUtils.getDomain(emailRow.email))) {
+			if (!domains.includes(emailUtils.getDomain(emailRow.email).toLowerCase())) {
 				throw new BizError(t('notEmailDomain'));
 			}
-
-			const { salt, hash } = await saltHashUtils.hashPassword(
-				emailRow.password || cryptoUtils.genRandomPwd()
-			);
-
-			emailRow.salt = salt;
-			emailRow.hash = hash;
 		}
 
-
-		const activeIp = reqUtils.getIp(c);
-		const { os, browser, device } = reqUtils.getUserAgent(c);
-		const activeTime = dayjs().format('YYYY-MM-DD HH:mm:ss');
-
-		const roleList = await roleService.roleSelectUse(c);
-		const defRole = roleList.find(roleRow => roleRow.isDefault === roleConst.isDefault.OPEN);
-
-		const userList = [];
-
 		for (const emailRow of list) {
-			let { email, hash, salt, roleName } = emailRow;
+			const { email, roleName } = emailRow;
 			let type = defRole.roleId;
 
 			if (roleName) {
@@ -135,27 +124,11 @@ const publicService = {
 				type = roleRow ? roleRow.roleId : type;
 			}
 
-			const userSql = `INSERT INTO user (email, password, salt, type, os, browser, active_ip, create_ip, device, active_time, create_time)
-			VALUES ('${email}', '${hash}', '${salt}', '${type}', '${os}', '${browser}', '${activeIp}', '${activeIp}', '${device}', '${activeTime}', '${activeTime}')`
-
-			const accountSql = `INSERT INTO account (email, name, user_id)
-			VALUES ('${email}', '${emailUtils.getName(email)}', 0);`;
-
-			userList.push(c.env.db.prepare(userSql));
-			userList.push(c.env.db.prepare(accountSql));
-
-		}
-
-		userList.push(c.env.db.prepare(`UPDATE account SET user_id = (SELECT user_id FROM user WHERE user.email = account.email) WHERE user_id = 0;`))
-
-		try {
-			await c.env.db.batch(userList);
-		} catch (e) {
-			if(e.message.includes('SQLITE_CONSTRAINT')) {
-				throw new BizError(t('emailExistDatabase'))
-			} else {
-				throw e
-			}
+			await userService.add(c, {
+				email,
+				password: emailRow.password || cryptoUtils.genRandomPwd(),
+				type
+			});
 		}
 
 	},
@@ -173,21 +146,32 @@ const publicService = {
 
 	async verifyUser(c, params) {
 
-		const { email, password } = params
+		const { identifier, type } = parseLoginIdentifier(params);
+		const { password } = params;
+		await loginRateLimitService.assertAllowed(c, identifier);
+		if (!identifier || !password) {
+			await loginRateLimitService.recordFailure(c, identifier);
+			throw new BizError(t('invalidCredentials'), 401);
+		}
+		const userRow = type === 'username'
+			? await userService.selectByUsernameIncludeDel(c, identifier)
+			: await userService.selectByEmailIncludeDel(c, identifier);
+		const passwordValid = userRow
+			? await cryptoUtils.verifyPassword(password, userRow.salt, userRow.password)
+			: false;
 
-		const userRow = await userService.selectByEmailIncludeDel(c, email);
-
-		if (email !== c.env.admin) {
-			throw new BizError(t('notAdmin'));
+		if (
+			!userRow ||
+			userRow.email !== c.env.admin ||
+			userRow.isDel === isDel.DELETE ||
+			userRow.status === userConst.status.BAN ||
+			!passwordValid
+		) {
+			await loginRateLimitService.recordFailure(c, identifier);
+			throw new BizError(t('invalidCredentials'), 401);
 		}
 
-		if (!userRow || userRow.isDel === isDel.DELETE) {
-			throw new BizError(t('notExistUser'));
-		}
-
-		if (!await cryptoUtils.verifyPassword(password, userRow.salt, userRow.password)) {
-			throw new BizError(t('IncorrectPwd'));
-		}
+		await loginRateLimitService.reset(c, identifier);
 	}
 
 }

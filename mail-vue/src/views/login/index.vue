@@ -1,842 +1,383 @@
 <template>
-  <div id="login-box" :style=" background ? 'background: var(--el-bg-color)' : ''" v-loading="oauthLoading" element-loading-text="登录中...">
-    <div id="background-wrap" v-if="!settingStore.settings.background">
-      <div class="x1 cloud"></div>
-      <div class="x2 cloud"></div>
-      <div class="x3 cloud"></div>
-      <div class="x4 cloud"></div>
-      <div class="x5 cloud"></div>
+  <main class="auth-page">
+    <div class="auth-utilities">
+      <IconButton :label="settingStore.lang === 'zh' ? 'Switch to English' : '切换到中文'" @click="toggleLanguage"><Languages :size="19" /></IconButton>
+      <IconButton :label="uiStore.dark ? $t('useLightTheme') : $t('useDarkTheme')" @click="toggleTheme">
+        <Sun v-if="uiStore.dark" :size="19" />
+        <Moon v-else :size="19" />
+      </IconButton>
     </div>
-    <div v-else :style="background"></div>
-    <div class="form-wrapper">
-      <div class="container">
-        <span class="form-title">{{ settingStore.settings.title }}</span>
-        <span class="form-desc" v-if="show === 'login'">{{ $t('loginTitle') }}</span>
-        <span class="form-desc" v-else>{{ $t('regTitle') }}</span>
-        <div v-show="show === 'login'">
-          <el-input :class="!hideLoginDomain ? 'email-input' : ''" v-model="form.email"
-                    type="text" :placeholder="$t('emailAccount')" autocomplete="off">
-            <template #append v-if="!hideLoginDomain">
-              <div @click.stop="openSelect">
-                <el-select
-                    v-if="show === 'login'"
-                    ref="mySelect"
-                    v-model="suffix"
-                    :placeholder="$t('select')"
-                    class="select"
-                >
-                  <el-option
-                      v-for="item in domainList"
-                      :key="item"
-                      :label="item"
-                      :value="item"
-                  />
-                </el-select>
-                <div style="color: var(--el-text-color-primary)">
-                  <span>{{ suffix }}</span>
-                  <Icon class="setting-icon" icon="mingcute:down-small-fill" width="20" height="20"/>
-                </div>
-              </div>
-            </template>
-          </el-input>
-          <el-input v-model="form.password" :placeholder="$t('password')" type="password" autocomplete="off">
-          </el-input>
-          <el-button class="btn" type="primary" @click="submit" :loading="loginLoading"
-          >{{ $t('loginBtn') }}
-          </el-button>
-          <el-button class="btn" v-if="settingStore.settings.linuxdoSwitch"  style="margin-top: 10px"  @click="linuxDoLogin">
-            <el-avatar src="/image/linuxdo.webp" :size="18" style="margin-right: 10px" />LinuxDo
-          </el-button>
-        </div>
-        <div v-show="show !== 'login'">
-          <el-input :class="!hideLoginDomain ? 'email-input' : ''" v-model="registerForm.email" type="text" :placeholder="$t('emailAccount')"
-                    autocomplete="off">
-            <template #append v-if="!hideLoginDomain">
-              <div @click.stop="openSelect">
-                <el-select
-                    v-if="show !== 'login'"
-                    ref="mySelect"
-                    v-model="suffix"
-                    :placeholder="$t('select')"
-                    class="select"
-                >
-                  <el-option
-                      v-for="item in domainList"
-                      :key="item"
-                      :label="item"
-                      :value="item"
-                  />
-                </el-select>
-                <div>
-                  <span>{{ suffix }}</span>
-                  <Icon class="setting-icon" icon="mingcute:down-small-fill" width="20" height="20"/>
-                </div>
-              </div>
-            </template>
-          </el-input>
-          <el-input v-model="registerForm.password" :placeholder="$t('password')" type="password" autocomplete="off"/>
-          <el-input v-model="registerForm.confirmPassword" :placeholder="$t('confirmPwd')" type="password"
-                    autocomplete="off"/>
-          <el-input v-if="settingStore.settings.regKey === 0" v-model="registerForm.code" :placeholder="$t('regKey')"
-                    type="text" autocomplete="off"/>
-          <el-input v-if="settingStore.settings.regKey === 2" v-model="registerForm.code"
-                    :placeholder="$t('regKeyOptional')" type="text" autocomplete="off"/>
-          <div v-show="verifyShow"
-               class="register-turnstile"
-               :data-sitekey="settingStore.settings.siteKey"
-               data-callback="onTurnstileSuccess"
-               data-error-callback="onTurnstileError"
-               data-after-interactive-callback="loadAfter"
-               data-before-interactive-callback="loadBefore"
-          >
-            <span style="font-size: 12px;color: #F56C6C" v-if="botJsError">{{ $t('verifyModuleFailed') }}</span>
-          </div>
-          <el-button class="btn" style="margin: 0" type="primary" @click="submitRegister" :loading="registerLoading"
-          >{{ $t('regBtn') }}
-          </el-button>
-          <el-button v-if="settingStore.settings.linuxdoSwitch" class="btn" style="margin-top: 10px"  @click="linuxDoLogin">
-            <el-avatar src="/image/linuxdo.webp" :size="18" style="margin-right: 10px" />LinuxDo
-          </el-button>
-        </div>
-        <template v-if="settingStore.settings.register === 0">
-          <div class="switch" @click="show = 'register'" v-if="show === 'login'">{{ $t('noAccount') }}
-            <span>{{ $t('regSwitch') }}</span></div>
-          <div class="switch" @click="show = 'login'" v-else>{{ $t('hasAccount') }} <span>{{ $t('loginSwitch') }}</span>
-          </div>
-        </template>
+
+    <section class="auth-brand" aria-labelledby="auth-brand-title">
+      <div class="auth-brand__content">
+        <span class="brand-mark"><Mail :size="28" aria-hidden="true" /></span>
+        <p class="brand-kicker">{{ settingStore.settings.title }}</p>
+        <h1 id="auth-brand-title">{{ $t('authBrandTitle') }}</h1>
+        <p class="brand-intro">{{ $t('authBrandDescription') }}</p>
+        <ul class="brand-capabilities">
+          <li><Check :size="18" aria-hidden="true" /><span>{{ $t('authCapabilityCatchAll') }}</span></li>
+          <li><Check :size="18" aria-hidden="true" /><span>{{ $t('authCapabilitySender') }}</span></li>
+          <li><Check :size="18" aria-hidden="true" /><span>{{ $t('authCapabilityIdentity') }}</span></li>
+        </ul>
       </div>
-    </div>
-    <el-dialog class="bind-dialog" v-model="showBindForm"  title="注册邮箱" >
-      <div class="bind-container">
-        <el-input :class="!hideLoginDomain ? 'email-input' : ''" v-model="bindForm.email" type="text" :placeholder="$t('emailAccount')" autocomplete="off">
-          <template #append v-if="!hideLoginDomain">
-            <div @click.stop="openSelect">
-              <el-select
-                  ref="mySelect"
-                  v-model="suffix"
-                  :placeholder="$t('select')"
-                  class="select"
-              >
-                <el-option
-                    v-for="item in domainList"
-                    :key="item"
-                    :label="item"
-                    :value="item"
-                />
-              </el-select>
-              <div>
-                <span>{{ suffix }}</span>
-                <Icon class="setting-icon" icon="mingcute:down-small-fill" width="20" height="20"/>
-              </div>
-            </div>
-          </template>
-        </el-input>
-        <el-input v-if="settingStore.settings.regKey === 0" v-model="bindForm.code" :placeholder="$t('regKey')"
-                  type="text" autocomplete="off"/>
-        <el-input v-if="settingStore.settings.regKey === 2" v-model="bindForm.code"
-                  :placeholder="$t('regKeyOptional')" type="text" autocomplete="off"/>
-        <el-button class="btn" type="primary" @click="bind" :loading="bindLoading"
-        >绑定
-        </el-button>
+      <p class="brand-footnote">{{ $t('authPrivateWorkspace') }}</p>
+    </section>
+
+    <section class="auth-panel" :aria-labelledby="show === 'login' ? 'login-title' : 'register-title'">
+      <div class="auth-card">
+        <div class="mobile-brand"><span class="brand-mark"><Mail :size="23" /></span><h1>{{ settingStore.settings.title }}</h1></div>
+
+        <form v-if="show === 'login'" class="auth-form" novalidate @submit.prevent="submitLogin">
+          <header class="auth-form__header">
+            <p class="auth-form__kicker">{{ $t('welcomeBack') }}</p>
+            <h2 id="login-title">{{ $t('loginTitleModern') }}</h2>
+            <p>{{ $t('loginDescriptionModern') }}</p>
+          </header>
+
+          <div v-if="loginErrors.service" class="auth-alert" role="alert"><CircleAlert :size="18" /><span>{{ loginErrors.service }}</span></div>
+
+          <FormField :label="$t('username')" for-id="login-username" :error="loginErrors.username" :hint="$t('legacyEmailHint')">
+            <div class="input-wrap"><UserRound :size="18" aria-hidden="true" /><input id="login-username" ref="loginUsernameRef" v-model.trim="loginForm.username" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" :placeholder="$t('usernameExample')" :aria-invalid="Boolean(loginErrors.username)" :aria-describedby="loginErrors.username ? 'login-username-error' : 'login-username-hint'" @blur="validateLoginUsername" /></div>
+          </FormField>
+
+          <FormField :label="$t('password')" for-id="login-password" :error="loginErrors.password">
+            <template #action><button type="button" class="field-action" :aria-label="showLoginPassword ? $t('hidePassword') : $t('showPassword')" @click="showLoginPassword = !showLoginPassword">{{ showLoginPassword ? $t('hide') : $t('show') }}</button></template>
+            <div class="input-wrap"><LockKeyhole :size="18" aria-hidden="true" /><input id="login-password" v-model="loginForm.password" :type="showLoginPassword ? 'text' : 'password'" autocomplete="current-password" :placeholder="$t('passwordPlaceholder')" :aria-invalid="Boolean(loginErrors.password)" @blur="validateLoginPassword" /></div>
+          </FormField>
+
+          <AppButton class="auth-submit" type="submit" :loading="loginLoading">{{ $t('loginBtn') }}</AppButton>
+          <button v-if="registrationEnabled" type="button" class="auth-switch" @click="switchMode('register')">{{ $t('noAccount') }} <strong>{{ $t('regSwitch') }}</strong></button>
+          <div v-if="settingStore.settings.linuxdoSwitch" class="auth-divider"><span>{{ $t('orContinueWith') }}</span></div>
+          <AppButton v-if="settingStore.settings.linuxdoSwitch" variant="secondary" @click="linuxDoLogin"><img src="/image/linuxdo.webp" alt="" width="20" height="20" />LinuxDo</AppButton>
+        </form>
+
+        <form v-else class="auth-form" novalidate @submit.prevent="submitRegister">
+          <header class="auth-form__header">
+            <p class="auth-form__kicker">{{ $t('createIdentity') }}</p>
+            <h2 id="register-title">{{ $t('registerTitleModern') }}</h2>
+            <p>{{ $t('registerDescriptionModern') }}</p>
+          </header>
+
+          <div v-if="registerErrors.service" class="auth-alert" role="alert"><CircleAlert :size="18" /><span>{{ registerErrors.service }}</span></div>
+
+          <FormField :label="$t('username')" for-id="register-username" :error="registerErrors.username" :hint="$t('usernameRules')">
+            <div class="input-wrap"><UserRound :size="18" /><input id="register-username" ref="registerUsernameRef" v-model.trim="registerForm.username" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" :placeholder="$t('usernameExample')" :aria-invalid="Boolean(registerErrors.username)" @blur="validateRegisterUsername" /></div>
+          </FormField>
+          <FormField :label="$t('password')" for-id="register-password" :error="registerErrors.password" :hint="$t('passwordRules')">
+            <template #action><button type="button" class="field-action" @click="showRegisterPassword = !showRegisterPassword">{{ showRegisterPassword ? $t('hide') : $t('show') }}</button></template>
+            <div class="input-wrap"><LockKeyhole :size="18" /><input id="register-password" v-model="registerForm.password" :type="showRegisterPassword ? 'text' : 'password'" autocomplete="new-password" :placeholder="$t('passwordPlaceholder')" :aria-invalid="Boolean(registerErrors.password)" @blur="validateRegisterPassword" /></div>
+          </FormField>
+          <FormField :label="$t('confirmPwd')" for-id="register-confirm" :error="registerErrors.confirmPassword">
+            <div class="input-wrap"><LockKeyhole :size="18" /><input id="register-confirm" v-model="registerForm.confirmPassword" :type="showRegisterPassword ? 'text' : 'password'" autocomplete="new-password" :placeholder="$t('confirmPasswordPlaceholder')" :aria-invalid="Boolean(registerErrors.confirmPassword)" @blur="validateConfirmPassword" /></div>
+          </FormField>
+          <FormField v-if="settingStore.settings.regKey === 0 || settingStore.settings.regKey === 2" :label="settingStore.settings.regKey === 0 ? $t('regKey') : $t('regKeyOptional')" for-id="register-code" :error="registerErrors.code">
+            <div class="input-wrap"><TicketCheck :size="18" /><input id="register-code" v-model.trim="registerForm.code" type="text" autocomplete="one-time-code" :placeholder="$t('inviteCodePlaceholder')" @blur="validateRegisterCode" /></div>
+          </FormField>
+          <div v-show="verifyShow" class="register-turnstile" :data-sitekey="settingStore.settings.siteKey" data-callback="onTurnstileSuccess" data-error-callback="onTurnstileError">
+            <p v-if="botJsError" class="field-error" role="alert">{{ $t('verifyModuleFailed') }}</p>
+          </div>
+          <AppButton class="auth-submit" type="submit" :loading="registerLoading">{{ $t('createAccount') }}</AppButton>
+          <button type="button" class="auth-switch" @click="switchMode('login')">{{ $t('hasAccount') }} <strong>{{ $t('loginSwitch') }}</strong></button>
+          <div v-if="settingStore.settings.linuxdoSwitch" class="auth-divider"><span>{{ $t('orContinueWith') }}</span></div>
+          <AppButton v-if="settingStore.settings.linuxdoSwitch" variant="secondary" @click="linuxDoLogin"><img src="/image/linuxdo.webp" alt="" width="20" height="20" />LinuxDo</AppButton>
+        </form>
       </div>
-    </el-dialog>
-    <a v-show="settingStore.settings.projectLink" class="github" href="https://github.com/maillab/cloud-mail">
-      <Icon icon="mingcute:github-line" color="#1890ff" width="20" height="20" />
-    </a>
-  </div>
+    </section>
+
+    <DialogRoot v-model:open="showBindForm" @update:open="handleBindDialogOpen">
+      <DialogPortal>
+        <DialogOverlay class="dialog-overlay" />
+        <DialogContent class="bind-dialog" aria-describedby="bind-description">
+          <div class="dialog-heading"><DialogTitle>{{ $t('completeRegistration') }}</DialogTitle><DialogClose class="dialog-close" :aria-label="$t('close')"><X :size="20" /></DialogClose></div>
+          <DialogDescription id="bind-description">{{ $t('oauthUsernameDescription') }}</DialogDescription>
+          <form class="bind-form" @submit.prevent="bindOAuthUser">
+            <FormField :label="$t('username')" for-id="bind-username" :error="bindError"><div class="input-wrap"><UserRound :size="18" /><input id="bind-username" v-model.trim="bindForm.username" autocomplete="username" :placeholder="$t('usernameExample')" /></div></FormField>
+            <FormField v-if="settingStore.settings.regKey === 0 || settingStore.settings.regKey === 2" :label="settingStore.settings.regKey === 0 ? $t('regKey') : $t('regKeyOptional')" for-id="bind-code"><div class="input-wrap"><TicketCheck :size="18" /><input id="bind-code" v-model.trim="bindForm.code" autocomplete="one-time-code" /></div></FormField>
+            <AppButton type="submit" :loading="bindLoading">{{ $t('completeRegistrationAction') }}</AppButton>
+          </form>
+        </DialogContent>
+      </DialogPortal>
+    </DialogRoot>
+
+    <div v-if="oauthLoading" class="auth-loading" role="status"><LoaderCircle :size="28" /><span>{{ $t('oauthSigningIn') }}</span></div>
+    <a v-if="settingStore.settings.projectLink" class="project-link" href="https://github.com/maillab/cloud-mail" target="_blank" rel="noreferrer"><Code2 :size="19" /><span class="sr-only">GitHub</span></a>
+  </main>
 </template>
 
 <script setup>
-import router from "@/router";
-import {computed, nextTick, reactive, ref} from "vue";
-import {login} from "@/request/login.js";
-import {register} from "@/request/login.js";
-import {websiteConfig} from "@/request/setting.js";
-import {isEmail} from "@/utils/verify-utils.js";
-import {useSettingStore} from "@/store/setting.js";
-import {useAccountStore} from "@/store/account.js";
-import {useUserStore} from "@/store/user.js";
-import {useUiStore} from "@/store/ui.js";
-import {Icon} from "@iconify/vue";
-import {cvtR2Url} from "@/utils/convert.js";
-import {loginUserInfo} from "@/request/my.js";
-import {permsToRouter} from "@/perm/perm.js";
-import {useI18n} from "vue-i18n";
-import {oauthBindUser, oauthLinuxDoLogin} from "@/request/ouath.js";
+import { computed, nextTick, onMounted, reactive, ref } from 'vue'
+import { Check, CircleAlert, Code2, Languages, LoaderCircle, LockKeyhole, Mail, Moon, Sun, TicketCheck, UserRound, X } from '@lucide/vue'
+import { DialogClose, DialogContent, DialogDescription, DialogOverlay, DialogPortal, DialogRoot, DialogTitle } from 'reka-ui'
+import { useI18n } from 'vue-i18n'
+import AppButton from '@/components/ui/AppButton.vue'
+import FormField from '@/components/ui/FormField.vue'
+import IconButton from '@/components/ui/IconButton.vue'
+import router from '@/router'
+import { login, register } from '@/request/login.js'
+import { loginUserInfo } from '@/request/my.js'
+import { oauthBindUser, oauthLinuxDoLogin, oauthLinuxDoStart } from '@/request/ouath.js'
+import { websiteConfig } from '@/request/setting.js'
+import { permsToRouter } from '@/perm/perm.js'
+import { useAccountStore } from '@/store/account.js'
+import { useSettingStore } from '@/store/setting.js'
+import { useUiStore } from '@/store/ui.js'
+import { useUserStore } from '@/store/user.js'
+import { setExtend } from '@/utils/day.js'
+import { consumeOAuthState, storeOAuthState, validateOAuthAuthorizationUrl } from '@/utils/oauth-state.js'
 
-const {t} = useI18n();
-const accountStore = useAccountStore();
-const userStore = useUserStore();
-const uiStore = useUiStore();
-const settingStore = useSettingStore();
-const loginLoading = ref(false)
-const bindLoading = ref(false)
-const oauthLoading = ref(false);
-const showBindForm = ref(false);
+const { t, locale } = useI18n()
+const accountStore = useAccountStore()
+const userStore = useUserStore()
+const uiStore = useUiStore()
+const settingStore = useSettingStore()
 const show = ref('login')
-
-const bindForm = reactive({
-  email: '',
-  oauthUserId: '',
-  code: ''
-})
-
-const form = reactive({
-  email: '',
-  password: '',
-
-});
-const mySelect = ref()
-const suffix = ref('')
-const registerForm = reactive({
-  email: '',
-  password: '',
-  confirmPassword: '',
-  code: null
-})
-const domainList = settingStore.domainList;
+const loginLoading = ref(false)
 const registerLoading = ref(false)
-suffix.value = domainList[0]
+const bindLoading = ref(false)
+const oauthLoading = ref(false)
+const showBindForm = ref(false)
+const showLoginPassword = ref(false)
+const showRegisterPassword = ref(false)
 const verifyShow = ref(false)
+const botJsError = ref(false)
+const loginUsernameRef = ref(null)
+const registerUsernameRef = ref(null)
 let verifyToken = ''
 let turnstileId = null
-let botJsError = ref(false)
 let verifyErrorCount = 0
 
-window.onTurnstileSuccess = (token) => {
-  verifyToken = token;
-};
+const loginForm = reactive({ username: '', password: '' })
+const registerForm = reactive({ username: '', password: '', confirmPassword: '', code: '' })
+const bindForm = reactive({ username: '', bindTicket: '', code: '' })
+const loginErrors = reactive({ username: '', password: '', service: '' })
+const registerErrors = reactive({ username: '', password: '', confirmPassword: '', code: '', service: '' })
+const bindError = ref('')
+const registrationEnabled = computed(() => settingStore.settings.register === 0)
+const usernamePattern = /^[A-Za-z0-9._-]{3,32}$/
 
-window.onTurnstileError = (e) => {
-  if (verifyErrorCount >= 4) {
-    return
+window.onTurnstileSuccess = token => { verifyToken = token }
+window.onTurnstileError = () => {
+  if (verifyErrorCount++ >= 4) return
+  window.setTimeout(() => nextTick(() => {
+    try {
+      if (!turnstileId) turnstileId = window.turnstile?.render('.register-turnstile')
+      else window.turnstile?.reset(turnstileId)
+    } catch { botJsError.value = true }
+  }), 1500)
+}
+
+function validateUsername(value, allowLegacyEmail = false) {
+  if (!value) return t('usernameRequired')
+  if (allowLegacyEmail && value.includes('@')) return ''
+  if (!usernamePattern.test(value) || value.startsWith('.') || value.endsWith('.') || value.includes('..')) return t('usernameInvalid')
+  return ''
+}
+function validateLoginUsername() { loginErrors.username = validateUsername(loginForm.username, true); return !loginErrors.username }
+function validateLoginPassword() { loginErrors.password = loginForm.password ? '' : t('passwordRequired'); return !loginErrors.password }
+function validateRegisterUsername() { registerErrors.username = validateUsername(registerForm.username); return !registerErrors.username }
+function validateRegisterPassword() { registerErrors.password = registerForm.password.length >= 6 ? '' : t('passwordInvalid'); return !registerErrors.password }
+function validateConfirmPassword() { registerErrors.confirmPassword = registerForm.password === registerForm.confirmPassword && registerForm.confirmPassword ? '' : t('confirmPwdFailMsg'); return !registerErrors.confirmPassword }
+function validateRegisterCode() { registerErrors.code = settingStore.settings.regKey === 0 && !registerForm.code ? t('emptyRegKeyMsg') : ''; return !registerErrors.code }
+function errorMessage(error, fallback) { return error?.message || error?.response?.data?.message || fallback }
+
+async function submitLogin() {
+  loginErrors.service = ''
+  if (![validateLoginUsername(), validateLoginPassword()].every(Boolean)) return
+  loginLoading.value = true
+  try {
+    const data = await login(loginForm.username, loginForm.password)
+    await saveToken(data.token)
+  } catch (error) {
+    loginErrors.service = errorMessage(error, t('invalidCredentials'))
+  } finally { loginLoading.value = false }
+}
+
+async function submitRegister() {
+  registerErrors.service = ''
+  if (![validateRegisterUsername(), validateRegisterPassword(), validateConfirmPassword(), validateRegisterCode()].every(Boolean)) return
+  if (!verifyToken && needsTurnstile()) { revealTurnstile(); return }
+  registerLoading.value = true
+  let registrationCompleted = false
+  try {
+    const data = await register({ username: registerForm.username, password: registerForm.password, token: verifyToken, code: registerForm.code || null })
+    registrationCompleted = true
+    settingStore.settings.regVerifyOpen = data?.regVerifyOpen ?? settingStore.settings.regVerifyOpen
+    const authData = data?.token ? data : await login(registerForm.username, registerForm.password)
+    await saveToken(authData.token)
+  } catch (error) {
+    if (registrationCompleted) {
+      loginForm.username = registerForm.username
+      switchMode('login')
+      loginErrors.service = t('registeredSignInAgain')
+    } else {
+      registerErrors.service = errorMessage(error, t('registrationFailed'))
+      if (error?.code === 400) { verifyToken = ''; settingStore.settings.regVerifyOpen = true; revealTurnstile() }
+    }
+  } finally {
+    if (registrationCompleted) {
+      registerForm.password = ''
+      registerForm.confirmPassword = ''
+    }
+    registerLoading.value = false
   }
-  verifyErrorCount++
-  console.warn('人机验加载失败', e)
-  setTimeout(() => {
-    nextTick(() => {
-      if (!turnstileId) {
-        turnstileId = window.turnstile.render('.register-turnstile')
-      } else {
-        window.turnstile.reset(turnstileId);
-      }
-    })
-  }, 1500)
-};
-
-window.loadAfter = (e) => {
-  console.log('loadAfter')
 }
 
-window.loadBefore = (e) => {
-  console.log('loadBefore')
+function needsTurnstile() { return settingStore.settings.registerVerify === 0 || (settingStore.settings.registerVerify === 2 && settingStore.settings.regVerifyOpen) }
+function revealTurnstile() {
+  verifyShow.value = true
+  nextTick(() => {
+    try {
+      if (!turnstileId) turnstileId = window.turnstile?.render('.register-turnstile')
+      else window.turnstile?.reset(turnstileId)
+    } catch { botJsError.value = true }
+  })
 }
-
-const loginOpacity = computed(() => {
-  const opacity = settingStore.settings.loginOpacity
-  return uiStore.dark ? `rgba(0, 0, 0, ${opacity})` : `rgba(255, 255, 255, ${opacity})`
-})
-
-const hideLoginDomain = computed(() => settingStore.settings.loginDomain === 1)
-
-const background = computed(() => {
-
-  return settingStore.settings.background ? {
-    'background-image': `url(${cvtR2Url(settingStore.settings.background)})`,
-    'background-repeat': 'no-repeat',
-    'background-size': 'cover',
-    'background-position': 'center'
-  } : ''
-})
-
-const openSelect = () => {
-  mySelect.value.toggleMenu()
+function switchMode(mode) {
+  show.value = mode
+  loginErrors.service = registerErrors.service = ''
+  nextTick(() => (mode === 'login' ? loginUsernameRef.value : registerUsernameRef.value)?.focus())
 }
-
-const getFullEmail = (email) => {
-  return hideLoginDomain.value ? email : email + suffix.value
+async function linuxDoLogin() {
+  if (oauthLoading.value) return
+  oauthLoading.value = true
+  try {
+    const start = validateOAuthAuthorizationUrl((await oauthLinuxDoStart()).authorizationUrl)
+    storeOAuthState(start.state)
+    window.location.assign(start.authorizationUrl)
+  } catch (error) {
+    ElMessage({ message: errorMessage(error, t('oauthFailed')), type: 'error', plain: true })
+    oauthLoading.value = false
+  }
 }
-
-const getEmailName = (email) => {
-  return email.split('@')[0]
-}
-
-function linuxDoLogin() {
-  const clientId = settingStore.settings.linuxdoClientId
-  const redirectUri = encodeURIComponent(settingStore.settings.linuxdoCallbackUrl)
-  window.location.href =
-      `https://connect.linux.do/oauth2/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=openid+profile+email`
-}
-
-linuxDoGetUser();
-
-async function linuxDoGetUser() {
-
+async function handleOAuthCallback() {
   const params = new URLSearchParams(window.location.search)
   const code = params.get('code')
-
-  if (code) {
-
-    oauthLoading.value = true
-    oauthLinuxDoLogin(code).then(data => {
-
-      bindForm.oauthUserId = data.userInfo.oauthUserId;
-
-      if (!data.token) {
-        showBindForm.value = true
-        oauthLoading.value = false
-        ElMessage({
-          message: '请注册绑定一个邮箱',
-          type: 'warning',
-          duration: 4000,
-          plain: true,
-        })
-        return;
-      }
-
-      saveToken(data.token);
-    }).catch(() => {
-      oauthLoading.value = false
-    })
-  }
-
-  const cleanUrl = window.location.origin + window.location.pathname
-  window.history.replaceState({}, '', cleanUrl)
-}
-
-function bind() {
-
-  if (!bindForm.email) {
-    ElMessage({
-      message: t('emptyEmailMsg'),
-      type: 'error',
-      plain: true,
-    })
-    return
-  }
-
-
-  if (getEmailName(bindForm.email).length < settingStore.settings.minEmailPrefix) {
-    ElMessage({
-      message: t('minEmailPrefix', {msg: settingStore.settings.minEmailPrefix}),
-      type: 'error',
-      plain: true,
-    })
-    return
-  }
-
-  let email = getFullEmail(bindForm.email);
-
-
-  if (!isEmail(email)) {
-    ElMessage({
-      message: t('notEmailMsg'),
-      type: 'error',
-      plain: true,
-    })
-    return
-  }
-
-  if (settingStore.settings.regKey === 0) {
-
-    if (!bindForm.code) {
-
-      ElMessage({
-        message: t('emptyRegKeyMsg'),
-        type: 'error',
-        plain: true,
-      })
-      return
+  const returnedState = params.get('state')
+  const providerError = params.get('error')
+  if (!code && !returnedState && !providerError) return
+  oauthLoading.value = true
+  try {
+    if (providerError || !code || !consumeOAuthState(returnedState)) throw new Error(t('oauthStateInvalid'))
+    const data = await oauthLinuxDoLogin(code, returnedState)
+    if (data.token) await saveToken(data.token)
+    else {
+      if (!data.bindTicket) throw new Error(t('oauthFailed'))
+      bindForm.bindTicket = data.bindTicket
+      bindForm.username = data.userInfo?.suggestedUsername || data.userInfo?.oauthUsername || ''
+      showBindForm.value = true
     }
-
+  } catch (error) { ElMessage({ message: errorMessage(error, t('oauthFailed')), type: 'error', plain: true }) }
+  finally {
+    oauthLoading.value = false
+    window.history.replaceState({}, '', window.location.origin + window.location.pathname)
   }
-
-  const form = {email, oauthUserId: bindForm.oauthUserId, code: bindForm.code}
-
+}
+async function bindOAuthUser() {
+  bindError.value = validateUsername(bindForm.username)
+  if (bindError.value) return
+  if (settingStore.settings.regKey === 0 && !bindForm.code) { bindError.value = t('emptyRegKeyMsg'); return }
   bindLoading.value = true
-  oauthBindUser(form).then(data => {
-    saveToken(data.token)
-  }).catch(() => {
-    bindLoading.value = false
-  })
-}
-
-const submit = () => {
-
-  if (!form.email) {
-    ElMessage({
-      message: t('emptyEmailMsg'),
-      type: 'error',
-      plain: true,
-    })
-    return
-  }
-
-  let email = getFullEmail(form.email);
-
-  if (!isEmail(email)) {
-    ElMessage({
-      message: t('notEmailMsg'),
-      type: 'error',
-      plain: true,
-    })
-    return
-  }
-
-  if (!form.password) {
-    ElMessage({
-      message: t('emptyPwdMsg'),
-      type: 'error',
-      plain: true,
-    })
-    return
-  }
-
-  loginLoading.value = true
-  login(email, form.password).then(async data => {
+  try {
+    if (!bindForm.bindTicket) throw new Error(t('oauthStateInvalid'))
+    const data = await oauthBindUser({ username: bindForm.username, bindTicket: bindForm.bindTicket, code: bindForm.code || null })
+    bindForm.bindTicket = ''
+    showBindForm.value = false
     await saveToken(data.token)
-  }).finally(() => {
-    loginLoading.value = false
-  })
+  } catch (error) { bindError.value = errorMessage(error, t('registrationFailed')) }
+  finally { bindLoading.value = false }
 }
-
+function handleBindDialogOpen(opened) {
+  if (opened) return
+  bindForm.bindTicket = ''
+  bindForm.username = ''
+  bindForm.code = ''
+  bindError.value = ''
+}
 async function saveToken(token) {
   localStorage.setItem('token', token)
-  refreshWebsiteConfig()
-  const user = await loginUserInfo();
-  accountStore.currentAccountId = user.account.accountId;
-  accountStore.currentAccount = user.account;
-  userStore.user = user;
-  const routers = permsToRouter(user.permKeys);
-  routers.forEach(routerData => {
-    router.addRoute('layout', routerData);
-  });
-  await router.replace({name: 'layout'})
+  const [setting, user] = await Promise.all([websiteConfig(), loginUserInfo()])
+  settingStore.settings = setting
+  settingStore.domainList = setting.domainList || []
+  userStore.user = user
+  const account = user.account || {}
+  accountStore.currentAccountId = account.accountId || 0
+  accountStore.currentAccount = account
+  accountStore.hasAccounts = Boolean(account.accountId)
+  permsToRouter(user.permKeys || []).forEach(routeData => { if (!router.hasRoute(routeData.name)) router.addRoute('layout', routeData) })
+  document.title = setting.title
+  await router.replace({ name: 'layout' })
   uiStore.showNotice()
-  oauthLoading.value = false;
-  bindLoading.value = false;
+}
+function toggleTheme() {
+  uiStore.dark = !uiStore.dark
+  document.documentElement.classList.toggle('dark', uiStore.dark)
+  document.getElementById('theme-color-meta')?.setAttribute('content', uiStore.dark ? '#121826' : '#F7F9FC')
+}
+function toggleLanguage() {
+  const lang = settingStore.lang === 'zh' ? 'en' : 'zh'
+  settingStore.lang = lang; locale.value = lang; setExtend(lang === 'en' ? 'en' : 'zh-cn')
 }
 
-function refreshWebsiteConfig() {
-  websiteConfig().then(setting => {
-    settingStore.settings = setting
-    settingStore.domainList = setting.domainList
-    if (!suffix.value && setting.domainList.length > 0) {
-      suffix.value = setting.domainList[0]
-    }
-    document.title = setting.title
-  }).catch(e => {
-    console.error(e)
-  })
-}
-
-
-function submitRegister() {
-
-  if (!registerForm.email) {
-    ElMessage({
-      message: t('emptyEmailMsg'),
-      type: 'error',
-      plain: true,
-    })
-    return
-  }
-
-  console.log(registerForm.email)
-
-  if (getEmailName(registerForm.email).length < settingStore.settings.minEmailPrefix) {
-    ElMessage({
-      message: t('minEmailPrefix', {msg: settingStore.settings.minEmailPrefix}),
-      type: 'error',
-      plain: true,
-    })
-    return
-  }
-
-  const email = getFullEmail(registerForm.email);
-
-  if (!isEmail(email)) {
-    ElMessage({
-      message: t('notEmailMsg'),
-      type: 'error',
-      plain: true,
-    })
-    return
-  }
-
-  if (!registerForm.password) {
-    ElMessage({
-      message: t('emptyPwdMsg'),
-      type: 'error',
-      plain: true,
-    })
-    return
-  }
-
-  if (registerForm.password.length < 6) {
-    ElMessage({
-      message: t('pwdLengthMsg'),
-      type: 'error',
-      plain: true,
-    })
-    return
-  }
-
-  if (registerForm.password !== registerForm.confirmPassword) {
-
-    ElMessage({
-      message: t('confirmPwdFailMsg'),
-      type: 'error',
-      plain: true,
-    })
-    return
-  }
-
-  if (settingStore.settings.regKey === 0) {
-
-    if (!registerForm.code) {
-
-      ElMessage({
-        message: t('emptyRegKeyMsg'),
-        type: 'error',
-        plain: true,
-      })
-      return
-    }
-
-  }
-
-  if (!verifyToken && (settingStore.settings.registerVerify === 0 || (settingStore.settings.registerVerify === 2 && settingStore.settings.regVerifyOpen))) {
-    if (!verifyShow.value) {
-      verifyShow.value = true
-      nextTick(() => {
-        if (!turnstileId) {
-          try {
-            turnstileId = window.turnstile.render('.register-turnstile')
-          } catch (e) {
-            botJsError.value = true
-            console.log('人机验证js加载失败')
-          }
-        } else {
-          window.turnstile.reset('.register-turnstile')
-        }
-      })
-    } else if (!botJsError.value) {
-      ElMessage({
-        message: t('botVerifyMsg'),
-        type: "error",
-        plain: true
-      })
-    }
-    return;
-  }
-
-  registerLoading.value = true
-
-  const form = {
-    email,
-    password: registerForm.password,
-    token: verifyToken,
-    code: registerForm.code
-  }
-
-  register(form).then(({regVerifyOpen}) => {
-    show.value = 'login'
-    registerForm.email = ''
-    registerForm.password = ''
-    registerForm.confirmPassword = ''
-    registerForm.code = ''
-    registerLoading.value = false
-    verifyToken = ''
-    settingStore.settings.regVerifyOpen = regVerifyOpen
-    verifyShow.value = false
-    ElMessage({
-      message: t('regSuccessMsg'),
-      type: 'success',
-      plain: true,
-    })
-  }).catch(res => {
-
-    registerLoading.value = false
-
-    if (res.code === 400) {
-      verifyToken = ''
-      settingStore.settings.regVerifyOpen = true
-      if (turnstileId) {
-        window.turnstile.reset(turnstileId)
-      } else {
-        nextTick(() => {
-          turnstileId = window.turnstile.render('.register-turnstile')
-        })
-      }
-      verifyShow.value = true
-
-    }
-  });
-}
-
+onMounted(() => { loginUsernameRef.value?.focus(); handleOAuthCallback() })
 </script>
 
+<style scoped>
+.auth-page { min-height: 100dvh; display: grid; grid-template-columns: minmax(320px, 1.05fr) minmax(420px, .95fr); color: var(--foreground); background: var(--background); }
+.auth-utilities { position: fixed; inset-block-start: max(12px, env(safe-area-inset-top)); inset-inline-end: max(14px, env(safe-area-inset-right)); z-index: 5; display: flex; gap: 2px; }
+.auth-brand { min-width: 0; padding: clamp(48px, 7vw, 104px); display: flex; flex-direction: column; justify-content: space-between; border-inline-end: 1px solid var(--border); background-color: var(--surface-subtle); background-image: linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px); background-size: 36px 36px; background-position: -1px -1px; }
+.auth-brand__content { max-width: 580px; padding: clamp(24px, 4vw, 48px); border-radius: 20px; background: color-mix(in oklch, var(--surface-subtle) 88%, transparent); }
+.brand-mark { width: 52px; height: 52px; display: inline-flex; align-items: center; justify-content: center; border-radius: 15px; color: var(--primary-foreground); background: var(--primary); }
+.brand-kicker { margin-block-start: 28px; color: var(--primary); font-size: .75rem; font-weight: 780; letter-spacing: .1em; text-transform: uppercase; }
+.auth-brand h1 { max-width: 11ch; margin-block-start: 12px; font-size: clamp(2.4rem, 4.5vw, 4.75rem); line-height: .98; letter-spacing: -.055em; text-wrap: balance; }
+.brand-intro { max-width: 48ch; margin-block-start: 24px; color: var(--muted-foreground); font-size: clamp(1rem, 1.4vw, 1.2rem); line-height: 1.65; }
+.brand-capabilities { margin-block-start: 36px; display: grid; gap: 14px; }
+.brand-capabilities li { display: flex; align-items: center; gap: 12px; font-weight: 620; }
+.brand-capabilities svg { flex: 0 0 auto; color: var(--success); }
+.brand-footnote { color: var(--subtle-foreground); font-size: .75rem; }
+.auth-panel { min-width: 0; padding: 72px clamp(24px, 6vw, 88px) 48px; display: flex; align-items: center; justify-content: center; background: var(--surface); }
+.auth-card { width: min(100%, 420px); }
+.mobile-brand { display: none; }
+.auth-form { display: grid; gap: 18px; }
+.auth-form__header { margin-block-end: 10px; }
+.auth-form__kicker { color: var(--primary) !important; font-size: .75rem !important; font-weight: 760; letter-spacing: .06em; text-transform: uppercase; }
+.auth-form__header h2 { margin-block-start: 7px; font-size: clamp(1.75rem, 3vw, 2.2rem); line-height: 1.12; letter-spacing: -.035em; }
+.auth-form__header p:last-child { margin-block-start: 10px; color: var(--muted-foreground); font-size: .9375rem; line-height: 1.55; }
+.auth-alert { padding: 12px 14px; display: flex; align-items: flex-start; gap: 10px; border: 1px solid color-mix(in oklch, var(--destructive) 35%, var(--border)); border-radius: var(--radius-control); color: var(--destructive); background: var(--destructive-soft); font-size: .875rem; }
+.auth-alert svg { flex: 0 0 auto; margin-block-start: 1px; }
+.input-wrap { min-height: 46px; padding-inline: 13px; display: flex; align-items: center; gap: 10px; border: 1px solid var(--border-strong); border-radius: var(--radius-control); background: var(--surface); transition: border-color var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) var(--ease-out); }
+.input-wrap:focus-within { border-color: var(--focus-ring); box-shadow: 0 0 0 3px color-mix(in oklch, var(--focus-ring) 18%, transparent); }
+.input-wrap svg { flex: 0 0 auto; color: var(--subtle-foreground); }
+.input-wrap input { width: 100%; min-width: 0; height: 44px; border: 0; outline: 0; color: var(--foreground); background: transparent; }
+.input-wrap input::placeholder { color: var(--subtle-foreground); }
+.field-action { min-height: 44px; margin-block: -12px; padding-inline: 6px; color: var(--primary); background: transparent; font-size: .8125rem; font-weight: 650; cursor: pointer; }
+.auth-submit { width: 100%; margin-block-start: 4px; }
+.auth-switch { min-height: 44px; padding: 8px; border: 0; color: var(--muted-foreground); background: transparent; cursor: pointer; }
+.auth-switch strong { color: var(--primary); }
+.auth-divider { height: 24px; display: flex; align-items: center; color: var(--subtle-foreground); font-size: .75rem; }
+.auth-divider::before, .auth-divider::after { content: ''; height: 1px; flex: 1; background: var(--border); }
+.auth-divider span { padding-inline: 12px; }
+.register-turnstile { min-height: 65px; }
+.field-error { color: var(--destructive); font-size: .8125rem; }
+.dialog-overlay { position: fixed; inset: 0; z-index: var(--z-overlay); background: var(--overlay); animation: fade-in var(--motion-base) var(--ease-out); }
+.bind-dialog { position: fixed; inset-block-start: 50%; inset-inline-start: 50%; z-index: var(--z-modal); width: min(420px, calc(100vw - 32px)); padding: 24px; border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface-raised); box-shadow: var(--shadow-floating); transform: translate(-50%, -50%); }
+.dialog-heading { display: flex; justify-content: space-between; gap: 16px; font-size: 1.125rem; font-weight: 700; }
+.dialog-close { width: 44px; height: 44px; margin: -12px -12px 0 0; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--radius-control); color: var(--muted-foreground); background: transparent; cursor: pointer; }
+.bind-dialog > p { margin-block-start: 6px; color: var(--muted-foreground); font-size: .875rem; }
+.bind-form { margin-block-start: 22px; display: grid; gap: 18px; }
+.auth-loading { position: fixed; inset: 0; z-index: var(--z-toast); display: flex; align-items: center; justify-content: center; gap: 12px; color: var(--foreground); background: color-mix(in oklch, var(--surface) 88%, transparent); font-weight: 650; }
+.auth-loading svg { animation: spin .8s linear infinite; }
+.project-link { position: fixed; inset-inline-end: 16px; inset-block-end: 16px; width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--border); border-radius: var(--radius-control); color: var(--muted-foreground); background: var(--surface); }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes fade-in { from { opacity: 0; } }
 
-<style>
-.el-select-dropdown__item {
-  padding: 0 15px;
+@media (max-width: 900px) {
+  .auth-page { grid-template-columns: minmax(0, 1fr); }
+  .auth-brand { display: none; }
+  .auth-panel { min-height: 100dvh; padding: 72px 20px 32px; align-items: flex-start; }
+  .mobile-brand { margin-block-end: 38px; display: flex; align-items: center; gap: 12px; }
+  .mobile-brand .brand-mark { width: 40px; height: 40px; border-radius: 12px; }
+.mobile-brand h1 { font-size: 1.05rem; }
 }
-
-.no-autofill-pwd {
-  .el-input__inner {
-    -webkit-text-security: disc !important;
-  }
-}
-</style>
-
-<style lang="scss" scoped>
-
-.form-wrapper {
-  position: fixed;
-  right: 0;
-  height: 100%;
-  z-index: 10;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  @media (max-width: 767px) {
-    width: 100%;
-  }
-}
-
-.container {
-  background: v-bind(loginOpacity);
-  padding-left: 40px;
-  padding-right: 40px;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  width: 450px;
-  height: 100%;
-  border-left: 1px solid var(--login-border);
-  box-shadow: var(--el-box-shadow-light);
-  @media (max-width: 1024px) {
-    padding: 20px 18px;
-    width: 384px;
-    margin-left: 18px;
-  }
-  @media (max-width: 767px) {
-    border: 1px solid var(--login-border);
-    padding: 20px 18px;
-    border-radius: 6px;
-    height: fit-content;
-    width: 100%;
-    margin-right: 18px;
-    margin-left: 18px;
-  }
-
-  .btn {
-    height: 36px;
-    width: 100%;
-    border-radius: 6px;
-  }
-
-  .form-desc {
-    margin-top: 5px;
-    margin-bottom: 18px;
-    color: var(--form-desc-color);
-  }
-
-  .form-title {
-    font-weight: bold;
-    font-size: 22px !important;
-  }
-
-  .switch {
-    margin-top: 20px;
-    text-align: center;
-
-    span {
-      color: var(--login-switch-color);
-      cursor: pointer;
-    }
-  }
-
-  :deep(.el-input__wrapper) {
-    border-radius: 6px;
-    background: var(--el-bg-color);
-  }
-
-  .email-input :deep(.el-input__wrapper) {
-    border-radius: 6px 0 0 6px;
-    background: var(--el-bg-color);
-  }
-
-  .el-input {
-    height: 38px;
-    width: 100%;
-    margin-bottom: 18px;
-
-    :deep(.el-input__inner) {
-      height: 36px;
-    }
-  }
-}
-
-:deep(.el-select-dropdown__item) {
-  padding: 0 10px;
-}
-
-:deep(.bind-dialog) {
-  width: 400px !important;
-  @media (max-width: 440px) {
-    width: calc(100% - 40px) !important;
-    margin-right: 20px !important;
-    margin-left: 20px !important;
-  }
-}
-
-.bind-container {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 15px;
-}
-
-.setting-icon {
-  position: relative;
-  top: 6px;
-}
-
-.github {
-  position: fixed;
-  width: 35px;
-  height: 35px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  border-radius: 50%;
-  background: var(--el-bg-color);
-  bottom: 10px;
-  right: 10px;
-  z-index: 1000;
-  border: 1px solid var(--el-border-color-light);
-  box-shadow: var(--el-box-shadow-light);
-  cursor: pointer;
-}
-
-:deep(.el-input-group__append) {
-  padding: 0 !important;
-  padding-left: 8px !important;
-  padding-right: 4px !important;
-  background: var(--el-bg-color);
-  border-radius: 0 8px 8px 0;
-}
-
-:deep(.el-button+.el-button) {
-  margin: 0;
-}
-
-.register-turnstile {
-  margin-bottom: 18px;
-}
-
-.select {
-  position: absolute;
-  right: 30px;
-  width: 100px;
-  opacity: 0;
-  pointer-events: none;
-}
-
-.custom-style {
-  margin-bottom: 10px;
-}
-
-.custom-style .el-segmented {
-  --el-border-radius-base: 6px;
-  width: 180px;
-}
-
-
-#login-box {
-  background: linear-gradient(to bottom, #2980b9, #6dd5fa, #fff);
-  font: 100% Arial, sans-serif;
-  height: 100%;
-  margin: 0;
-  padding: 0;
-  overflow-x: hidden;
-  display: grid;
-  grid-template-columns: 1fr;
-}
-
-
-#background-wrap {
-  height: 100%;
-  z-index: 0;
-}
-
-@keyframes animateCloud {
-  0% {
-    margin-left: -500px;
-  }
-
-  100% {
-    margin-left: 100%;
-  }
-}
-
-.x1 {
-  animation: animateCloud 30s linear infinite;
-  transform: scale(0.65);
-}
-
-.x2 {
-  animation: animateCloud 15s linear infinite;
-  transform: scale(0.3);
-}
-
-.x3 {
-  animation: animateCloud 25s linear infinite;
-  transform: scale(0.5);
-}
-
-.x4 {
-  animation: animateCloud 13s linear infinite;
-  transform: scale(0.4);
-}
-
-.x5 {
-  animation: animateCloud 20s linear infinite;
-  transform: scale(0.55);
-}
-
-.cloud {
-  background: linear-gradient(to bottom, #fff 5%, #f1f1f1 100%);
-  border-radius: 100px;
-  box-shadow: 0 8px 5px rgba(0, 0, 0, 0.1);
-  height: 120px;
-  width: 350px;
-  position: relative;
-}
-
-.cloud:after,
-.cloud:before {
-  content: "";
-  position: absolute;
-  background: #fff;
-  z-index: -1;
-}
-
-.cloud:after {
-  border-radius: 100px;
-  height: 100px;
-  left: 50px;
-  top: -50px;
-  width: 100px;
-}
-
-.cloud:before {
-  border-radius: 200px;
-  height: 180px;
-  width: 180px;
-  right: 50px;
-  top: -90px;
-}
-
+@media (max-width: 420px) { .auth-panel { padding-inline: 16px; } .auth-form { gap: 16px; } }
 </style>

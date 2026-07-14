@@ -15,23 +15,130 @@ import cryptoUtils from '../utils/crypto-utils';
 import turnstileService from './turnstile-service';
 import roleService from './role-service';
 import regKeyService from './reg-key-service';
-import dayjs from 'dayjs';
 import { toUtc } from '../utils/date-uitil';
 import { t } from '../i18n/i18n.js';
 import verifyRecordService from './verify-record-service';
+import { buildLegacyAuthEmail, isValidUsername, normalizeUsername, parseLoginIdentifier } from '../utils/auth-utils';
+import { configuredDomains } from '../utils/sender-utils';
+import loginRateLimitService from './login-rate-limit-service';
+import { addSessionToken, isSessionExpired, putAuthInfo, removeSessionToken } from '../utils/session-utils';
 
 const loginService = {
 
 	async register(c, params, oauth = false) {
+		if (oauth) {
+			return this.registerOAuth(c, params);
+		}
+
+		return this.registerUsername(c, params);
+	},
+
+	async registerUsername(c, params, oauth = false) {
+		let { username, displayName, password, token, code } = params;
+		username = normalizeUsername(username);
+
+		let { regKey, register, registerVerify, regVerifyCount } = await settingService.query(c);
+		if (oauth) {
+			register = settingConst.register.OPEN;
+			registerVerify = settingConst.registerVerify.CLOSE;
+		}
+
+		if (register === settingConst.register.CLOSE) {
+			throw new BizError(t('regDisabled'));
+		}
+
+		if (!isValidUsername(username)) {
+			throw new BizError(t('invalidUsername'));
+		}
+
+		if (typeof password !== 'string' || password.length < 6) {
+			throw new BizError(t('pwdMinLength'));
+		}
+
+		if (password.length > 30) {
+			throw new BizError(t('pwdLengthLimit'));
+		}
+
+		if (await userService.selectByUsernameIncludeDel(c, username)) {
+			throw new BizError(t('usernameExists'));
+		}
+
+		const email = buildLegacyAuthEmail(username);
+		if (await userService.selectByEmailIncludeDel(c, email)) {
+			throw new BizError(t('usernameExists'));
+		}
+
+		let type = null;
+		let regKeyId = 0;
+
+		if (regKey === settingConst.regKey.OPEN) {
+			const keyResult = await this.handleOpenRegKey(c, regKey, code);
+			type = keyResult?.type;
+			regKeyId = keyResult?.regKeyId;
+		}
+
+		if (regKey === settingConst.regKey.OPTIONAL) {
+			const keyResult = await this.handleOpenOptional(c, regKey, code);
+			type = keyResult?.type;
+			regKeyId = keyResult?.regKeyId;
+		}
+
+		if (!type) {
+			const defaultRole = await roleService.selectDefaultRole(c);
+			type = defaultRole?.roleId;
+		}
+
+		const roleRow = await roleService.selectById(c, type);
+		if (!roleRow) {
+			throw new BizError(t('roleNotExist'));
+		}
+
+		let regVerifyOpen = false;
+		if (registerVerify === settingConst.registerVerify.OPEN) {
+			regVerifyOpen = true;
+			await turnstileService.verify(c, token);
+		}
+
+		if (registerVerify === settingConst.registerVerify.COUNT) {
+			regVerifyOpen = await verifyRecordService.isOpenRegVerify(c, regVerifyCount);
+			if (regVerifyOpen) {
+				await turnstileService.verify(c, token);
+			}
+		}
+
+		const { salt, hash } = await saltHashUtils.hashPassword(password);
+		const userId = await userService.insert(c, {
+			email,
+			username,
+			displayName: typeof displayName === 'string' && displayName.trim() ? displayName.trim() : username,
+			regKeyId,
+			password: hash,
+			salt,
+			type
+		});
+
+		await userService.updateUserInfo(c, userId, true);
+
+		if (regKey !== settingConst.regKey.CLOSE && regKeyId > 0) {
+			await regKeyService.reduceCount(c, code, 1);
+		}
+
+		if (registerVerify === settingConst.registerVerify.COUNT && !regVerifyOpen) {
+			const row = await verifyRecordService.increaseRegCount(c);
+			return { regVerifyOpen: row.count >= regVerifyCount, username };
+		}
+
+		return { regVerifyOpen, username };
+	},
+
+	async registerOAuth(c, params) {
 
 		const { email, password, token, code } = params;
 
 		let { regKey, register, registerVerify, regVerifyCount, minEmailPrefix, emailPrefixFilter } = await settingService.query(c)
 
-		if (oauth) {
-			registerVerify = settingConst.registerVerify.CLOSE;
-			register = settingConst.register.OPEN;
-		}
+		registerVerify = settingConst.registerVerify.CLOSE;
+		register = settingConst.register.OPEN;
 
 		if (register === settingConst.register.CLOSE) {
 			throw new BizError(t('regDisabled'));
@@ -61,7 +168,7 @@ const loginService = {
 			throw new BizError(t('pwdMinLength'));
 		}
 
-		if (!c.env.domain.includes(emailUtils.getDomain(email))) {
+		if (!configuredDomains(c.env.domain).includes(emailUtils.getDomain(email).toLowerCase())) {
 			throw new BizError(t('notEmailDomain'));
 		}
 
@@ -87,6 +194,10 @@ const loginService = {
 		}
 
 		if (accountRow) {
+			throw new BizError(t('isRegAccount'));
+		}
+
+		if (await userService.selectByEmailIncludeDel(c, email)) {
 			throw new BizError(t('isRegAccount'));
 		}
 
@@ -126,9 +237,18 @@ const loginService = {
 			}
 		}
 
+		const username = await userService.findAvailableUsername(c, emailUtils.getName(email));
 		const { salt, hash } = await saltHashUtils.hashPassword(password);
 
-		const userId = await userService.insert(c, { email, regKeyId,password: hash, salt, type: type || defType });
+		const userId = await userService.insert(c, {
+			email,
+			username,
+			displayName: username,
+			regKeyId,
+			password: hash,
+			salt,
+			type: type || defType
+		});
 
 		await accountService.insert(c, { userId: userId, email, name: emailUtils.getName(email) });
 
@@ -140,10 +260,10 @@ const loginService = {
 
 		if (registerVerify === settingConst.registerVerify.COUNT && !regVerifyOpen) {
 			const row = await verifyRecordService.increaseRegCount(c);
-			return {regVerifyOpen: row.count >= regVerifyCount}
+			return { regVerifyOpen: row.count >= regVerifyCount, username }
 		}
 
-		return {regVerifyOpen}
+		return { regVerifyOpen, username }
 
 	},
 
@@ -201,67 +321,64 @@ const loginService = {
 
 	async login(c, params, noVerifyPwd = false) {
 
-		const { email, password } = params;
+		const { identifier, type } = parseLoginIdentifier(params);
+		const { password } = params;
 
-		if ((!email || !password) && !noVerifyPwd) {
-			throw new BizError(t('emailAndPwdEmpty'));
+		if (!noVerifyPwd) {
+			await loginRateLimitService.assertAllowed(c, identifier);
+		}
+		if ((!identifier || !password) && !noVerifyPwd) {
+			await loginRateLimitService.recordFailure(c, identifier);
+			throw new BizError(t('invalidCredentials'), 401);
 		}
 
-		const userRow = await userService.selectByEmailIncludeDel(c, email);
+		const userRow = type === 'username'
+			? await userService.selectByUsernameIncludeDel(c, identifier)
+			: await userService.selectByEmailIncludeDel(c, identifier);
 
-		if (!userRow) {
-			throw new BizError(t('notExistUser'));
-		}
-
-		if(userRow.isDel === isDel.DELETE) {
-			throw new BizError(t('isDelUser'));
-		}
-
-		if(userRow.status === userConst.status.BAN) {
-			throw new BizError(t('isBanUser'));
-		}
-
-		if (!await cryptoUtils.verifyPassword(password, userRow.salt, userRow.password) && !noVerifyPwd) {
-			throw new BizError(t('IncorrectPwd'));
+		if (noVerifyPwd) {
+			if (!userRow) throw new BizError(t('notExistUser'), 401);
+			if (userRow.isDel === isDel.DELETE) throw new BizError(t('isDelUser'), 401);
+			if (userRow.status === userConst.status.BAN) throw new BizError(t('isBanUser'), 401);
+		} else {
+			const passwordValid = userRow
+				? await cryptoUtils.verifyPassword(password, userRow.salt, userRow.password)
+				: false;
+			if (!userRow || userRow.isDel === isDel.DELETE || userRow.status === userConst.status.BAN || !passwordValid) {
+				await loginRateLimitService.recordFailure(c, identifier);
+				throw new BizError(t('invalidCredentials'), 401);
+			}
+			await loginRateLimitService.reset(c, identifier);
+			if (cryptoUtils.needsRehash(userRow.password)) {
+				const upgraded = await cryptoUtils.hashPassword(password);
+				await userService.updatePasswordHash(c, userRow.userId, upgraded.hash, upgraded.salt);
+				userRow.password = upgraded.hash;
+				userRow.salt = upgraded.salt;
+			}
 		}
 
 		const uuid = uuidv4();
-		const jwt = await JwtUtils.generateToken(c,{ userId: userRow.userId, token: uuid });
+		const jwt = await JwtUtils.generateToken(c,{ userId: userRow.userId, token: uuid }, constant.TOKEN_EXPIRE);
 
 		let authInfo = await c.env.kv.get(KvConst.AUTH_INFO + userRow.userId, { type: 'json' });
-
-		if (authInfo && (authInfo.user.email === userRow.email)) {
-
-			if (authInfo.tokens.length > 10) {
-				authInfo.tokens.shift();
-			}
-
-			authInfo.tokens.push(uuid);
-
-		} else {
-
-			authInfo = {
-				tokens: [],
-				user: userRow,
-				refreshTime: dayjs().toISOString()
-			};
-
-			authInfo.tokens.push(uuid);
-
-		}
+		authInfo = addSessionToken(authInfo, uuid, userRow);
 
 		await userService.updateUserInfo(c, userRow.userId);
 
-		await c.env.kv.put(KvConst.AUTH_INFO + userRow.userId, JSON.stringify(authInfo), { expirationTtl: constant.TOKEN_EXPIRE });
+		await putAuthInfo(c, userRow.userId, authInfo);
 		return jwt;
 	},
 
 	async logout(c, userId) {
-		const token =userContext.getToken(c);
+		const token = await userContext.getToken(c);
 		const authInfo = await c.env.kv.get(KvConst.AUTH_INFO + userId, { type: 'json' });
-		const index = authInfo.tokens.findIndex(item => item === token);
-		authInfo.tokens.splice(index, 1);
-		await c.env.kv.put(KvConst.AUTH_INFO + userId, JSON.stringify(authInfo));
+		if (!authInfo) return;
+		removeSessionToken(authInfo, token);
+		if (isSessionExpired(authInfo) || authInfo.tokens.length === 0) {
+			await c.env.kv.delete(KvConst.AUTH_INFO + userId);
+			return;
+		}
+		await putAuthInfo(c, userId, authInfo);
 	}
 
 };

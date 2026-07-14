@@ -1,4 +1,10 @@
 export default function emailTextTemplate(text) {
+	const safeText = String(text || '')
+		.replace(/&/g, '&amp;')
+		.replace(/</g, '&lt;')
+		.replace(/>/g, '&gt;')
+		.replace(/"/g, '&quot;')
+		.replace(/'/g, '&#39;');
 	return `<!DOCTYPE html>
 <html lang='en' >
 <head>
@@ -29,7 +35,7 @@ export default function emailTextTemplate(text) {
     </style>
 </head>
 <body>
-<span>${text}</span>
+<span>${safeText}</span>
 </body>
 </html>`
 }

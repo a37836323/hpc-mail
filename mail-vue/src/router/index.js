@@ -110,7 +110,7 @@ router.beforeEach((to, from, next) => {
     }
 
     if (token && to.name === 'login') {
-        return next(from.path)
+        return next(from.name ? from.fullPath : '/inbox')
     }
 
     next()
@@ -166,11 +166,15 @@ router.afterEach((to) => {
         }
     }
 
-    if (window.innerWidth < 1025) {
+    if (window.innerWidth < 768) {
         uiStore.asideShow = false
     }
 
     first = false
+
+    requestAnimationFrame(() => {
+        document.getElementById('main-content')?.focus({preventScroll: true})
+    })
 })
 
 function removeLoading() {

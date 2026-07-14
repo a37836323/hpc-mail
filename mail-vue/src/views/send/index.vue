@@ -13,10 +13,10 @@
                :type="'send'"
   >
     <template #first>
-      <Icon class="icon" @click="changeTimeSort" icon="material-symbols-light:timer-arrow-down-outline"
-            v-if="params.timeSort === 0" width="28" height="28"/>
-      <Icon class="icon" @click="changeTimeSort" icon="material-symbols-light:timer-arrow-up-outline" v-else
-            width="28" height="28"/>
+      <IconButton :label="params.timeSort === 0 ? $t('sortOldestFirst') : $t('sortNewestFirst')" @click="changeTimeSort">
+        <ArrowDownNarrowWide v-if="params.timeSort === 0" :size="19" />
+        <ArrowUpNarrowWide v-else :size="19" />
+      </IconButton>
     </template>
   </emailScroll>
 </template>
@@ -29,7 +29,8 @@ import {emailList, emailDelete} from "@/request/email.js";
 import {starAdd, starCancel} from "@/request/star.js";
 import {defineOptions, onMounted, reactive, ref, watch} from "vue";
 import router from "@/router/index.js";
-import {Icon} from "@iconify/vue";
+import { ArrowDownNarrowWide, ArrowUpNarrowWide } from '@lucide/vue'
+import IconButton from '@/components/ui/IconButton.vue'
 
 defineOptions({
   name: 'send'
@@ -72,19 +73,17 @@ function cancelStar(email) {
 }
 
 function getEmailList(emailId, size) {
-  const accountId =  accountStore.currentAccountId;
-  const allReceive = accountStore.currentAccount.allReceive;
+  // Sent mail is a user-level timeline. accountId=0 includes dynamic sender
+  // identities that are intentionally not stored as mailbox accounts.
+  const accountId = 0;
+  const allReceive = 1;
   return emailList(accountId, allReceive, emailId, params.timeSort, size, 1).then(data => {
-    data.latestEmail.reqAccountId = accountId;
-    data.latestEmail.allReceive = allReceive;
+    if (data.latestEmail) {
+      data.latestEmail.reqAccountId = accountId;
+      data.latestEmail.allReceive = allReceive;
+    }
     return data;
   })
 }
 
 </script>
-
-<style scoped>
-.icon {
-  cursor: pointer;
-}
-</style>
