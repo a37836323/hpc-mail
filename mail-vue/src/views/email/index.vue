@@ -213,7 +213,11 @@ function getEmailList(emailId, size) {
 .mailbox-filter > svg:last-child { pointer-events: none; }
 
 @media (max-width: 767px) {
-  .mailbox-filter { min-width: 0; width: min(54vw, 240px); grid-template-columns: auto minmax(0, 1fr) auto; }
+  .mailbox-filter { min-width: 132px; width: auto; height: 44px; flex: 1 1 180px; grid-template-columns: auto minmax(0, 1fr) auto; }
+  .mailbox-filter select { height: 42px; }
   .mailbox-filter > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+}
+@media (max-width: 360px) {
+  .mailbox-filter { min-width: 110px; }
 }
 </style>

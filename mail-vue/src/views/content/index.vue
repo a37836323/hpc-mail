@@ -230,6 +230,8 @@ const handleDelete = () => {
 .attachment-download:hover { color: var(--foreground); background: var(--surface-subtle); }
 .attachment-download:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 @media (max-width: 600px) {
+  .message-page { padding-block-end: env(safe-area-inset-bottom); }
+  .message-toolbar { min-height: calc(56px + env(safe-area-inset-top)); padding-block-start: env(safe-area-inset-top); }
   .message-card { width: 100%; min-height: 100%; margin: 0; border: 0; border-radius: 0; }
   .message-heading, .message-body { padding: 20px 16px; }
   .message-meta > div { grid-template-columns: 64px minmax(0, 1fr); }

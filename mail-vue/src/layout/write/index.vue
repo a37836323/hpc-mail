@@ -19,32 +19,38 @@
         </header>
 
         <div class="compose-body">
-          <section class="sender-section" aria-labelledby="sender-heading">
-            <div class="sender-section__heading">
-              <div><h2 id="sender-heading">{{ $t('senderIdentity') }}</h2><p>{{ $t('senderIdentityDescription') }}</p></div>
-              <select v-if="recentSenders.length" class="recent-sender" :aria-label="$t('recentSenderAddresses')" @change="applyRecentSender($event.target.value)">
-                <option value="">{{ $t('recentSender') }}</option>
-                <option v-for="sender in recentSenders" :key="sender.address" :value="sender.address">{{ sender.address }}</option>
-              </select>
+          <section class="sender-section" :class="{ 'sender-section--expanded': senderExpanded }" :aria-label="$t('senderIdentity')">
+            <button type="button" class="sender-mobile-summary" :aria-expanded="senderExpanded" @click="senderExpanded = !senderExpanded">
+              <span><strong>{{ $t('senderIdentity') }}</strong><small>{{ senderAddress || $t('senderAddressIncomplete') }}</small></span>
+              <ChevronDown :size="19" aria-hidden="true" />
+            </button>
+            <div class="sender-section__content">
+              <div class="sender-section__heading">
+                <div><h2 id="sender-heading">{{ $t('senderIdentity') }}</h2><p>{{ $t('senderIdentityDescription') }}</p></div>
+                <select v-if="recentSenders.length" class="recent-sender" :aria-label="$t('recentSenderAddresses')" @change="applyRecentSender($event.target.value)">
+                  <option value="">{{ $t('recentSender') }}</option>
+                  <option v-for="sender in recentSenders" :key="sender.address" :value="sender.address">{{ sender.address }}</option>
+                </select>
+              </div>
+              <div class="sender-grid">
+                <FormField :label="$t('displayNameOptional')" for-id="sender-name">
+                  <div class="compose-input"><UserRound :size="17" /><input id="sender-name" v-model.trim="form.name" autocomplete="name" :placeholder="$t('displayNameExample')" @input="markDirty" /></div>
+                </FormField>
+                <FormField :label="$t('emailPrefix')" for-id="sender-local" :error="senderErrors.localPart">
+                  <div class="compose-input"><AtSign :size="17" /><input id="sender-local" ref="localPartRef" v-model.trim="form.localPart" autocomplete="off" autocapitalize="none" spellcheck="false" :placeholder="$t('senderLocalPartExample')" :aria-invalid="Boolean(senderErrors.localPart)" :disabled="!availableDomains.length" @input="markDirty" @blur="validateLocalPart" /></div>
+                </FormField>
+                <FormField :label="$t('domain')" for-id="sender-domain" :error="senderErrors.domain">
+                  <div class="compose-input compose-select"><Globe2 :size="17" /><select id="sender-domain" v-model="form.domain" :aria-invalid="Boolean(senderErrors.domain)" :disabled="!availableDomains.length" @change="markDirty(); validateDomain()"><option disabled value="">{{ $t('selectDomain') }}</option><option v-for="domain in availableDomains" :key="domain" :value="domain">{{ domain }}</option></select><ChevronDown :size="16" /></div>
+                </FormField>
+              </div>
+              <p v-if="!availableDomains.length" class="domain-empty" role="alert"><CircleAlert :size="17" aria-hidden="true" /><span><strong>{{ $t('noAuthorizedSenderDomains') }}</strong>{{ $t('noAuthorizedSenderDomainsDescription') }}</span></p>
+              <div class="sender-preview" :class="{ 'sender-preview--valid': senderValid }" aria-live="polite">
+                <CheckCircle2 v-if="senderValid" :size="18" aria-hidden="true" />
+                <CircleAlert v-else :size="18" aria-hidden="true" />
+                <span><small>{{ senderValid ? $t('readyToSendFrom') : $t('senderPreview') }}</small><strong>{{ senderAddress || $t('senderAddressIncomplete') }}</strong></span>
+              </div>
+              <p v-if="senderFallbackNotice" class="sender-fallback" role="status"><Info :size="16" />{{ senderFallbackNotice }}</p>
             </div>
-            <div class="sender-grid">
-              <FormField :label="$t('displayNameOptional')" for-id="sender-name">
-                <div class="compose-input"><UserRound :size="17" /><input id="sender-name" v-model.trim="form.name" autocomplete="name" :placeholder="$t('displayNameExample')" @input="markDirty" /></div>
-              </FormField>
-              <FormField :label="$t('emailPrefix')" for-id="sender-local" :error="senderErrors.localPart">
-                <div class="compose-input"><AtSign :size="17" /><input id="sender-local" ref="localPartRef" v-model.trim="form.localPart" autocomplete="off" autocapitalize="none" spellcheck="false" :placeholder="$t('senderLocalPartExample')" :aria-invalid="Boolean(senderErrors.localPart)" :disabled="!availableDomains.length" @input="markDirty" @blur="validateLocalPart" /></div>
-              </FormField>
-              <FormField :label="$t('domain')" for-id="sender-domain" :error="senderErrors.domain">
-                <div class="compose-input compose-select"><Globe2 :size="17" /><select id="sender-domain" v-model="form.domain" :aria-invalid="Boolean(senderErrors.domain)" :disabled="!availableDomains.length" @change="markDirty(); validateDomain()"><option disabled value="">{{ $t('selectDomain') }}</option><option v-for="domain in availableDomains" :key="domain" :value="domain">{{ domain }}</option></select><ChevronDown :size="16" /></div>
-              </FormField>
-            </div>
-            <p v-if="!availableDomains.length" class="domain-empty" role="alert"><CircleAlert :size="17" aria-hidden="true" /><span><strong>{{ $t('noAuthorizedSenderDomains') }}</strong>{{ $t('noAuthorizedSenderDomainsDescription') }}</span></p>
-            <div class="sender-preview" :class="{ 'sender-preview--valid': senderValid }" aria-live="polite">
-              <CheckCircle2 v-if="senderValid" :size="18" aria-hidden="true" />
-              <CircleAlert v-else :size="18" aria-hidden="true" />
-              <span><small>{{ senderValid ? $t('readyToSendFrom') : $t('senderPreview') }}</small><strong>{{ senderAddress || $t('senderAddressIncomplete') }}</strong></span>
-            </div>
-            <p v-if="senderFallbackNotice" class="sender-fallback" role="status"><Info :size="16" />{{ senderFallbackNotice }}</p>
           </section>
 
           <section class="message-fields" :aria-label="$t('messageDetails')">
@@ -149,6 +155,7 @@ const editor = ref(null)
 const localPartRef = ref(null)
 const fileInput = ref(null)
 const showContacts = ref(false)
+const senderExpanded = ref(false)
 const contactsTable = ref(null)
 const senderFallbackNotice = ref('')
 const senderErrors = reactive({ localPart: '', domain: '' })
@@ -320,7 +327,9 @@ async function sendEmail() {
   fieldErrors.subject = form.subject.trim() ? '' : t('emptySubjectMsg')
   form.content = editor.value?.getContent?.() || form.content
   fieldErrors.content = form.content ? '' : t('emptyContentMsg')
-  if (!validateSender() || fieldErrors.recipient || fieldErrors.subject || fieldErrors.content || sending.value) return
+  const senderReady = validateSender()
+  if (!senderReady) senderExpanded.value = true
+  if (!senderReady || fieldErrors.recipient || fieldErrors.subject || fieldErrors.content || sending.value) return
   sending.value = true
   const payload = {
     ...toRaw(form),
@@ -417,6 +426,7 @@ function resetForm() {
   Object.assign(form, { name: '', localPart: '', domain: '', sendEmail: '', accountId: 0, receiveEmail: [], subject: '', content: '', text: '', sendType: '', emailId: 0, attachments: [], draftId: null, createTime: '' })
   Object.assign(senderErrors, { localPart: '', domain: '' }); Object.assign(fieldErrors, { recipient: '', subject: '', content: '' }); Object.assign(initialReply, { receiveEmail: [], subject: '', content: '', sendType: '' })
   senderFallbackNotice.value = ''; defValue.value = ''; dirty.value = false; editor.value?.clearEditor?.()
+  senderExpanded.value = false
   nextTick(() => { suspendAutosave = false })
 }
 
@@ -432,6 +442,8 @@ onBeforeUnmount(() => window.clearTimeout(autosaveTimer))
 .compose-header p { margin-block-start: 2px; color: var(--muted-foreground); font-size: .75rem; }
 .compose-body { min-height: 0; overflow-y: auto; }
 .sender-section { padding: 20px 24px; border-block-end: 1px solid var(--border); background: var(--surface-subtle); }
+.sender-mobile-summary { display: none; }
+.sender-section__content { min-width: 0; }
 .sender-section__heading { margin-block-end: 14px; display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; }
 .sender-section__heading h2 { font-size: .875rem; font-weight: 720; }
 .sender-section__heading p { margin-block-start: 2px; color: var(--muted-foreground); font-size: .75rem; }
@@ -484,16 +496,27 @@ onBeforeUnmount(() => window.clearTimeout(autosaveTimer))
 @keyframes spin { to { transform: rotate(360deg); } }
 
 @media (max-width: 767px) {
-  .compose-dialog { inset: 0; width: 100vw; height: 100dvh; border: 0; border-radius: 0; transform: none; padding-block-end: env(safe-area-inset-bottom); }
+  .compose-dialog { inset: 0; width: 100vw; height: 100dvh; padding-block: env(safe-area-inset-top) env(safe-area-inset-bottom); border: 0; border-radius: 0; transform: none; }
   .compose-header { min-height: 60px; padding: 8px 8px 8px 16px; }
   .compose-header p { display: none; }
-  .sender-section { padding: 16px; }
+  .sender-section { padding: 0; }
+  .sender-mobile-summary { width: 100%; min-height: 60px; padding: 8px 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--foreground); background: var(--surface-subtle); text-align: start; cursor: pointer; }
+  .sender-mobile-summary > span { min-width: 0; display: grid; }
+  .sender-mobile-summary strong { font-size: .875rem; }
+  .sender-mobile-summary small { overflow: hidden; color: var(--muted-foreground); font-size: .75rem; text-overflow: ellipsis; white-space: nowrap; }
+  .sender-mobile-summary > svg { flex: 0 0 auto; transition: transform var(--motion-base) var(--ease-out); }
+  .sender-section--expanded .sender-mobile-summary > svg { transform: rotate(180deg); }
+  .sender-section__content { display: none; padding: 4px 16px 16px; }
+  .sender-section--expanded .sender-section__content { display: block; }
   .sender-section__heading { align-items: flex-start; flex-direction: column; gap: 10px; }
+  .sender-section__heading > div { display: none; }
   .recent-sender { width: 100%; max-width: none; }
   .sender-grid { grid-template-columns: 1fr; }
   .message-fields { padding-inline: 16px; }
   .recipient-row, .subject-row { grid-template-columns: 62px minmax(0, 1fr) auto; }
   .subject-row { grid-template-columns: 62px minmax(0, 1fr); }
+  .recipient-row :deep(.el-tag) { min-height: 36px; }
+  .recipient-row :deep(.el-tag__close) { width: 32px; height: 32px; flex: 0 0 32px; }
   .compose-error { margin-inline-start: 70px; }
   .editor-section { padding-inline: 10px; }
   .attachments { padding-inline: 16px; grid-template-columns: 1fr; }

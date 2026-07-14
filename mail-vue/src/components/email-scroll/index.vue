@@ -243,7 +243,7 @@ import {fromNow} from "@/utils/day.js";
 import {useI18n} from "vue-i18n";
 import {EmailUnreadEnum} from "@/enums/email-enum.js";
 import { UseVirtualList } from '@vueuse/components'
-import { useScroll } from '@vueuse/core'
+import { useScroll, useWindowSize } from '@vueuse/core'
 
 const props = defineProps({
   getEmailList: Function,
@@ -314,7 +314,8 @@ let scrollTop = 0
 const latestEmail = ref(null)
 const scrollbarRef = ref(null)
 let reqLock = false
-let isMobile = ref(innerWidth < 1367)
+const { width: viewportWidth } = useWindowSize()
+const isMobile = computed(() => viewportWidth.value < 1367)
 let skeletonRows = 0
 const timePaddingRight = ref('');
 const keyCount = ref(0);
@@ -361,6 +362,7 @@ onActivated(() => {
 })
 
 onMounted(() => {
+  window.addEventListener('wheel', handleWindowWheel, { passive: true })
   timer = setInterval(() => {
     emailList.forEach(email => {
       email.formatCreateTime = fromNow(email.createTime);
@@ -369,14 +371,11 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  window.removeEventListener('wheel', handleWindowWheel)
   clearInterval(timer)
 })
 
 getEmailList()
-
-window.onresize = () => {
-  isMobile.value = innerWidth < 1367
-}
 
 function onScroll(e) {
   scrollTop = e.target.scrollTop;
@@ -478,11 +477,11 @@ watch(() => emailStore.addStarEmailId, () => {
   })
 })
 
-window.addEventListener('wheel', (event) => {
+function handleWindowWheel() {
   if (dropdownShow.value) {
     dropdownRef.value.handleClose();
   }
-})
+}
 
 function openReply(email) {
   uiStore.writerRef.openReply(email)
@@ -1177,6 +1176,7 @@ function loadData() {
       }
 
       .code-tag {
+        position: relative;
         flex: 0 0 auto;
         max-width: 170px;
         height: 20px;
@@ -1188,6 +1188,12 @@ function loadData() {
         text-overflow: ellipsis;
         cursor: pointer;
         background: transparent;
+
+        &::before {
+          content: '';
+          position: absolute;
+          inset: -12px -4px;
+        }
       }
 
       .subject-text {

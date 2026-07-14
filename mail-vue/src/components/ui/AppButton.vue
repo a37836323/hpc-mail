@@ -54,4 +54,7 @@ defineProps({
 .app-button--block { width: 100%; }
 .app-button__spinner { animation: app-spin .8s linear infinite; }
 @keyframes app-spin { to { transform: rotate(360deg); } }
+@media (max-width: 767px), (pointer: coarse) {
+  .app-button--sm { min-height: 44px; }
+}
 </style>

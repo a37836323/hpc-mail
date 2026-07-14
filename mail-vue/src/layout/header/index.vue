@@ -165,7 +165,7 @@ async function clickLogout() {
 @media (max-width: 767px) {
   .topbar { height: calc(56px + env(safe-area-inset-top)); padding: env(safe-area-inset-top) 8px 0 4px; }
   .page-heading__eyebrow, .profile-trigger__identity, .profile-trigger > svg, .topbar__actions > :nth-child(2) { display: none; }
-  .compose-action { width: 44px; padding-inline: 0; }
+  .compose-action { width: 44px; min-height: 44px; padding-inline: 0; }
   .compose-action__label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 }
 </style>

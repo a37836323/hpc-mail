@@ -146,7 +146,7 @@
   </section>
 </template>
 <script setup>
-import {defineOptions, nextTick, reactive, ref} from "vue";
+import {defineOptions, nextTick, onBeforeUnmount, onMounted, reactive, ref} from "vue";
 import { CircleHelp, Plus, RefreshCw } from '@lucide/vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import IconButton from '@/components/ui/IconButton.vue'
@@ -412,9 +412,8 @@ function adjustWidth() {
 
 adjustWidth()
 
-window.onresize = () => {
-  adjustWidth()
-};
+onMounted(() => window.addEventListener('resize', adjustWidth, { passive: true }))
+onBeforeUnmount(() => window.removeEventListener('resize', adjustWidth))
 
 
 </script>

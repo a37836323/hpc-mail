@@ -1,7 +1,7 @@
 <template>
   <div class="user-box">
     <div class="header-actions">
-      <AppButton size="sm" @click="openAdd"><template #icon><UserPlus :size="18" /></template>{{ $t('addUser') }}</AppButton>
+      <AppButton class="add-user-action" size="sm" @click="openAdd"><template #icon><UserPlus :size="18" /></template>{{ $t('addUser') }}</AppButton>
       <div class="search">
         <el-input
             v-model="params.username"
@@ -336,7 +336,7 @@
 </template>
 
 <script setup>
-import {defineOptions, h, reactive, ref, watch} from 'vue'
+import {defineOptions, h, onBeforeUnmount, onMounted, reactive, ref, watch} from 'vue'
 import {
   userList,
   userDelete,
@@ -486,10 +486,20 @@ const filterItem = reactive({
   receive: ['normal', 'del']
 })
 
-window.addEventListener('wheel', (event) => {
+function handleWindowWheel() {
   if (dropdownShow.value) {
     dropdownRef.value.handleClose();
   }
+}
+
+onMounted(() => {
+  window.addEventListener('wheel', handleWindowWheel, { passive: true })
+  window.addEventListener('resize', adjustWidth, { passive: true })
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('wheel', handleWindowWheel)
+  window.removeEventListener('resize', adjustWidth)
 })
 
 function visibleChange(e) {
@@ -985,10 +995,6 @@ function getUserList(loading = true) {
   })
 }
 
-window.onresize = () => {
-  adjustWidth()
-};
-
 adjustWidth()
 
 function adjustWidth() {
@@ -1125,7 +1131,7 @@ function adjustWidth() {
   overflow: auto;
   height: calc(100% - 50px);
   @media (max-width: 464px) {
-    height: calc(100% - 90px);
+    height: calc(100% - 60px);
   }
 }
 
@@ -1176,6 +1182,18 @@ function adjustWidth() {
   :deep(.el-select__wrapper) {
     min-height: 28px;
   }
+}
+
+@media (max-width: 767px) {
+  .add-user-action { width: 44px; padding-inline: 0; }
+  .add-user-action :deep(span) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .header-actions .search-input { width: 160px; }
+  .search :deep(.el-input__inner) { height: 44px; }
+  .status-select :deep(.el-select__wrapper) { min-height: 44px; }
+}
+
+@media (max-width: 360px) {
+  .header-actions .search-input { width: 128px; }
 }
 
 .dialog {

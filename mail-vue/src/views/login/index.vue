@@ -222,7 +222,11 @@ function toggleLanguage() {
   settingStore.lang = lang; locale.value = lang; setExtend(lang === 'en' ? 'en' : 'zh-cn')
 }
 
-onMounted(() => loginUsernameRef.value?.focus())
+onMounted(() => {
+  if (window.innerWidth >= 768 && window.matchMedia('(pointer: fine)').matches) {
+    loginUsernameRef.value?.focus()
+  }
+})
 </script>
 
 <style scoped>
@@ -257,9 +261,13 @@ onMounted(() => loginUsernameRef.value?.focus())
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 
 @media (max-width: 480px) {
-  .auth-page { padding-inline: 14px; align-items: flex-start; }
-  .auth-shell { gap: 16px; }
-  .auth-card { padding: 24px 20px; border-radius: 14px; }
+  .auth-page { padding: max(68px, calc(env(safe-area-inset-top) + 56px)) 20px max(24px, env(safe-area-inset-bottom)); align-items: flex-start; }
+  .auth-shell { width: min(100%, 352px); gap: 0; }
+  .auth-brandline { display: none; }
+  .auth-card { padding: 22px 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+  .auth-form { gap: 14px; }
+  .auth-form__header { margin-block-end: 2px; }
+  .auth-form__header h2 { font-size: 1.375rem; }
 }
 
 </style>

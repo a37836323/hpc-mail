@@ -260,8 +260,14 @@ img { max-width: 100%; height: auto; display: block; }
     body { font-size: 1rem; }
     .el-button { min-height: 44px; }
     .el-dialog { width: calc(100vw - 24px) !important; margin-inline: 12px !important; }
-    .header-actions { overflow-x: auto; scrollbar-width: none; }
+    .header-actions { min-height: 60px !important; padding: 8px 12px !important; flex-wrap: nowrap !important; overflow-x: auto; overscroll-behavior-inline: contain; scrollbar-width: none; }
+    .header-actions > * { flex: 0 0 auto; }
     .header-actions::-webkit-scrollbar { display: none; }
+    .email-container > .header-actions { min-height: 60px !important; display: grid !important; grid-template-columns: 36px minmax(0, 1fr); gap: 4px !important; padding: 8px !important; overflow: hidden; }
+    .email-container > .header-actions > .el-checkbox { width: 36px; min-height: 44px; margin: 0; display: grid; place-items: center; }
+    .email-container > .header-actions .header-left { min-width: 0; padding-inline-start: 0 !important; flex-wrap: nowrap !important; overflow-x: auto; overscroll-behavior-inline: contain; scrollbar-width: none; }
+    .email-container > .header-actions .header-left::-webkit-scrollbar { display: none; }
+    .email-container > .header-actions .header-right { display: none !important; }
     .settings-card, .number-item, .picture-item, .picture-cs-item, .code-item { border-radius: 12px !important; }
 }
 

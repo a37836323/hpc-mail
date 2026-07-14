@@ -122,7 +122,7 @@
 <script setup>
 import { AtSign, Inbox, Send, Users } from '@lucide/vue'
 import {useTransition} from "@vueuse/core";
-import {defineOptions, onActivated, onDeactivated, onMounted, reactive, ref, watch, computed} from "vue";
+import {defineOptions, onActivated, onBeforeUnmount, onDeactivated, onMounted, reactive, ref, watch, computed} from "vue";
 import echarts from "@/echarts/index.js";
 import dayjs from "dayjs";
 import {analysisEcharts} from "@/request/analysis.js";
@@ -209,6 +209,7 @@ let senderPieLeft = window.innerWidth < 500 ? `${window.innerWidth - 110}` : '72
 let analysisDark = uiStore.dark
 
 onMounted(() => {
+  window.addEventListener('resize', handleViewportResize, { passive: true })
   const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
   analysisEcharts(timeZone).then(data => {
@@ -273,10 +274,12 @@ onDeactivated(() => {
   leaveWidth = window.innerWidth
 })
 
-window.onresize = () => {
+function handleViewportResize() {
   setStyle()
   widthChange()
 }
+
+onBeforeUnmount(() => window.removeEventListener('resize', handleViewportResize))
 
 watch(() => uiStore.dark, () => {
   if (route.name !== 'analysis') return
@@ -936,7 +939,6 @@ function createSendGauge() {
 @media (max-width: 600px) { .analytics-heading p { display: none; } }
 
 </style>
-
 
 
 

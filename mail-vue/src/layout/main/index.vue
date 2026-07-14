@@ -83,7 +83,7 @@ function showNotice(data) {
 
 <style>
 .mailbox-drawer__overlay { position: fixed; inset: 0; z-index: var(--z-overlay); background: var(--overlay); animation: mailbox-overlay-in var(--motion-base) var(--ease-out); }
-.mailbox-drawer { position: fixed; inset-block: 0; inset-inline-end: 0; z-index: var(--z-modal); width: min(340px, calc(100vw - 24px)); border-inline-start: 1px solid var(--border); background: var(--surface); box-shadow: var(--shadow-floating); animation: mailbox-drawer-in var(--motion-base) var(--ease-out); }
+.mailbox-drawer { position: fixed; inset-block: 0; inset-inline-end: 0; z-index: var(--z-modal); width: min(340px, calc(100vw - 24px)); padding-block: env(safe-area-inset-top) env(safe-area-inset-bottom); border-inline-start: 1px solid var(--border); background: var(--surface); box-shadow: var(--shadow-floating); animation: mailbox-drawer-in var(--motion-base) var(--ease-out); }
 .mailbox-drawer:focus { outline: none; }
 @keyframes mailbox-overlay-in { from { opacity: 0; } }
 @keyframes mailbox-drawer-in { from { opacity: 0; transform: translateX(24px); } }

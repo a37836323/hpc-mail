@@ -478,6 +478,12 @@ async function latest() {
   width: 303px;
 }
 
+@media (max-width: 767px) {
+  .search-input { height: 44px; min-width: 180px; }
+  .search-type { min-height: 44px; }
+  :deep(.el-select__wrapper) { min-height: 44px; }
+}
+
 .icon {
   cursor: pointer;
 }

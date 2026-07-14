@@ -1993,6 +1993,11 @@ form .el-button {
   min-height: 28px;
 }
 
+@media (max-width: 767px) {
+  :deep(.el-button--small) { min-height: 44px; height: 44px; }
+  :deep(.el-select__wrapper) { min-height: 44px; }
+}
+
 </style>
 
 <style>

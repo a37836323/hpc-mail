@@ -239,6 +239,14 @@ function destroyEditor() {
   margin: 0 !important;
 }
 
+@media (max-width: 767px), (pointer: coarse) {
+  :deep(.tox-tbtn) {
+    width: 44px !important;
+    height: 44px !important;
+  }
+  :deep(.tox-toolbar__primary) { min-height: 48px; }
+}
+
 :deep(.tox .tox-edit-area::before) {
   display: none;
 }
