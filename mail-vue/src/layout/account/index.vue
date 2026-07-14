@@ -33,8 +33,8 @@
               <button type="button" class="mini-action" :aria-label="$t('mailboxActions')"><MoreHorizontal :size="18" /></button>
               <template #dropdown><el-dropdown-menu>
                 <el-dropdown-item v-if="hasPerm('email:send')" @click="openRename(item)">{{ $t('rename') }}</el-dropdown-item>
-                <el-dropdown-item v-if="item.accountId !== userStore.user?.defaultAccount?.accountId" @click="pinMailbox(item)">{{ $t('pin') }}</el-dropdown-item>
-                <el-dropdown-item v-if="item.accountId !== userStore.user?.defaultAccount?.accountId && hasPerm('account:delete')" divided @click="removeMailbox(item)">{{ $t('delete') }}</el-dropdown-item>
+                <el-dropdown-item @click="pinMailbox(item)">{{ $t('pin') }}</el-dropdown-item>
+                <el-dropdown-item v-if="hasPerm('account:delete')" divided @click="removeMailbox(item)">{{ $t('delete') }}</el-dropdown-item>
               </el-dropdown-menu></template>
             </el-dropdown>
           </div>
@@ -70,13 +70,11 @@ import { hasPerm } from '@/perm/perm.js'
 import { useAccountStore } from '@/store/account.js'
 import { useSettingStore } from '@/store/setting.js'
 import { useUiStore } from '@/store/ui.js'
-import { useUserStore } from '@/store/user.js'
 
 const { t } = useI18n()
 const accountStore = useAccountStore()
 const settingStore = useSettingStore()
 const uiStore = useUiStore()
-const userStore = useUserStore()
 const accounts = reactive([])
 const loading = ref(false)
 const loadingMore = ref(false)
@@ -105,7 +103,6 @@ window.onMailboxTurnstileError = () => {
 }
 
 watch(domainList, domains => { if (!domains.includes(addForm.domain)) addForm.domain = domains[0] || '' }, { immediate: true })
-watch(() => accountStore.changeUserAccountName, name => { if (accounts[0] && name) accounts[0].name = name })
 
 async function getAccountList() {
   if (loading.value || loadingMore.value || noMore.value) return
@@ -138,7 +135,7 @@ async function submitAdd() {
     const account = await accountAdd(`${addForm.localPart}@${addForm.domain}`, verifyToken)
     accounts.push(account); accountStore.hasAccounts = true; changeAccount(account)
     addForm.localPart = ''; verifyToken = ''; verifyShow.value = false; showAdd.value = false
-    userStore.refreshUserInfo(); ElMessage({ message: t('addSuccessMsg'), type: 'success', plain: true })
+    ElMessage({ message: t('addSuccessMsg'), type: 'success', plain: true })
   } catch (error) { if (error?.code === 400) { verifyToken = ''; revealVerification() } }
   finally { addLoading.value = false }
 }

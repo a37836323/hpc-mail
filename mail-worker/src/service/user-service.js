@@ -53,8 +53,7 @@ const userService = {
 			throw new BizError(t('authExpired'), 401);
 		}
 
-		const [account, roleRow, permKeys] = await Promise.all([
-			accountService.selectDefaultByUserId(c, userRow.userId),
+		const [roleRow, permKeys] = await Promise.all([
 			roleService.selectById(c, userRow.type),
 			permService.userPermKeys(c, userId)
 		]);
@@ -64,13 +63,21 @@ const userService = {
 		user.sendCount = userRow.sendCount;
 		user.username = userRow.username;
 		user.displayName = userRow.displayName || '';
-		user.defaultAccount = account;
-		user.name = userRow.displayName || account?.name || userRow.username;
+		user.name = userRow.displayName || userRow.username;
 		user.permKeys = permKeys;
 		user.role = roleRow;
 		user.type = userRow.type;
 
 		return user;
+	},
+
+	async setDisplayName(c, params, userId) {
+		const displayName = typeof params?.displayName === 'string' ? params.displayName.trim() : '';
+		if (!displayName || displayName.length > 50 || /[\u0000-\u001f\u007f]/.test(displayName)) {
+			throw new BizError(t('invalidDisplayName'));
+		}
+		await orm(c).update(user).set({ displayName }).where(eq(user.userId, userId)).run();
+		return displayName;
 	},
 
 

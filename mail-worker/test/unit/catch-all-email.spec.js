@@ -5,6 +5,7 @@ import accountService from '../../src/service/account-service';
 import settingService from '../../src/service/setting-service';
 import userService from '../../src/service/user-service';
 import aiService from '../../src/service/ai-service';
+import feishuService from '../../src/service/feishu-service';
 import { emailConst, settingConst } from '../../src/const/entity-const';
 
 describe('external catch-all delivery', () => {
@@ -15,6 +16,8 @@ describe('external catch-all delivery', () => {
 			receive: settingConst.receive.OPEN,
 			tgChatId: '',
 			tgBotStatus: settingConst.tgBotStatus.CLOSE,
+			feishuBotStatus: settingConst.feishuBotStatus.OPEN,
+			feishuWebhookUrl: 'https://open.feishu.cn/open-apis/bot/v2/hook/12345678-1234-1234-1234-123456789abc',
 			forwardStatus: settingConst.forwardStatus.CLOSE,
 			forwardEmail: '',
 			ruleEmail: '',
@@ -30,6 +33,8 @@ describe('external catch-all delivery', () => {
 		vi.spyOn(accountService, 'selectByEmailIncludeDel').mockResolvedValue(null);
 		vi.spyOn(userService, 'selectSystemAdmin').mockResolvedValue({ userId: 1, username: 'root', type: 1 });
 		vi.spyOn(aiService, 'extractCode').mockResolvedValue('');
+		vi.spyOn(console, 'error').mockImplementation(() => {});
+		const feishuForward = vi.spyOn(feishuService, 'sendEmailToBot').mockRejectedValue(new Error('webhook unavailable'));
 		let saved;
 		vi.spyOn(emailService, 'receive').mockImplementation(async (_c, params) => {
 			saved = params;
@@ -54,7 +59,9 @@ describe('external catch-all delivery', () => {
 			forward: vi.fn()
 		};
 
-		await receiveEmail(message, {}, {});
+		const backgroundTasks = [];
+		await receiveEmail(message, {}, { waitUntil: task => backgroundTasks.push(task) });
+		await Promise.all(backgroundTasks);
 
 		expect(reject).not.toHaveBeenCalled();
 		expect(saved).toMatchObject({
@@ -64,6 +71,8 @@ describe('external catch-all delivery', () => {
 			status: emailConst.status.SAVING
 		});
 		expect(complete).toHaveBeenCalledWith({ env: {} }, emailConst.status.RECEIVE, 77);
+		expect(feishuForward).toHaveBeenCalledOnce();
+		expect(backgroundTasks).toHaveLength(1);
 	});
 
 	it('preserves explicit unknown-recipient rejection', async () => {

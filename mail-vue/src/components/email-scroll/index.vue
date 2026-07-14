@@ -167,7 +167,7 @@
               </div>
             </template>
           </el-dropdown-item>
-          <el-dropdown-item v-if="['email','star','all-email'].includes(props.type)" v-perm="'email:send'" @click="openReply(rightClickEmail)">
+          <el-dropdown-item v-if="['email','star','all-email'].includes(props.type) && hasPerm('email:send')" @click="openReply(rightClickEmail)">
             <template #default>
               <div class="right-dropdown-item">
                 <Icon icon="la:reply" width="20" height="20"  />
@@ -175,7 +175,7 @@
               </div>
             </template>
           </el-dropdown-item>
-          <el-dropdown-item v-if="['email','send', 'star','all-email'].includes(props.type)" v-perm="'email:send'" @click="openForward(rightClickEmail)">
+          <el-dropdown-item v-if="['email','send', 'star','all-email'].includes(props.type) && hasPerm('email:send')" @click="openForward(rightClickEmail)">
             <template #default>
               <div class="right-dropdown-item">
                 <Icon icon="iconoir:arrow-up-right" width="19" height="19"  />
@@ -244,6 +244,7 @@ import {useI18n} from "vue-i18n";
 import {EmailUnreadEnum} from "@/enums/email-enum.js";
 import { UseVirtualList } from '@vueuse/components'
 import { useScroll, useWindowSize } from '@vueuse/core'
+import {hasPerm} from '@/perm/perm.js'
 
 const props = defineProps({
   getEmailList: Function,

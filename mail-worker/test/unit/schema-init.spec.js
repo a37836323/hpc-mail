@@ -53,7 +53,6 @@ function initPayload(overrides = {}) {
 	return {
 		adminUsername: 'riba2534',
 		adminPassword: `${crypto.randomUUID()}${crypto.randomUUID()}`,
-		adminMailbox: 'admin@hpc.email',
 		...overrides
 	};
 }
@@ -85,7 +84,7 @@ describe('versioned clean database initialization', () => {
 
 		const admin = database.prepare(`SELECT username, type FROM user`).get();
 		expect(admin).toEqual({ username: 'riba2534', type: 1 });
-		expect(database.prepare(`SELECT email, user_id FROM account`).get()).toEqual({ email: 'admin@hpc.email', user_id: 1 });
+		expect(database.prepare(`SELECT COUNT(*) AS total FROM account`).get()).toEqual({ total: 0 });
 		expect(database.prepare(`SELECT key, is_system FROM role WHERE role_id = 1`).get()).toEqual({ key: 'admin', is_system: 1 });
 		expect(database.prepare(`SELECT key, is_system FROM role WHERE role_id = 2`).get()).toEqual({ key: 'user', is_system: 1 });
 		expect(database.prepare(`PRAGMA table_info('verify_record')`).all().find(row => row.name === 'ip').type).toBe('TEXT');
@@ -93,6 +92,9 @@ describe('versioned clean database initialization', () => {
 		expect(database.prepare(`SELECT enabled FROM api_config WHERE config_id = 1`).get()).toEqual({ enabled: 1 });
 		expect(database.prepare(`SELECT perm_key FROM perm WHERE perm_id = 38`).get()).toEqual({ perm_key: 'api-key:query' });
 		expect(database.prepare(`PRAGMA table_info('api_key')`).all().map(row => row.name)).toContain('key_hash');
+		expect(database.prepare(`PRAGMA table_info('setting')`).all().map(row => row.name)).toEqual(expect.arrayContaining([
+			'feishu_bot_status', 'feishu_webhook_url', 'feishu_bot_secret'
+		]));
 
 		const second = await dbInit.init(c, {});
 		expect(second).toEqual({ schemaVersion: SCHEMA_VERSION, rebuilt: false });
@@ -110,6 +112,9 @@ describe('versioned clean database initialization', () => {
 			DROP TABLE api_key;
 			DROP TABLE api_config;
 			DELETE FROM perm WHERE perm_id >= 37;
+			ALTER TABLE setting DROP COLUMN feishu_bot_status;
+			ALTER TABLE setting DROP COLUMN feishu_webhook_url;
+			ALTER TABLE setting DROP COLUMN feishu_bot_secret;
 			UPDATE schema_meta SET schema_version = '4';
 		`);
 
@@ -118,6 +123,34 @@ describe('versioned clean database initialization', () => {
 		expect(database.prepare(`SELECT username FROM user WHERE user_id = 1`).get()).toEqual({ username: 'riba2534' });
 		expect(database.prepare(`SELECT enabled FROM api_config`).get()).toEqual({ enabled: 1 });
 		expect(database.prepare(`SELECT schema_version FROM schema_meta`).get()).toEqual({ schema_version: SCHEMA_VERSION });
+		expect(database.prepare(`SELECT feishu_bot_status, feishu_webhook_url, feishu_bot_secret FROM setting`).get()).toEqual({
+			feishu_bot_status: 1,
+			feishu_webhook_url: '',
+			feishu_bot_secret: ''
+		});
+	});
+
+	it('upgrades version 5 in place and preserves users, mailboxes, and API keys', async () => {
+		const database = new DatabaseSync(':memory:');
+		const c = initContext(database);
+		vi.spyOn(settingService, 'refresh').mockResolvedValue();
+		await dbInit.init(c, initPayload());
+		database.exec(`
+			INSERT INTO account (email, name, user_id) VALUES ('kept@hpc.email', 'kept', 1);
+			INSERT INTO api_key (name, key_prefix, key_suffix, key_hash, user_id, scopes, created_by)
+			VALUES ('kept', 'hpc_live_123456', 'abcdef', 'hash', 1, '["mail.read"]', 1);
+			ALTER TABLE setting DROP COLUMN feishu_bot_status;
+			ALTER TABLE setting DROP COLUMN feishu_webhook_url;
+			ALTER TABLE setting DROP COLUMN feishu_bot_secret;
+			UPDATE schema_meta SET schema_version = '5';
+		`);
+
+		const migrated = await dbInit.init(c, {});
+		expect(migrated).toEqual({ schemaVersion: SCHEMA_VERSION, rebuilt: false, migratedFrom: '5' });
+		expect(database.prepare(`SELECT username FROM user WHERE user_id = 1`).get()).toEqual({ username: 'riba2534' });
+		expect(database.prepare(`SELECT email FROM account WHERE account_id = 1`).get()).toEqual({ email: 'kept@hpc.email' });
+		expect(database.prepare(`SELECT name FROM api_key WHERE api_key_id = 1`).get()).toEqual({ name: 'kept' });
+		expect(database.prepare(`SELECT feishu_bot_status FROM setting`).get()).toEqual({ feishu_bot_status: 1 });
 	});
 
 	it('requires explicit rebuild permission for a legacy database', async () => {

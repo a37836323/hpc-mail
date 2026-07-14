@@ -24,7 +24,7 @@ HPC Mail 将 Cloudflare Email Routing、Workers、D1、KV 与 R2 组合成一套
 - **独立账号体系**：使用用户名和密码登录，登录身份不再与单一邮箱地址绑定；一个用户可以管理多个邮箱账号。
 - **灵活发件地址**：发送邮件时可自由填写合法前缀，并从管理员配置且用户有权使用的域名中选择后缀。
 - **完整邮件体验**：支持收发邮件、附件、内嵌图片、草稿、已发送状态和响应式阅读界面。
-- **自动转发与通知**：可按配置将来信转发至外部邮箱或 Telegram。
+- **自动转发与通知**：可按规则将来信转发至外部邮箱，并推送到 Telegram 或带签名验证的飞书 Webhook 机器人。
 - **服务端无状态部署**：业务运行在 Cloudflare Workers，数据分别存储于 D1、KV 与 R2，无需维护传统邮件服务器。
 - **管理与权限控制**：提供用户、邮箱、域名、配额、注册方式和系统参数管理。
 - **外部 API 控制**：提供一次性展示的独立 API 密钥、细粒度作用域、绑定用户、全局开关、到期时间、IP 白名单、每分钟限流和 90 天调用审计。
@@ -42,7 +42,7 @@ flowchart LR
     Worker <--> KV["KV · 会话与缓存"]
     Worker <--> R2["R2 · 邮件附件"]
     Worker --> AI["Workers AI · 内容分析"]
-    Worker --> Forward["外部邮箱 / Telegram"]
+    Worker --> Forward["外部邮箱 / Telegram / 飞书"]
     Worker --> Provider["Cloudflare Email / Resend"]
     Provider --> Recipient["邮件收件人"]
 ```
@@ -124,7 +124,6 @@ pnpm --dir mail-vue run build
 | `CUSTOM_DOMAIN` | `mail.example.com` | Web 服务使用的自定义域名 |
 | `DOMAIN` | `["example.com","example.net"]` | 可收发邮件的域名，必须是 JSON 字符串数组 |
 | `ADMIN_USERNAME` | `admin` | 初始管理员用户名，只用于登录身份和全新数据库初始化 |
-| `ADMIN_MAILBOX` | `admin@example.com` | 初始化时归属于管理员的首个邮箱，域名必须包含在 `DOMAIN` 中 |
 | `CLOUDFLARE_ACCOUNT_ID` | `xxxxxxxx` | Cloudflare 账户 ID |
 | `D1_DATABASE_ID` | `xxxxxxxx` | D1 数据库 ID |
 | `KV_NAMESPACE_ID` | `xxxxxxxx` | KV 命名空间 ID |
@@ -144,9 +143,9 @@ pnpm --dir mail-vue run build
 
 用户身份与邮箱地址完全分离：`user` 只保存用户名、密码哈希和角色等身份数据，所有邮箱地址只保存在 `account` 中。登录接口只接受用户名和密码，管理员邮箱也不会作为登录标识。
 
-部署完成后，工作流会通过受 `INIT_SECRET` 保护的 `POST /api/init` 初始化当前版本的 Schema，并使用 `ADMIN_USERNAME`、`ADMIN_PASSWORD` 和 `ADMIN_MAILBOX` 创建全新数据库的初始管理员。相同版本的重复初始化是幂等操作，不会覆盖已经修改过的管理员密码。
+部署完成后，工作流会通过受 `INIT_SECRET` 保护的 `POST /api/init` 初始化当前版本的 Schema，并使用 `ADMIN_USERNAME` 和 `ADMIN_PASSWORD` 创建全新数据库的平台管理员。初始化不会自动创建或绑定邮箱；管理员登录后可在邮箱管理中按需添加任意已配置域名的邮箱。相同版本的重复初始化是幂等操作，不会覆盖已经修改过的管理员密码。
 
-数据库升级只执行仓库中明确声明并经过测试的版本迁移，例如 Schema v4 到 v5 会保留现有用户和邮件并增加 API 控制表。没有已声明迁移路径的未知或旧版 Schema 会拒绝继续，不会擅自清除数据。确认不再需要现有数据后，可将 `REBUILD_DATABASE` 临时设为 `true` 并重新运行工作流；该操作会清空 D1、按最新 Schema 重建并重新创建管理员。重建成功后必须立即将它恢复为 `false`。
+数据库升级只执行仓库中明确声明并经过测试的版本迁移，例如 Schema v5 到 v6 会保留现有用户、邮箱和 API 密钥，并增加飞书机器人配置。没有已声明迁移路径的未知或旧版 Schema 会拒绝继续，不会擅自清除数据。确认不再需要现有数据后，可将 `REBUILD_DATABASE` 临时设为 `true` 并重新运行工作流；该操作会清空 D1、按最新 Schema 重建并重新创建管理员。重建成功后必须立即将它恢复为 `false`。
 
 线上健康检查会使用 `ADMIN_USERNAME` 和 `ADMIN_PASSWORD` 实际登录、读取当前用户信息并退出。通过后台修改管理员密码后，也要同步更新 GitHub Secret `ADMIN_PASSWORD`，否则下一次部署会在健康检查阶段失败。
 
@@ -188,9 +187,11 @@ curl https://mail.example.com/api/v1/status \
 | --- | --- | --- | --- |
 | `GET` | `/status` | 任意 | 验证密钥和 API 状态 |
 | `GET` | `/mailboxes` | `mailbox.read` | 查询绑定用户的邮箱地址 |
+| `GET` | `/domains` | `mail.send` | 查询绑定用户可以用于动态发件的域名 |
 | `GET` | `/messages` | `mail.read` | 分页查询收件或发件记录 |
 | `GET` | `/messages/:id` | `mail.read` | 查询单封邮件 |
-| `POST` | `/messages` | `mail.send` | 使用任意合法前缀和已授权域名发信 |
+| `GET` | `/messages/:id/attachments/:attachmentId` | `mail.read` | 下载经过归属校验的邮件附件 |
+| `POST` | `/messages` | `mail.send` | 使用已注册邮箱，或任意合法前缀与已授权域名发信 |
 
 发送示例：
 
@@ -207,7 +208,26 @@ curl https://mail.example.com/api/v1/messages \
   }'
 ```
 
+也可以使用绑定用户拥有的已注册邮箱：
+
+```json
+{
+  "from": { "mailboxId": 123, "name": "通知服务" },
+  "to": ["user@example.net"],
+  "subject": "测试邮件",
+  "text": "这是一封通过已注册邮箱发送的邮件。"
+}
+```
+
+`from.mailboxId` 与 `from.localPart + from.domain` 必须二选一。显式传入的邮箱 ID 必须属于密钥绑定用户；收件箱默认返回该用户全部活动邮箱的来信，传 `mailboxId` 后只返回指定邮箱。请求参数、收件人数、正文和附件均有严格边界校验。
+
+后台“API 控制 → 密钥测试”可以直接从当前浏览器验证密钥、读取收件箱和发送测试邮件。密钥只保存在页面内存中，不会进入平台登录会话、URL 或浏览器存储。
+
 生产环境建议为每个调用方单独创建密钥，只授予必要作用域，配置固定出口 IP 和合理限流，并根据调用审计定期轮换或吊销密钥。不要在浏览器前端代码、URL、日志或公开仓库中保存 API 密钥。
+
+## 飞书机器人推送
+
+在“系统设置 → 邮件推送 → 飞书 Webhook 机器人”中保存飞书或 Lark 官方自定义机器人 Webhook，可选填写机器人签名密钥，然后启用推送。系统会沿用邮件转发规则，在收件完成后异步发送纯文本卡片；推送失败不会影响邮件入库。Webhook 与签名密钥在查询接口中始终掩码，后台也提供基于已保存配置的测试消息。
 
 ## 目录结构
 
@@ -234,7 +254,7 @@ hpc-mail/
 - `INIT_SECRET` 必须与 `JWT_SECRET` 相互独立；仅为可信用户开放注册。
 - 若在后台修改管理员密码，请同时更新 GitHub Secret `ADMIN_PASSWORD`，但不要把密码写入仓库 Variables 或配置文件。
 - 建议为 Cloudflare 和 GitHub 账户启用双因素认证，并定期轮换部署凭据。
-- 邮件属于不受信任输入；若扩展邮件渲染逻辑，请继续保留 HTML 净化、远程资源限制与附件 MIME 校验。
+- 邮件属于不受信任输入；若扩展邮件渲染逻辑，请继续保留 HTML/CSS 净化、远程图片 `no-referrer` 策略、危险 URL 拦截与附件 MIME 校验。
 - 如发现安全问题，请不要公开披露凭据或用户数据，可通过仓库所有者的私密联系方式报告。
 
 ## 参与贡献

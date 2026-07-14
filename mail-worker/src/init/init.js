@@ -2,12 +2,15 @@ import BizError from '../error/biz-error';
 import KvConst from '../const/kv-const';
 import settingService from '../service/setting-service';
 import cryptoUtils from '../utils/crypto-utils';
-import emailUtils from '../utils/email-utils';
-import verifyUtils from '../utils/verify-utils';
-import { configuredDomains } from '../utils/sender-utils';
 import { isValidUsername, normalizeUsername } from '../utils/auth-utils';
 
-const SCHEMA_VERSION = '5';
+const SCHEMA_VERSION = '6';
+
+const FEISHU_SETTING_MIGRATION_SQL = [
+	`ALTER TABLE setting ADD COLUMN feishu_bot_status INTEGER NOT NULL DEFAULT 1`,
+	`ALTER TABLE setting ADD COLUMN feishu_webhook_url TEXT NOT NULL DEFAULT ''`,
+	`ALTER TABLE setting ADD COLUMN feishu_bot_secret TEXT NOT NULL DEFAULT ''`
+];
 
 const API_SCHEMA_SQL = [
 	`CREATE TABLE api_config (
@@ -238,6 +241,9 @@ const SCHEMA_SQL = [
 		tg_bot_token TEXT NOT NULL DEFAULT '',
 		tg_chat_id TEXT NOT NULL DEFAULT '',
 		tg_bot_status INTEGER NOT NULL DEFAULT 1,
+		feishu_bot_status INTEGER NOT NULL DEFAULT 1,
+		feishu_webhook_url TEXT NOT NULL DEFAULT '',
+		feishu_bot_secret TEXT NOT NULL DEFAULT '',
 		forward_email TEXT NOT NULL DEFAULT '',
 		forward_status INTEGER NOT NULL DEFAULT 1,
 		rule_email TEXT NOT NULL DEFAULT '',
@@ -320,23 +326,16 @@ const API_PERMISSION_ROWS = PERMISSION_ROWS.filter(row => row[0] >= 37);
 
 const DEFAULT_ROLE_PERMISSIONS = [2, 3, 5, 22, 23, 24];
 
-function normalizeInitParams(c, params = {}) {
+function normalizeInitParams(params = {}) {
 	const adminUsername = normalizeUsername(params.adminUsername);
 	const adminPassword = params.adminPassword;
-	const adminMailbox = typeof params.adminMailbox === 'string' ? params.adminMailbox.trim().toLowerCase() : '';
 
 	if (!isValidUsername(adminUsername)) throw new BizError('Invalid admin username', 400);
 	if (typeof adminPassword !== 'string' || adminPassword.length < 12 || adminPassword.length > 128) {
 		throw new BizError('Admin password must contain 12 to 128 characters', 400);
 	}
-	if (adminMailbox) {
-		const domains = configuredDomains(c.env.domain);
-		if (!verifyUtils.isEmail(adminMailbox) || !domains.includes(emailUtils.getDomain(adminMailbox).toLowerCase())) {
-			throw new BizError('Invalid admin mailbox domain', 400);
-		}
-	}
 
-	return { adminUsername, adminPassword, adminMailbox };
+	return { adminUsername, adminPassword };
 }
 
 async function schemaVersion(c) {
@@ -425,23 +424,19 @@ async function createSchema(c, initParams) {
 	if (c.env.kv) await c.env.kv.put(KvConst.INSTANCE_EPOCH, instanceEpoch);
 
 	const { hash } = await cryptoUtils.hashPassword(initParams.adminPassword);
-	const admin = await c.env.db.prepare(`
+	await c.env.db.prepare(`
 		INSERT INTO user (username, display_name, type, password_hash)
 		VALUES (?, ?, 1, ?)
-		RETURNING user_id
-	`).bind(initParams.adminUsername, initParams.adminUsername, hash).first();
-
-	if (initParams.adminMailbox) {
-		await c.env.db.prepare(`INSERT INTO account (email, name, user_id) VALUES (?, ?, ?)`)
-			.bind(initParams.adminMailbox, emailUtils.getName(initParams.adminMailbox), admin.user_id)
-			.run();
-	}
+	`).bind(initParams.adminUsername, initParams.adminUsername, hash).run();
 
 	return instanceEpoch;
 }
 
 async function migrateFromVersion4(c) {
-	const statements = API_SCHEMA_SQL.map(sql => c.env.db.prepare(sql));
+	const statements = [
+		...API_SCHEMA_SQL.map(sql => c.env.db.prepare(sql)),
+		...FEISHU_SETTING_MIGRATION_SQL.map(sql => c.env.db.prepare(sql))
+	];
 	statements.push(c.env.db.prepare(`INSERT INTO api_config (config_id, enabled) VALUES (1, 1)`));
 	for (const row of API_PERMISSION_ROWS) {
 		statements.push(
@@ -451,6 +446,13 @@ async function migrateFromVersion4(c) {
 	}
 	statements.push(c.env.db.prepare(`UPDATE schema_meta SET schema_version = ?`).bind(SCHEMA_VERSION));
 	await c.env.db.batch(statements);
+}
+
+async function migrateFromVersion5(c) {
+	await c.env.db.batch([
+		...FEISHU_SETTING_MIGRATION_SQL.map(sql => c.env.db.prepare(sql)),
+		c.env.db.prepare(`UPDATE schema_meta SET schema_version = ?`).bind(SCHEMA_VERSION)
+	]);
 }
 
 const dbInit = {
@@ -467,6 +469,11 @@ const dbInit = {
 			await settingService.refresh(c);
 			return { schemaVersion: SCHEMA_VERSION, rebuilt: false, migratedFrom: currentVersion };
 		}
+		if (currentVersion === '5' && !rebuildRequested) {
+			await migrateFromVersion5(c);
+			await settingService.refresh(c);
+			return { schemaVersion: SCHEMA_VERSION, rebuilt: false, migratedFrom: currentVersion };
+		}
 		const hasTables = await hasApplicationTables(c);
 		if (hasTables && !rebuildRequested) {
 			throw new BizError(
@@ -475,7 +482,7 @@ const dbInit = {
 			);
 		}
 
-		const initParams = normalizeInitParams(c, params);
+		const initParams = normalizeInitParams(params);
 		await clearRuntimeState(c);
 		if (hasTables) await dropSchema(c);
 		const instanceEpoch = await createSchema(c, initParams);

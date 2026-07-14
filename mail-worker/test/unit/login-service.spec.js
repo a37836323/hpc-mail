@@ -104,7 +104,7 @@ describe('username authentication service', () => {
 		expect(accountInsert).not.toHaveBeenCalled();
 	});
 
-	it('returns a default mailbox separately from the username identity', async () => {
+		it('returns a platform identity without singling out a mailbox', async () => {
 		vi.spyOn(userService, 'selectById').mockResolvedValue({
 			userId: 42,
 			username: 'Riba2534',
@@ -112,19 +112,18 @@ describe('username authentication service', () => {
 			type: 2,
 			sendCount: 0
 		});
-		vi.spyOn(accountService, 'selectDefaultByUserId').mockResolvedValue(null);
-		vi.spyOn(roleService, 'selectById').mockResolvedValue({ roleId: 2, key: 'user', name: 'user' });
+			vi.spyOn(roleService, 'selectById').mockResolvedValue({ roleId: 2, key: 'user', name: 'user' });
 		vi.spyOn(permService, 'userPermKeys').mockResolvedValue(['email:send']);
 
 		const result = await userService.loginUserInfo({ env: {} }, 42);
 
 		expect(result).toEqual(expect.objectContaining({
 			username: 'Riba2534',
-			displayName: 'Riba',
-			name: 'Riba',
-			defaultAccount: null,
-			type: 2
-		}));
+				displayName: 'Riba',
+				name: 'Riba',
+				type: 2
+			}));
+			expect(result).not.toHaveProperty('defaultAccount');
 		expect(result).not.toHaveProperty('email');
 		expect(result).not.toHaveProperty('legacyEmail');
 		expect(result).not.toHaveProperty('account');

@@ -9,6 +9,7 @@ import BizError from '../error/biz-error';
 import {t} from '../i18n/i18n'
 import verifyRecordService from './verify-record-service';
 import userContext from '../security/user-context';
+import { maskFeishuWebhookUrl, validateFeishuWebhookUrl } from '../utils/feishu-utils';
 
 const settingService = {
 
@@ -69,10 +70,17 @@ const settingService = {
 
 	async get(c, showSiteKey = false) {
 
-		const [settingRow, recordList] = await Promise.all([
+		const [cachedSetting, recordList] = await Promise.all([
 			await this.query(c),
 			verifyRecordService.selectListByIP(c)
 		]);
+		// Never redact the shared request/KV object in place. Notification credentials are
+		// still required by the inbound email handler later in the same isolate.
+		const settingRow = {
+			...cachedSetting,
+			resendTokens: { ...(cachedSetting.resendTokens || {}) },
+			domainList: Array.isArray(cachedSetting.domainList) ? [...cachedSetting.domainList] : cachedSetting.domainList
+		};
 
 
 		if (!showSiteKey) {
@@ -88,6 +96,10 @@ const settingService = {
 		settingRow.s3AccessKey = settingRow.s3AccessKey ? `${settingRow.s3AccessKey.slice(0, 12)}******` : null;
 		settingRow.s3SecretKey = settingRow.s3SecretKey ? `${settingRow.s3SecretKey.slice(0, 12)}******` : null;
 		settingRow.tgBotToken = settingRow.tgBotToken ? `${settingRow.tgBotToken.slice(0, 20)}******` : null;
+		settingRow.feishuWebhookConfigured = Boolean(settingRow.feishuWebhookUrl);
+		settingRow.feishuBotSecretConfigured = Boolean(settingRow.feishuBotSecret);
+		settingRow.feishuWebhookUrl = maskFeishuWebhookUrl(settingRow.feishuWebhookUrl);
+		settingRow.feishuBotSecret = settingRow.feishuBotSecret ? `${settingRow.feishuBotSecret.slice(0, 6)}******` : '';
 		settingRow.hasR2 = !!c.env.r2
 		settingRow.hasCfEmail = !!c.env.email
 
@@ -113,6 +125,32 @@ const settingService = {
 
 	async set(c, params) {
 		const settingData = await this.query(c);
+		params = { ...params };
+		if (Object.prototype.hasOwnProperty.call(params, 'feishuWebhookUrl')) {
+			if (typeof params.feishuWebhookUrl === 'string' && params.feishuWebhookUrl.endsWith('******')) {
+				delete params.feishuWebhookUrl;
+			} else {
+				params.feishuWebhookUrl = validateFeishuWebhookUrl(params.feishuWebhookUrl);
+			}
+		}
+		if (Object.prototype.hasOwnProperty.call(params, 'feishuBotSecret')) {
+			if (typeof params.feishuBotSecret === 'string' && params.feishuBotSecret.endsWith('******')) {
+				delete params.feishuBotSecret;
+			} else if (
+				typeof params.feishuBotSecret !== 'string' ||
+				params.feishuBotSecret.length > 256 ||
+				/[\u0000-\u001f\u007f]/.test(params.feishuBotSecret)
+			) {
+				throw new BizError(t('invalidFeishuWebhook'), 400);
+			}
+		}
+		if (Object.prototype.hasOwnProperty.call(params, 'feishuBotStatus')) {
+			params.feishuBotStatus = Number(params.feishuBotStatus);
+			if (![0, 1].includes(params.feishuBotStatus)) throw new BizError(t('invalidFeishuWebhook'), 400);
+		}
+		const finalFeishuStatus = params.feishuBotStatus ?? settingData.feishuBotStatus;
+		const finalFeishuUrl = params.feishuWebhookUrl ?? settingData.feishuWebhookUrl;
+		if (finalFeishuStatus === 0 && !finalFeishuUrl) throw new BizError(t('emptyFeishuWebhook'), 400);
 		let resendTokens = { ...settingData.resendTokens, ...params.resendTokens };
 		Object.keys(resendTokens).forEach(domain => {
 			if (!resendTokens[domain]) delete resendTokens[domain];

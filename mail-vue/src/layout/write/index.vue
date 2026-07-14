@@ -135,7 +135,7 @@ import { fileToBase64, formatBytes } from '@/utils/file-utils.js'
 import { isEmail } from '@/utils/verify-utils.js'
 import { toOssDomain } from '@/utils/convert.js'
 import { normalizeDomain, resolveAuthorizedDomains } from '@/utils/domain.js'
-import { resolveDefaultSenderAccount } from '@/utils/default-sender.js'
+import { resolveActiveSenderAccount } from '@/utils/active-sender.js'
 
 defineExpose({ open, openReply, openForward, openDraft })
 
@@ -231,11 +231,7 @@ function chooseDefaultSender(preferredAddress = '') {
     form.accountId = 0
     return false
   }
-  const account = resolveDefaultSenderAccount(
-    accountStore.currentAccount,
-    userStore.user?.defaultAccount,
-    preferredAddress,
-  )
+  const account = resolveActiveSenderAccount(accountStore.currentAccount, preferredAddress)
   if (account && setSenderFromAddress(account.email, account.name, account.accountId)) return true
   form.localPart = ''
   form.domain = availableDomains.value[0] || ''

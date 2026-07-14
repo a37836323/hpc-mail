@@ -203,10 +203,9 @@ async function saveToken(token) {
   settingStore.settings = setting
   settingStore.domainList = setting.domainList || []
   userStore.user = user
-  const account = user.defaultAccount || {}
-  accountStore.currentAccountId = account.accountId || 0
-  accountStore.currentAccount = account
-  accountStore.hasAccounts = Boolean(account.accountId)
+  accountStore.currentAccountId = 0
+  accountStore.currentAccount = {}
+  accountStore.hasAccounts = false
   permsToRouter(user.permKeys || []).forEach(routeData => { if (!router.hasRoute(routeData.name)) router.addRoute('layout', routeData) })
   document.title = setting.title
   await router.replace({ name: 'layout' })

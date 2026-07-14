@@ -28,6 +28,9 @@ import { assertNoHeaderInjection, buildDynamicSender } from '../utils/sender-uti
 
 const MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024;
 const MAX_TOTAL_ATTACHMENT_SIZE = 25 * 1024 * 1024;
+const MAX_RECIPIENTS = 100;
+const MAX_MESSAGE_BODY_SIZE = 5 * 1024 * 1024;
+const encoder = new TextEncoder();
 
 const emailService = {
 	async resolveRecipient(c, accountRow, noRecipient) {
@@ -203,8 +206,17 @@ const emailService = {
 		if (!Array.isArray(receiveEmail) || receiveEmail.length === 0) {
 			throw new BizError(t('notEmail'));
 		}
+		if (receiveEmail.length > MAX_RECIPIENTS) {
+			throw new BizError(t('recipientLimit'));
+		}
 		if (!Array.isArray(attachments)) {
 			throw new BizError(t('attLimit'));
+		}
+		if (typeof text !== 'string' || typeof content !== 'string') {
+			throw new BizError(t('invalidMessageBody'));
+		}
+		if (encoder.encode(text).byteLength > MAX_MESSAGE_BODY_SIZE || encoder.encode(content).byteLength > MAX_MESSAGE_BODY_SIZE) {
+			throw new BizError(t('messageBodyLimit'));
 		}
 		receiveEmail.forEach(item => {
 			assertNoHeaderInjection(item);
@@ -214,6 +226,7 @@ const emailService = {
 		});
 		attachments.forEach(item => assertNoHeaderInjection(item?.filename));
 
+		this.validateAttachments([], attachments);
 		let { imageDataList, html } = await attService.toImageUrlHtml(c, content);
 		this.validateAttachments(imageDataList, attachments);
 

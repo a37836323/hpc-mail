@@ -164,15 +164,6 @@ const accountService = {
 			.get();
 	},
 
-	async selectDefaultByUserId(c, userId) {
-		return orm(c).select().from(account).where(
-			and(eq(account.userId, userId), eq(account.isDel, isDel.NORMAL))
-		)
-			.orderBy(desc(account.sort), asc(account.accountId))
-			.limit(1)
-			.get();
-	},
-
 	async insert(c, params) {
 		await orm(c).insert(account).values({ ...params }).returning();
 	},

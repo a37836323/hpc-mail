@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { resolveDefaultSenderAccount } from '../src/utils/default-sender.js'
+import { resolveActiveSenderAccount } from '../src/utils/active-sender.js'
 import { resolveDisplayName, resolveUserDatabaseName, resolveUsername } from '../src/utils/user-identity.js'
 import { isValidUsername } from '../src/utils/username.js'
 
@@ -32,19 +32,16 @@ describe('modern user identity', () => {
   })
 })
 
-describe('default sender account', () => {
-  it('uses only the active mailbox or the backend default mailbox', () => {
+describe('active sender account', () => {
+  it('uses only the mailbox selected in the current workspace', () => {
     const current = { accountId: 2, email: 'current@example.com' }
-    const fallback = { accountId: 1, email: 'default@example.com' }
-    expect(resolveDefaultSenderAccount(current, fallback)).toBe(current)
-    expect(resolveDefaultSenderAccount({}, fallback)).toBe(fallback)
-    expect(resolveDefaultSenderAccount({}, {})).toBeNull()
+    expect(resolveActiveSenderAccount(current)).toBe(current)
+    expect(resolveActiveSenderAccount({})).toBeNull()
   })
 
-  it('honors a reply address only when it is one of those mailbox accounts', () => {
+  it('honors a reply address only when it matches the active mailbox', () => {
     const current = { accountId: 2, email: 'current@example.com' }
-    const fallback = { accountId: 1, email: 'default@example.com' }
-    expect(resolveDefaultSenderAccount(current, fallback, 'DEFAULT@example.com')).toBe(fallback)
-    expect(resolveDefaultSenderAccount(current, fallback, 'legacy@example.com')).toBe(current)
+    expect(resolveActiveSenderAccount(current, 'CURRENT@example.com')).toBe(current)
+    expect(resolveActiveSenderAccount(current, 'other@example.com')).toBe(current)
   })
 })

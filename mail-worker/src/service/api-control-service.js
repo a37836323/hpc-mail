@@ -80,7 +80,9 @@ function normalizeExpiry(value) {
 }
 
 function clientIp(c) {
-	const value = c.req.header('CF-Connecting-IP') || c.req.header('X-Forwarded-For') || 'Unknown';
+	// Public API is deployed behind Cloudflare. X-Forwarded-For is caller-controlled
+	// on direct/local deployments and must not be used as an IP allow-list boundary.
+	const value = c.req.header('CF-Connecting-IP') || 'Unknown';
 	const first = value.split(',')[0].trim().toLowerCase();
 	return normalizeIpAddress(first) || first;
 }

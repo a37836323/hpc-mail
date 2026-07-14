@@ -13,14 +13,14 @@
               <div class="setting-item">
                 <div><span>{{ $t('websiteReg') }}</span></div>
                 <div>
-                  <el-switch @change="change" :before-change="beforeChange" :active-value="0" :inactive-value="1"
+                  <el-switch :aria-label="$t('websiteReg')" @change="change" :before-change="beforeChange" :active-value="0" :inactive-value="1"
                              v-model="setting.register"/>
                 </div>
               </div>
               <div class="setting-item">
                 <div><span>{{ $t('loginDomain') }}</span></div>
                 <div>
-                  <el-switch @change="change" :before-change="beforeChange" :active-value="1" :inactive-value="0"
+                  <el-switch :aria-label="$t('loginDomain')" @change="change" :before-change="beforeChange" :active-value="1" :inactive-value="0"
                              v-model="setting.loginDomain"/>
                 </div>
               </div>
@@ -28,6 +28,7 @@
                 <div><span>{{ $t('regKey') }}</span></div>
                 <div>
                   <el-select
+                      :aria-label="$t('regKey')"
                       @change="change"
                       :style="`width: ${ locale === 'en' ?  100 : 80 }px;`"
                       v-model="setting.regKey"
@@ -45,7 +46,7 @@
               <div class="setting-item">
                 <div><span>{{ $t('addAccount') }}</span></div>
                 <div>
-                  <el-switch @change="change" :before-change="beforeChange" :active-value="0" :inactive-value="1"
+                  <el-switch :aria-label="$t('addAccount')" @change="change" :before-change="beforeChange" :active-value="0" :inactive-value="1"
                              v-model="setting.addEmail"/>
                 </div>
               </div>
@@ -57,7 +58,7 @@
                   </el-tooltip>
                 </div>
                 <div>
-                  <el-switch @change="change" :before-change="beforeChange" :active-value="0" :inactive-value="1"
+                  <el-switch :aria-label="$t('multipleEmail')" @change="change" :before-change="beforeChange" :active-value="0" :inactive-value="1"
                              v-model="setting.manyEmail"/>
                 </div>
               </div>
@@ -66,7 +67,7 @@
                   <span>{{ $t('emailPrefix') }}</span>
                 </div>
                 <div class="forward">
-                  <el-button class="opt-button" size="small" type="primary" @click="openEmailPrefix">
+                  <el-button class="opt-button" size="small" type="primary" :aria-label="$t('emailPrefix')" @click="openEmailPrefix">
                     <Icon icon="fluent:settings-48-regular" width="18" height="18"/>
                   </el-button>
                 </div>
@@ -82,7 +83,7 @@
                 <div class="title-item"><span>{{ $t('websiteTitle') }}</span></div>
                 <div class="email-title">
                   <span>{{ setting.title }}</span>
-                  <el-button class="opt-button" size="small" type="primary" @click="editTitleShow = true">
+                  <el-button class="opt-button" size="small" type="primary" :aria-label="$t('websiteTitle')" @click="editTitleShow = true">
                     <Icon icon="lsicon:edit-outline" width="16" height="16"/>
                   </el-button>
                 </div>
@@ -90,7 +91,7 @@
               <div class="setting-item">
                 <div class="title-item"><span>{{ $t('loginBoxOpacity') }}</span></div>
                 <div>
-                  <el-input-number size="small" v-model="loginOpacity" @change="opacityChange" :precision="2"
+                  <el-input-number size="small" v-model="loginOpacity" :aria-label="$t('loginBoxOpacity')" @change="opacityChange" :precision="2"
                                    :step="0.01" :max="1" :min="0"/>
                 </div>
               </div>
@@ -111,10 +112,10 @@
                     </template>
                   </el-image>
                   <div class="background-btn">
-                    <el-button class="opt-button" size="small" type="primary" @click="openSetBackground">
+                    <el-button class="opt-button" size="small" type="primary" :aria-label="$t('loginBackground')" @click="openSetBackground">
                       <Icon icon="lsicon:edit-outline" width="16" height="16"/>
                     </el-button>
-                    <el-button class="opt-button" size="small" type="primary" @click="delBackground">
+                    <el-button class="opt-button" size="small" type="primary" :aria-label="$t('delete')" @click="delBackground">
                       <Icon icon="material-symbols:delete-outline-rounded" width="16" height="16"/>
                     </el-button>
                   </div>
@@ -130,7 +131,7 @@
               <div class="setting-item">
                 <div><span>{{ $t('receiveEmail') }}</span></div>
                 <div>
-                  <el-switch @change="change" :before-change="beforeChange" :active-value="0" :inactive-value="1"
+                  <el-switch :aria-label="$t('receiveEmail')" @change="change" :before-change="beforeChange" :active-value="0" :inactive-value="1"
                              v-model="setting.receive"/>
                 </div>
               </div>
@@ -143,6 +144,7 @@
                 </div>
                 <div>
                   <el-select
+                      :aria-label="$t('autoRefresh')"
                       @change="change"
                       :style="`width: ${ locale === 'en' ? 100 : 80 }px;`"
                       v-model="setting.autoRefresh"
@@ -160,7 +162,7 @@
               <div class="setting-item">
                 <div><span>{{ $t('sendEmail') }}</span></div>
                 <div>
-                  <el-switch @change="change" :before-change="beforeChange" :active-value="0" :inactive-value="1"
+                  <el-switch :aria-label="$t('sendEmail')" @change="change" :before-change="beforeChange" :active-value="0" :inactive-value="1"
                              v-model="setting.send"/>
                 </div>
               </div>
@@ -172,7 +174,7 @@
                   </el-tooltip>
                 </div>
                 <div>
-                  <el-switch @change="change" :before-change="beforeChange" :active-value="0" :inactive-value="1"
+                  <el-switch :aria-label="$t('noRecipient')" @change="change" :before-change="beforeChange" :active-value="0" :inactive-value="1"
                              v-model="setting.noRecipient"/>
                 </div>
               </div>
@@ -182,11 +184,11 @@
                   <span>{{ $t('enabled') }}</span>
                 </div>
                 <div v-else>
-                  <el-button class="opt-button" style="margin-top: 0" @click="openResendList" size="small"
+                  <el-button class="opt-button" style="margin-top: 0" :aria-label="$t('resendTokenList')" @click="openResendList" size="small"
                              type="primary">
                     <Icon icon="ic:round-list" width="18" height="18"/>
                   </el-button>
-                  <el-button class="opt-button" style="margin-top: 0" @click="openResendForm" size="small"
+                  <el-button class="opt-button" style="margin-top: 0" :aria-label="$t('add')" @click="openResendForm" size="small"
                              type="primary">
                     <Icon icon="material-symbols:add-rounded" width="16" height="16"/>
                   </el-button>
@@ -195,7 +197,7 @@
               <div class="setting-item">
                 <div><span>{{ $t('blackList') }}</span></div>
                 <div>
-                  <el-button class="opt-button" style="margin-top: 0" @click="openBlackListForm" size="small"
+                  <el-button class="opt-button" style="margin-top: 0" :aria-label="$t('blackList')" @click="openBlackListForm" size="small"
                              type="primary">
                     <Icon icon="fluent:settings-48-regular" width="16" height="16"/>
                   </el-button>
@@ -217,7 +219,7 @@
                 </div>
                 <div class="r2domain">
                   <span>{{ setting.r2Domain || '' }}</span>
-                  <el-button class="opt-button" size="small" type="primary" @click="r2DomainShow = true">
+                  <el-button class="opt-button" size="small" type="primary" :aria-label="$t('osDomain')" @click="r2DomainShow = true">
                     <Icon icon="lsicon:edit-outline" width="16" height="16"/>
                   </el-button>
                 </div>
@@ -227,7 +229,7 @@
                   <span>{{ $t('s3Configuration') }}</span>
                 </div>
                 <div class="r2domain">
-                  <el-button class="opt-button" size="small" type="primary" @click="addS3Show = true">
+                  <el-button class="opt-button" size="small" type="primary" :aria-label="$t('s3Configuration')" @click="addS3Show = true">
                     <Icon icon="fluent:settings-48-regular" width="16" height="16"/>
                   </el-button>
                 </div>
@@ -252,7 +254,16 @@
                 <div><span>{{ $t('tgBot') }}</span></div>
                 <div class="forward">
                   <span>{{ setting.tgBotStatus === 0 ? $t('enabled') : $t('disabled') }}</span>
-                  <el-button class="opt-button" size="small" type="primary" @click="openTgSetting">
+                  <el-button class="opt-button" size="small" type="primary" :aria-label="$t('tgBot')" @click="openTgSetting">
+                    <Icon icon="fluent:settings-48-regular" width="18" height="18"/>
+                  </el-button>
+                </div>
+              </div>
+              <div class="setting-item">
+                <div><span>{{ $t('feishuBot') }}</span></div>
+                <div class="forward">
+                  <span>{{ setting.feishuBotStatus === 0 ? $t('enabled') : $t('disabled') }}</span>
+                  <el-button class="opt-button" size="small" type="primary" :aria-label="$t('configureFeishuBot')" @click="openFeishuSetting">
                     <Icon icon="fluent:settings-48-regular" width="18" height="18"/>
                   </el-button>
                 </div>
@@ -261,7 +272,7 @@
                 <div><span>{{ $t('otherEmail') }}</span></div>
                 <div class="forward">
                   <span>{{ setting.forwardStatus === 0 ? $t('enabled') : $t('disabled') }}</span>
-                  <el-button class="opt-button" size="small" type="primary" @click="openThirdEmailSetting">
+                  <el-button class="opt-button" size="small" type="primary" :aria-label="$t('otherEmail')" @click="openThirdEmailSetting">
                     <Icon icon="fluent:settings-48-regular" width="18" height="18"/>
                   </el-button>
                 </div>
@@ -270,7 +281,7 @@
                 <div><span>{{ $t('forwardingRules') }}</span></div>
                 <div class="forward">
                   <span>{{ setting.ruleType === 0 ? $t('forwardAll') : $t('rules') }}</span>
-                  <el-button class="opt-button" size="small" type="primary" @click="openForwardRules">
+                  <el-button class="opt-button" size="small" type="primary" :aria-label="$t('forwardingRules')" @click="openForwardRules">
                     <Icon icon="fluent:settings-48-regular" width="18" height="18"/>
                   </el-button>
                 </div>
@@ -285,10 +296,11 @@
               <div class="setting-item">
                 <div><span>{{ $t('signUpVerification') }}</span></div>
                 <div>
-                  <el-button class="opt-button" size="small" type="primary" @click="openRegVerifyCount">
+                  <el-button class="opt-button" size="small" type="primary" :aria-label="$t('signUpVerification')" @click="openRegVerifyCount">
                     <Icon icon="fluent:settings-48-regular" width="18" height="18"/>
                   </el-button>
                   <el-select
+                      :aria-label="$t('signUpVerification')"
                       @change="change"
                       :style="`width: ${ locale === 'en' ? 100 : 80 }px;`"
                       v-model="setting.registerVerify"
@@ -304,10 +316,11 @@
               <div class="setting-item">
                 <div><span>{{ $t('addEmailVerification') }}</span></div>
                 <div>
-                  <el-button class="opt-button" size="small" type="primary" @click="openAddVerifyCount">
+                  <el-button class="opt-button" size="small" type="primary" :aria-label="$t('addEmailVerification')" @click="openAddVerifyCount">
                     <Icon icon="fluent:settings-48-regular" width="18" height="18"/>
                   </el-button>
                   <el-select
+                      :aria-label="$t('addEmailVerification')"
                       @change="change"
                       :style="`width: ${ locale === 'en' ? 100 : 80 }px;`"
                       v-model="setting.addEmailVerify"
@@ -324,7 +337,7 @@
                 <div><span>Site Key</span></div>
                 <div class="bot-verify">
                   <span>{{ setting.siteKey }}</span>
-                  <el-button class="opt-button" size="small" type="primary" @click="turnstileShow = true">
+                  <el-button class="opt-button" size="small" type="primary" aria-label="Site Key" @click="turnstileShow = true">
                     <Icon icon="lsicon:edit-outline" width="16" height="16"/>
                   </el-button>
                 </div>
@@ -333,7 +346,7 @@
                 <div><span>Secret Key</span></div>
                 <div class="bot-verify">
                   <span> {{ setting.secretKey }} </span>
-                  <el-button class="opt-button" size="small" type="primary" @click="turnstileShow = true">
+                  <el-button class="opt-button" size="small" type="primary" aria-label="Secret Key" @click="turnstileShow = true">
                     <Icon icon="lsicon:edit-outline" width="16" height="16"/>
                   </el-button>
                 </div>
@@ -348,7 +361,7 @@
                 <div><span>{{ $t('noticePopup') }}</span></div>
                 <div class="forward">
                   <span>{{ setting.notice === 0 ? $t('enabled') : $t('disabled') }}</span>
-                  <el-button class="opt-button" size="small" type="primary" @click="openNoticePopupSetting">
+                  <el-button class="opt-button" size="small" type="primary" :aria-label="$t('noticePopup')" @click="openNoticePopupSetting">
                     <Icon icon="fluent:settings-48-regular" width="18" height="18"/>
                   </el-button>
                 </div>
@@ -356,7 +369,7 @@
               <div class="setting-item">
                 <div><span>{{ $t('popUp') }}</span></div>
                 <div class="forward">
-                  <el-button class="opt-button" size="small" type="primary" @click="openNoticePopup">
+                  <el-button class="opt-button" size="small" type="primary" :aria-label="$t('popUp')" @click="openNoticePopup">
                     <Icon icon="mynaui:click-solid" width="18" height="18"/>
                   </el-button>
                 </div>
@@ -370,14 +383,14 @@
               <div class="setting-item">
                 <div><span>{{ $t('codeRecognition') }}</span></div>
                 <div>
-                  <el-switch @change="changeField('aiCode', $event)" :before-change="beforeChange" :active-value="0" :inactive-value="1"
+                  <el-switch :aria-label="$t('codeRecognition')" @change="changeField('aiCode', $event)" :before-change="beforeChange" :active-value="0" :inactive-value="1"
                              v-model="setting.aiCode"/>
                 </div>
               </div>
               <div class="setting-item">
                 <div><span>{{ $t('codeRecognitionRules') }}</span></div>
                 <div class="forward">
-                  <el-button class="opt-button" size="small" type="primary" @click="openAiCodeFilter">
+                  <el-button class="opt-button" size="small" type="primary" :aria-label="$t('codeRecognitionRules')" @click="openAiCodeFilter">
                     <Icon icon="fluent:settings-48-regular" width="18" height="18"/>
                   </el-button>
                 </div>
@@ -448,7 +461,7 @@
       </el-dialog>
       <el-dialog v-model="resendTokenFormShow" :title="$t('resendToken')" width="340" @closed="cleanResendTokenForm">
         <form>
-          <el-select style="margin-bottom: 15px" v-model="resendTokenForm.domain" placeholder="Select">
+          <el-select style="margin-bottom: 15px" v-model="resendTokenForm.domain" :aria-label="$t('domain')" placeholder="Select">
             <el-option
                 v-for="item in settingStore.domainList"
                 :key="item"
@@ -530,7 +543,7 @@
           <el-input tag-type="warning" :placeholder="$t('customDomainDesc')" v-model="customDomain" ></el-input>
           <div class="tg-msg-label">
             <span>{{t('from')}}</span>
-            <el-select  v-model="tgMsgFrom" >
+            <el-select v-model="tgMsgFrom" :aria-label="$t('from')">
               <el-option
                   v-for="item in tgMsgFromOption"
                   :key="item.value"
@@ -541,7 +554,7 @@
           </div>
           <div class="tg-msg-label">
             <span>{{t('recipient')}}</span>
-            <el-select  v-model="tgMsgTo" >
+            <el-select v-model="tgMsgTo" :aria-label="$t('recipient')">
               <el-option
                   v-for="item in tgMsgToOption"
                   :key="item.value"
@@ -552,7 +565,7 @@
           </div>
           <div class="tg-msg-label">
             <span>{{t('emailText')}}</span>
-            <el-select  v-model="tgMsgText" >
+            <el-select v-model="tgMsgText" :aria-label="$t('emailText')">
               <el-option
                   v-for="item in tgMsgTextOption"
                   :key="item.value"
@@ -564,11 +577,46 @@
         </div>
         <template #footer>
           <div class="dialog-footer">
-            <el-switch v-model="tgBotStatus" :active-value="0" :inactive-value="1" :active-text="$t('enable')"
+            <el-switch v-model="tgBotStatus" :aria-label="$t('tgBot')" :active-value="0" :inactive-value="1" :active-text="$t('enable')"
                        :inactive-text="$t('disable')"/>
             <el-button :loading="settingLoading" type="primary" @click="tgBotSave">
               {{ $t('save') }}
             </el-button>
+          </div>
+        </template>
+      </el-dialog>
+      <el-dialog
+          v-model="feishuSettingShow"
+          class="forward-dialog feishu-dialog"
+          :title="$t('feishuBot')"
+          @closed="resetFeishuForm"
+      >
+        <div class="forward-set-body feishu-form">
+          <p class="feishu-hint">{{ $t('feishuBotDesc') }}</p>
+          <label>
+            <span>{{ $t('feishuWebhookUrl') }}</span>
+            <el-input v-model.trim="feishuForm.webhookUrl" autocomplete="off" :placeholder="setting.feishuWebhookConfigured ? $t('configuredKeepBlank') : 'https://open.feishu.cn/open-apis/bot/v2/hook/…'"/>
+          </label>
+          <label>
+            <span>{{ $t('feishuBotSecret') }} <small>({{ $t('optional') }})</small></span>
+            <el-input v-model="feishuForm.secret" type="password" show-password autocomplete="new-password" :placeholder="setting.feishuBotSecretConfigured ? $t('configuredKeepBlank') : $t('feishuBotSecretPlaceholder')"/>
+          </label>
+          <div class="feishu-security-note">
+            <Icon icon="lucide:shield-check" width="18" height="18"/>
+            <span>{{ $t('feishuSecurityNote') }}</span>
+          </div>
+          <div v-if="setting.feishuWebhookConfigured || setting.feishuBotSecretConfigured" class="feishu-credential-actions">
+            <el-button v-if="setting.feishuBotSecretConfigured" link type="primary" :disabled="settingLoading" @click="clearFeishuSecret">{{ $t('clearSigningSecret') }}</el-button>
+            <el-button v-if="setting.feishuWebhookConfigured" link type="danger" :disabled="settingLoading" @click="clearFeishuConfiguration">{{ $t('removeFeishuConfiguration') }}</el-button>
+          </div>
+        </div>
+        <template #footer>
+          <div class="dialog-footer feishu-actions">
+            <el-switch v-model="feishuForm.status" :aria-label="$t('feishuBotStatus')" :active-value="0" :inactive-value="1" :active-text="$t('enable')" :inactive-text="$t('disable')"/>
+            <div>
+              <el-button :loading="feishuTestLoading" :disabled="!setting.feishuWebhookConfigured" @click="sendFeishuTest">{{ $t('testWebhook') }}</el-button>
+              <el-button :loading="settingLoading" type="primary" @click="saveFeishuSetting">{{ $t('save') }}</el-button>
+            </div>
           </div>
         </template>
       </el-dialog>
@@ -590,7 +638,7 @@
         </div>
         <template #footer>
           <div class="dialog-footer">
-            <el-switch v-model="forwardStatus" :active-value="0" :inactive-value="1" :active-text="$t('enable')"
+            <el-switch v-model="forwardStatus" :aria-label="$t('otherEmail')" :active-value="0" :inactive-value="1" :active-text="$t('enable')"
                        :inactive-text="$t('disable')"/>
             <el-button :loading="settingLoading" type="primary" @click="forwardEmailSave">
               {{ $t('save') }}
@@ -654,7 +702,7 @@
         <form>
           <el-input v-model="noticeForm.noticeTitle" :placeholder="t('titleDesc')"/>
           <div class="notice-line-item">
-            <el-select v-model="noticeForm.noticeType">
+            <el-select v-model="noticeForm.noticeType" :aria-label="$t('icon')">
               <template #prefix>
                 <span style="margin-right: 10px">{{ $t('icon') }}</span>
               </template>
@@ -664,7 +712,7 @@
               <el-option key="warning" label="Warning" value="warning"/>
               <el-option key="info" label="Info" value="info"/>
             </el-select>
-            <el-select v-model="noticeForm.noticePosition">
+            <el-select v-model="noticeForm.noticePosition" :aria-label="$t('position')">
               <template #prefix>
                 <span style="margin-right: 10px">{{ $t('position') }}</span>
               </template>
@@ -709,7 +757,7 @@
         </form>
         <template #footer>
           <div class="dialog-footer">
-            <el-switch v-model="noticeForm.notice" :active-value="0" :inactive-value="1" :active-text="$t('enable')"
+            <el-switch v-model="noticeForm.notice" :aria-label="$t('noticePopup')" :active-value="0" :inactive-value="1" :active-text="$t('enable')"
                        :inactive-text="$t('disable')"/>
             <div>
               <el-button @click="previewNoticePopup">
@@ -737,7 +785,7 @@
                 <Icon class="warning" icon="fe:warning" width="18" height="18"/>
               </el-tooltip>
             </div>
-            <el-switch :before-change="beforeChange" :active-value="0" :inactive-value="1"
+            <el-switch :aria-label="$t('forcePathStyle')" :before-change="beforeChange" :active-value="0" :inactive-value="1"
                        v-model="s3.forcePathStyle"/>
           </div>
           <div class="s3-button">
@@ -805,10 +853,9 @@
 
 <script setup>
 import {computed, defineOptions, nextTick, reactive, ref} from "vue";
-import {deleteBackground, setBackground, setBlackList, settingQuery, settingSet} from "@/request/setting.js";
+import {deleteBackground, setBackground, setBlackList, settingQuery, settingSet, testFeishu} from "@/request/setting.js";
 import {useSettingStore} from "@/store/setting.js";
 import {useUiStore} from "@/store/ui.js";
-import {useUserStore} from "@/store/user.js";
 import {useAccountStore} from "@/store/account.js";
 import {Icon} from "@iconify/vue";
 import {cvtR2Url} from "@/utils/convert.js";
@@ -834,7 +881,6 @@ const settingReady = ref(false)
 const backgroundImage = ref('')
 const localUpShow = ref(false)
 const accountStore = useAccountStore();
-const userStore = useUserStore();
 const editTitleShow = ref(false)
 const resendTokenFormShow = ref(false)
 const blackFormShow = ref(false)
@@ -842,6 +888,7 @@ const aiCodeFilterShow = ref(false)
 const r2DomainShow = ref(false)
 const turnstileShow = ref(false)
 const tgSettingShow = ref(false)
+const feishuSettingShow = ref(false)
 const noticePopupShow = ref(false)
 const thirdEmailShow = ref(false)
 const forwardRulesShow = ref(false)
@@ -921,6 +968,8 @@ const tgChatId = ref([])
 const customDomain = ref('')
 const tgBotStatus = ref(0)
 const tgBotToken = ref('')
+const feishuTestLoading = ref(false)
+const feishuForm = reactive({ status: 1, webhookUrl: '', secret: '' })
 const forwardEmail = ref([])
 const forwardStatus = ref(0)
 const emailColumnWidth = ref(0)
@@ -1066,6 +1115,78 @@ function openTgSetting() {
     tgChatId.value.push(...list)
   }
   tgSettingShow.value = true
+}
+
+function resetFeishuForm() {
+  feishuForm.status = setting.value.feishuBotStatus ?? 1
+  feishuForm.webhookUrl = ''
+  feishuForm.secret = ''
+}
+
+function openFeishuSetting() {
+  resetFeishuForm()
+  feishuSettingShow.value = true
+}
+
+async function saveFeishuSetting() {
+  if (settingLoading.value) return
+  settingLoading.value = true
+  try {
+    const form = { feishuBotStatus: feishuForm.status }
+    if (feishuForm.webhookUrl) form.feishuWebhookUrl = feishuForm.webhookUrl
+    if (feishuForm.secret) form.feishuBotSecret = feishuForm.secret
+    await settingSet(form)
+    ElMessage.success(t('saveSuccessMsg'))
+    feishuSettingShow.value = false
+    getSettings()
+  } finally {
+    settingLoading.value = false
+  }
+}
+
+async function sendFeishuTest() {
+  if (feishuTestLoading.value) return
+  feishuTestLoading.value = true
+  try {
+    await testFeishu()
+    ElMessage.success(t('feishuTestSucceeded'))
+  } finally {
+    feishuTestLoading.value = false
+  }
+}
+
+async function clearFeishuSecret() {
+  if (settingLoading.value) return
+  settingLoading.value = true
+  try {
+    await settingSet({ feishuBotSecret: '' })
+    ElMessage.success(t('saveSuccessMsg'))
+    getSettings()
+  } finally {
+    settingLoading.value = false
+  }
+}
+
+async function clearFeishuConfiguration() {
+  try {
+    await ElMessageBox.confirm(t('removeFeishuConfigurationConfirm'), t('removeFeishuConfiguration'), {
+      type: 'warning',
+      confirmButtonText: t('confirm'),
+      cancelButtonText: t('cancel')
+    })
+  } catch (_) {
+    return
+  }
+  if (settingLoading.value) return
+  settingLoading.value = true
+  try {
+    await settingSet({ feishuBotStatus: 1, feishuWebhookUrl: '', feishuBotSecret: '' })
+    ElMessage.success(t('saveSuccessMsg'))
+    feishuSettingShow.value = false
+    getSettings()
+  } finally {
+    settingLoading.value = false
+  }
 }
 
 function openNoticePopupSetting() {
@@ -1474,9 +1595,7 @@ function editSetting(settingForm, refreshStatus = true) {
       type: "success",
       plain: true
     })
-    if (setting.value.manyEmail === 1) {
-      accountStore.currentAccountId = userStore.user.defaultAccount?.accountId || 0;
-    }
+    if (setting.value.manyEmail === 1) accountStore.currentAccountId = 0
     if (refreshStatus) {
       getSettings()
     }
@@ -1485,6 +1604,7 @@ function editSetting(settingForm, refreshStatus = true) {
     resendTokenFormShow.value = false
     turnstileShow.value = false
     tgSettingShow.value = false
+    feishuSettingShow.value = false
     thirdEmailShow.value = false
     forwardRulesShow.value = false
     addVerifyCountShow.value = false
@@ -1830,6 +1950,74 @@ function editSetting(settingForm, refreshStatus = true) {
       width: v-bind(tgMsgLabelWidth);
     }
   }
+}
+
+.feishu-form {
+  gap: 14px;
+
+  > * { margin-bottom: 0 !important; }
+
+  label {
+    display: grid;
+    gap: 7px;
+    color: var(--el-text-color-primary);
+    font-size: 13px;
+    font-weight: 600;
+
+    small { color: var(--el-text-color-secondary); font-weight: 400; }
+  }
+}
+
+.feishu-hint {
+  margin: 0;
+  color: var(--el-text-color-secondary);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.feishu-security-note {
+  padding: 10px 12px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  border-radius: 8px;
+  color: var(--el-color-success-dark-2);
+  background: var(--el-color-success-light-9);
+  font-size: 12px;
+  line-height: 1.5;
+
+  svg { flex: 0 0 auto; margin-top: 1px; }
+}
+
+.feishu-credential-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.feishu-actions {
+  align-items: center;
+  gap: 12px;
+
+  > div { display: flex; gap: 8px; }
+
+  @media (max-width: 480px) {
+    align-items: stretch;
+    flex-direction: column;
+    > div { display: grid; grid-template-columns: 1fr 1fr; }
+  }
+}
+
+:deep(.feishu-dialog .el-dialog__header) {
+  padding-right: 56px;
+}
+
+:deep(.feishu-dialog .el-dialog__title) {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .forward {

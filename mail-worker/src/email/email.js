@@ -11,6 +11,7 @@ import roleService from '../service/role-service';
 import telegramService from '../service/telegram-service';
 import aiService from '../service/ai-service';
 import { isAdminRole } from '../utils/auth-utils';
+import feishuService from '../service/feishu-service';
 
 export async function email(message, env, ctx) {
 
@@ -20,6 +21,8 @@ export async function email(message, env, ctx) {
 			receive,
 			tgChatId,
 			tgBotStatus,
+			feishuBotStatus,
+			feishuWebhookUrl,
 			forwardStatus,
 			forwardEmail,
 			ruleEmail,
@@ -161,6 +164,19 @@ export async function email(message, env, ctx) {
 		//转发到TG
 		if (tgBotStatus === settingConst.tgBotStatus.OPEN && tgChatId) {
 			await telegramService.sendEmailToBot({ env }, emailRow)
+		}
+
+		// 飞书转发在邮件完成入库后执行。Webhook 故障只记录日志，不影响 SMTP 接收结果。
+		if (feishuBotStatus === settingConst.feishuBotStatus.OPEN && feishuWebhookUrl) {
+			const task = feishuService.sendEmailToBot({ env }, emailRow).catch(error => {
+				console.error('异步转发飞书机器人失败:', error.message);
+				return false;
+			});
+			if (typeof ctx?.waitUntil === 'function') {
+				ctx.waitUntil(task);
+			} else {
+				await task;
+			}
 		}
 
 		//转发到其他邮箱

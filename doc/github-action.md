@@ -1,38 +1,56 @@
-## Github Action 部署
+# GitHub Actions 自动部署
 
-**配置 Github 仓库**
+仓库内置 [`.github/workflows/deploy-cloudflare.yml`](../.github/workflows/deploy-cloudflare.yml)。推送 `mail-worker/**`、`mail-vue/**` 或工作流文件到 `main` 后，GitHub Actions 会自动完成测试、依赖审计、前端构建、Wrangler Dry Run、Cloudflare 部署、Schema 初始化和线上健康检查。
 
-1. Fork 或克隆仓库 [https://github.com/eoao/cloud-mail](https://github.com/eoao/cloud-mail)
-2. 进入您的 GitHub 仓库设置
-3. 转到 Settings → Secrets and variables → Actions → New Repository secrets
-4. 添加以下 Secrets：
+## 配置 Secrets
 
-| Secret 名称             | 必需 | 用途                                                  |
-| ----------------------- | :--: | ----------------------------------------------------- |
-| `CLOUDFLARE_API_TOKEN`  |  ✅  | Cloudflare API 令牌（需要 Workers 和相关资源权限）    |
-| `CLOUDFLARE_ACCOUNT_ID` |  ✅  | Cloudflare 账户 ID                                    |
-| `D1_DATABASE_ID`        |  ✅  | 您的 D1 数据库的 ID                                     |
-| `KV_NAMESPACE_ID`       |  ✅  | 您的 KV 命名空间的 ID                                   |
-| `R2_BUCKET_NAME`        |  ✅  | 您的 R2 存储桶的名称                                    |
-| `DOMAIN`                |  ✅  | 您要用于邮件服务的域名（例如 `["xx.xx"]，多域名用,分隔`）        |
-| `ADMIN`                 |  ✅  | 您的管理员邮箱地址（例如 `admin@example.com`）      |
-| `JWT_SECRET`            |  ✅  | 用于生成和验证 JWT 的随机长字符串                     |
-| `INIT_URL`              |  ❌  | （可选）部署后用于初始化数据库的 Worker URL（格式参考下述手动初始化）           |
+打开仓库 **Settings → Secrets and variables → Actions → Secrets**，添加：
 
----
+| 名称 | 说明 |
+| --- | --- |
+| `CLOUDFLARE_API_TOKEN` | 具备 Workers、D1、KV 和 R2 部署权限的 Cloudflare API Token |
+| `JWT_SECRET` | URL 安全、至少 43 个字符的高强度随机值 |
+| `INIT_SECRET` | 保护 `/api/init` 的独立密钥，至少 32 个字符 |
+| `ADMIN_PASSWORD` | 平台管理员密码，12–128 个字符 |
 
-**获取 Cloudflare API 令牌**
+不要将任何 Secret 写入仓库文件。`JWT_SECRET` 与 `INIT_SECRET` 必须不同。
 
-1. 访问 [Cloudflare Dashboard](https://dash.cloudflare.com/profile/api-tokens)
-2. 创建新的 API 令牌
-3. 选择"编辑 Cloudflare Workers"模板，并参照下表添加相应权限
-   ![dc2e1dc8dcd217644759c46c6c705de1](https://i.miji.bid/2025/07/07/dc2e1dc8dcd217644759c46c6c705de1.png)
-4. 保存令牌并复制到 GitHub Secrets 中的 `CLOUDFLARE_API_TOKEN`
+## 配置 Variables
 
-**获取 Cloudflare 账户 ID**
-1. 账户 ID 可以在 Cloudflare 仪表盘的账户设置中找到。
-2. 复制到 GitHub Secrets 中的 `CLOUDFLARE_ACCOUNT_ID`
+在同一页面的 **Variables** 中添加：
 
-**运行工作流**
-1. 然后在Action页面手动运行工作流，后续同步上游后会自动部署到 Cloudflare Workers。如未配置 `INIT_URL`，则需要手动访问 `https://你的项目域名/api/init/你的jwt_secret` 进行数据库初始化。
-2. 自动同步上游可使用bot或者手动点击Sync Upstream按钮。
+| 名称 | 示例 | 说明 |
+| --- | --- | --- |
+| `NAME` | `hpc-mail` | Worker 名称 |
+| `CUSTOM_DOMAIN` | `mail.example.com` | Web 服务自定义域名 |
+| `DOMAIN` | `["example.com","example.net"]` | 可收发邮件的域名，必须是 JSON 字符串数组 |
+| `ADMIN_USERNAME` | `admin` | 平台管理员用户名，不是邮箱地址 |
+| `CLOUDFLARE_ACCOUNT_ID` | `xxxxxxxx` | Cloudflare 账户 ID |
+| `D1_DATABASE_ID` | `xxxxxxxx` | D1 数据库 ID |
+| `KV_NAMESPACE_ID` | `xxxxxxxx` | KV 命名空间 ID |
+| `R2_BUCKET_NAME` | `hpc-mail-r2` | R2 存储桶名称 |
+
+可选 Variables：
+
+| 名称 | 默认值 | 说明 |
+| --- | --- | --- |
+| `CF_EMAIL` | `false` | 是否开启 Cloudflare Send Email Binding |
+| `AI_MODEL` | `@cf/meta/llama-3.1-8b-instruct` | Workers AI 模型 |
+| `ANALYSIS_CACHE` | `false` | 是否缓存分析结果 |
+| `PROJECT_LINK` | `false` | 是否展示项目链接 |
+| `REBUILD_DATABASE` | `false` | 破坏性整库重建开关 |
+
+## 首次部署
+
+1. 在 Cloudflare 创建 D1、KV 和 R2 资源，并完成上述配置。
+2. 进入仓库 **Actions → Deploy HPC Mail to Cloudflare → Run workflow**。
+3. 工作流会调用受 `INIT_SECRET` 保护的初始化接口，创建平台管理员和最新 Schema，不会自动创建邮箱。
+4. 在 Cloudflare Email Routing 中将相关域名的 Catch-all 指向已部署的 Worker。
+
+平台账户与邮箱地址完全分离。部署后请使用 `ADMIN_USERNAME` 和 `ADMIN_PASSWORD` 登录，再在邮箱管理中添加需要的邮箱。
+
+## Schema 重建
+
+正常升级会使用仓库中明确声明的版本迁移。只有在确认现有数据全部不再需要时，才将 `REBUILD_DATABASE` 临时设为 `true` 并重新运行工作流。成功后立即恢复为 `false`，避免下次部署再次清空数据。
+
+更完整的部署、API 和安全说明见项目根目录 [README](../README.md)。

@@ -10,22 +10,18 @@
         <div>{{$t('displayName')}}</div>
         <div>
           <span v-if="setNameShow" class="edit-name-input">
-            <el-input v-model="accountName"  ></el-input>
-            <button type="button" class="edit-name" @click="setName">
+            <el-input v-model="displayNameInput" :aria-label="$t('displayName')"></el-input>
+            <button type="button" class="edit-name" :disabled="setNameLoading" @click="setName">
              {{$t('save')}}
             </button>
           </span>
           <span v-else class="user-name">
             <span >{{ userStore.user.displayName || '—' }}</span>
-            <button v-if="userStore.user.defaultAccount?.accountId" type="button" class="edit-name" @click="showSetName">
+            <button type="button" class="edit-name" @click="showSetName">
              {{$t('change')}}
             </button>
           </span>
         </div>
-      </div>
-      <div class="item">
-        <div>{{$t('emailAccount')}}</div>
-        <div>{{ userStore.user.defaultAccount?.email || '—' }}</div>
       </div>
       <div class="item">
         <div>{{$t('password')}}</div>
@@ -39,6 +35,7 @@
       <el-select
           :model-value="langSelect"
           class="language-select"
+          :aria-label="$t('language')"
           placeholder="Select"
           @change="changeLang"
       >
@@ -66,21 +63,19 @@
 </template>
 <script setup>
 import {reactive, ref, defineOptions} from 'vue'
-import {resetPassword, userDelete} from "@/request/my.js";
+import {resetPassword, setDisplayName, userDelete} from "@/request/my.js";
 import {useUserStore} from "@/store/user.js";
 import router from "@/router/index.js";
-import {accountSetName} from "@/request/account.js";
-import {useAccountStore} from "@/store/account.js";
 import {useI18n} from "vue-i18n";
 import {useSettingStore} from "@/store/setting.js";
 
 const { t } = useI18n()
-const accountStore = useAccountStore()
 const settingStore = useSettingStore()
 const userStore = useUserStore();
 const setPwdLoading = ref(false)
+const setNameLoading = ref(false)
 const setNameShow = ref(false)
-const accountName = ref(null)
+const displayNameInput = ref('')
 const langSelect = ref(settingStore.lang)
 
 defineOptions({
@@ -88,13 +83,14 @@ defineOptions({
 })
 
 function showSetName() {
-  accountName.value = userStore.user.displayName || ''
+  displayNameInput.value = userStore.user.displayName || ''
   setNameShow.value = true
 }
 
 function setName() {
+  const name = displayNameInput.value.trim()
 
-  if (!accountName.value) {
+  if (!name) {
     ElMessage({
       message: t('emptyUserNameMsg'),
       type: 'error',
@@ -103,29 +99,24 @@ function setName() {
     return;
   }
 
-  setNameShow.value = false
-  let name = accountName.value
-
   if (name === userStore.user.displayName) {
+    setNameShow.value = false
     return
   }
 
-  const previousName = userStore.user.displayName
-  userStore.user.displayName = accountName.value
-
-  const accountId = userStore.user.defaultAccount?.accountId
-  if (!accountId) return
-  accountSetName(accountId,name).then(() => {
+  setNameLoading.value = true
+  setDisplayName(name).then(() => {
+    userStore.user.displayName = name
+    setNameShow.value = false
     ElMessage({
       message: t('saveSuccessMsg'),
       type: 'success',
       plain: true,
     })
-
-    accountStore.changeUserAccountName = name
-
   }).catch(() => {
-    userStore.user.displayName = previousName
+    // Keep the editor open and preserve the entered name so it can be retried.
+  }).finally(() => {
+    setNameLoading.value = false
   })
 }
 
@@ -273,6 +264,11 @@ function submitPwd() {
         color: var(--primary);
         font-weight: 650;
         cursor: pointer;
+
+        &:disabled {
+          opacity: .55;
+          cursor: not-allowed;
+        }
       }
 
       div:first-child {

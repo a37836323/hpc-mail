@@ -50,6 +50,9 @@
           <button type="button" role="tab" :aria-selected="activeTab === 'guide'" :class="{ active: activeTab === 'guide' }" @click="activeTab = 'guide'">
             <BookOpen :size="17" />{{ $t('quickStart') }}
           </button>
+          <button type="button" role="tab" :aria-selected="activeTab === 'tester'" :class="{ active: activeTab === 'tester' }" @click="activeTab = 'tester'">
+            <FlaskConical :size="17" />{{ $t('apiKeyTester') }}
+          </button>
         </div>
         <div v-if="activeTab === 'keys'" class="filters">
           <el-input v-model="keyParams.search" clearable :placeholder="$t('searchApiKeys')" @keyup.enter="loadKeys(true)" />
@@ -132,7 +135,7 @@
         />
       </div>
 
-      <div v-else class="guide-panel" role="tabpanel">
+      <div v-else-if="activeTab === 'guide'" class="guide-panel" role="tabpanel">
         <div class="guide-copy">
           <span class="guide-icon"><TerminalSquare :size="22" /></span>
           <div><h3>{{ $t('apiQuickStartTitle') }}</h3><p>{{ $t('apiQuickStartDescription') }}</p></div>
@@ -149,10 +152,12 @@
         <div class="endpoint-list">
           <div><code>GET</code><strong>/status</strong><span>{{ $t('endpointStatusDescription') }}</span></div>
           <div><code>GET</code><strong>/mailboxes</strong><span>{{ $t('endpointMailboxesDescription') }}</span></div>
+          <div><code>GET</code><strong>/domains</strong><span>{{ $t('endpointDomainsDescription') }}</span></div>
           <div><code>GET</code><strong>/messages</strong><span>{{ $t('endpointMessagesDescription') }}</span></div>
           <div><code>POST</code><strong>/messages</strong><span>{{ $t('endpointSendDescription') }}</span></div>
         </div>
       </div>
+      <ApiKeyTester v-else ref="testerRef" />
     </div>
 
     <el-dialog v-model="createVisible" class="api-key-dialog" :title="$t('createApiKey')" width="560px" destroy-on-close>
@@ -173,7 +178,10 @@
       <div class="secret-result">
         <div class="secret-warning"><TriangleAlert :size="20" /><div><strong>{{ $t('copyApiKeyNow') }}</strong><p>{{ $t('apiKeyShownOnce') }}</p></div></div>
         <div class="secret-value"><code>{{ createdSecret }}</code><IconButton :label="$t('copyApiKey')" variant="bordered" @click="copyText(createdSecret)"><Copy :size="18" /></IconButton></div>
-        <AppButton class="copy-secret-button" @click="copyText(createdSecret)"><template #icon><Copy :size="18" /></template>{{ $t('copyApiKey') }}</AppButton>
+        <div class="secret-actions">
+          <AppButton variant="secondary" @click="copyText(createdSecret)"><template #icon><Copy :size="18" /></template>{{ $t('copyApiKey') }}</AppButton>
+          <AppButton @click="testCreatedKey"><template #icon><FlaskConical :size="18" /></template>{{ $t('testThisApiKey') }}</AppButton>
+        </div>
       </div>
     </el-dialog>
   </section>
@@ -181,10 +189,11 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
-import { Activity, BookOpen, Copy, KeyRound, Plus, Power, RefreshCw, ScrollText, TerminalSquare, TriangleAlert } from '@lucide/vue'
+import { Activity, BookOpen, Copy, FlaskConical, KeyRound, Plus, Power, RefreshCw, ScrollText, TerminalSquare, TriangleAlert } from '@lucide/vue'
 import { useI18n } from 'vue-i18n'
 import AppButton from '@/components/ui/AppButton.vue'
 import IconButton from '@/components/ui/IconButton.vue'
+import ApiKeyTester from './ApiKeyTester.vue'
 import { hasPerm } from '@/perm/perm.js'
 import { tzDayjs } from '@/utils/day.js'
 import { apiAuditList, apiConfig, apiKeyCreate, apiKeyList, apiKeyRevoke, apiKeySetStatus, apiSetConfig, apiUsers } from '@/request/api-control.js'
@@ -200,6 +209,7 @@ const createLoading = ref(false)
 const createVisible = ref(false)
 const secretVisible = ref(false)
 const createdSecret = ref('')
+const testerRef = ref(null)
 const keys = ref([])
 const users = ref([])
 const auditRows = ref([])
@@ -281,6 +291,13 @@ async function createKey() {
   } finally {
     createLoading.value = false
   }
+}
+
+function testCreatedKey() {
+  const secret = createdSecret.value
+  secretVisible.value = false
+  activeTab.value = 'tester'
+  requestAnimationFrame(() => testerRef.value?.useKey(secret))
 }
 
 async function setKeyStatus(item, enabled) {
@@ -438,7 +455,7 @@ async function copyText(value) {
 .secret-warning p { margin-block-start: 3px; font-size: .75rem; }
 .secret-value { min-width: 0; padding: 10px 8px 10px 12px; display: flex; align-items: center; gap: 8px; border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--surface-subtle); }
 .secret-value code { min-width: 0; overflow-wrap: anywhere; font-size: .75rem; }
-.copy-secret-button { width: 100%; }
+.secret-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 
 @media (max-width: 1000px) {
   .overview-grid { grid-template-columns: 1fr 1fr; }
@@ -456,7 +473,7 @@ async function copyText(value) {
   .metric-card strong { font-size: 1.4rem; }
   .content-card { min-height: 560px; }
   .content-card__toolbar { align-items: stretch; flex-direction: column; }
-  .tabs { width: 100%; display: grid; grid-template-columns: repeat(3, 1fr); }
+  .tabs { width: 100%; display: grid; grid-template-columns: repeat(4, 1fr); }
   .tabs button { min-height: 44px; padding-inline: 6px; justify-content: center; }
   .filters { overflow-x: auto; }
   .filters :deep(.el-input) { width: 170px; flex: 0 0 170px; }
@@ -469,6 +486,7 @@ async function copyText(value) {
   .guide-steps { grid-template-columns: 1fr; }
   .endpoint-list > div { grid-template-columns: 50px minmax(90px, auto) minmax(0, 1fr); }
   .form-grid { grid-template-columns: 1fr; }
+  .secret-actions { grid-template-columns: 1fr; }
   .create-form :deep(.el-input__wrapper), .create-form :deep(.el-select__wrapper), .create-form :deep(.el-input-number) { min-height: 44px; }
   :global(.api-key-dialog.el-dialog) { max-height: calc(100dvh - 24px); margin: 12px auto !important; display: grid; grid-template-rows: auto minmax(0, 1fr); overflow: hidden; }
   :global(.api-key-dialog .el-dialog__body) { min-height: 0; overflow-y: auto; }

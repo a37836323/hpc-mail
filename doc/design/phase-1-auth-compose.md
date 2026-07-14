@@ -79,12 +79,11 @@ Content-Type: application/json
 }
 ```
 
-兼容窗口内：
+当前登录模型：
 
-- `/api/login` 同时接受旧字段 `email`。
-- `username` 含 `@` 时可以尝试按旧邮箱查询。
-- 前端只发送 `username`；兼容逻辑只服务旧客户端和迁移回滚。
-- 注册接口不再自动向 `account` 表插入 `username@默认域名`。
+- `/api/login` 只接受 `username` 和 `password`。
+- 邮箱地址不能作为登录标识，也不存在旧邮箱登录兼容路径。
+- 注册接口只创建平台账户，不向 `account` 表自动插入邮箱。
 
 ### 3.3 权限与注册
 
