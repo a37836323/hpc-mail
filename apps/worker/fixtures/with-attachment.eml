@@ -1,0 +1,21 @@
+From: "Report Bot" <bot@reports.example.org>
+To: <REPLACED_BY_QUERY@hpc.email>
+Subject: Monthly report attached
+Date: Tue, 15 Jul 2026 10:00:00 +0000
+Message-ID: <fixture-att-003@reports.example.org>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="b2_fixture"
+
+--b2_fixture
+Content-Type: text/plain; charset=utf-8
+
+The monthly report is attached. Access code: ZX8K2P
+
+--b2_fixture
+Content-Type: text/csv; name="report.csv"
+Content-Disposition: attachment; filename="report.csv"
+Content-Transfer-Encoding: base64
+
+ZGF0ZSx2YWx1ZQoyMDI2LTA3LTAxLDQyCjIwMjYtMDctMDIsNTEK
+
+--b2_fixture--

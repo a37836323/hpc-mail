@@ -1,0 +1,166 @@
+name: Deploy HPC Mail
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - apps/**
+      - packages/**
+      - .github/workflows/deploy.yml
+      - scripts/**
+      - package.json
+      - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+  workflow_dispatch:
+    inputs:
+      reset_database:
+        type: boolean
+        default: false
+        description: '危险：清空线上 D1 全部表与 KV 后从零迁移（仅首次上线）'
+
+concurrency:
+  group: hpc-mail-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  KV_NAMESPACE_ID: 740790d8a32f4286833f17940358f1bb
+  D1_NAME: hpc-cloud-mail-db
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 校验部署参数
+        env:
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+          ADMIN_USERNAME: ${{ vars.ADMIN_USERNAME }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          [ -n "$CLOUDFLARE_API_TOKEN" ] || { echo '::error::缺 CLOUDFLARE_API_TOKEN'; exit 1; }
+          echo "$JWT_SECRET" | grep -qE '^[A-Za-z0-9_-]{43,}$' || { echo '::error::JWT_SECRET 需为 43+ 位 URL-safe 字符串'; exit 1; }
+          plen=${#ADMIN_PASSWORD}
+          [ "$plen" -ge 12 ] && [ "$plen" -le 128 ] || { echo '::error::ADMIN_PASSWORD 需 12-128 位'; exit 1; }
+          echo "$ADMIN_USERNAME" | grep -qE '^[a-z0-9][a-z0-9_-]{2,31}$' || { echo '::error::ADMIN_USERNAME 非法'; exit 1; }
+          echo "::add-mask::$JWT_SECRET"
+          echo "::add-mask::$ADMIN_PASSWORD"
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: shared 测试与类型检查
+        run: |
+          pnpm --filter @hpc-mail/shared test
+          pnpm --filter @hpc-mail/shared typecheck
+
+      - name: web 测试、类型检查与构建
+        run: |
+          pnpm --filter @hpc-mail/web test
+          pnpm --filter @hpc-mail/web typecheck
+          pnpm --filter @hpc-mail/web build
+
+      - name: 禁止 sourcemap 进产物
+        run: |
+          maps=$(find apps/web/dist -name '*.map' | wc -l)
+          [ "$maps" = "0" ] || { echo '::error::产物包含 sourcemap'; exit 1; }
+
+      - name: 拷贝前端产物进 worker
+        run: pnpm --filter @hpc-mail/worker build:assets
+
+      - name: worker 测试与类型检查
+        run: |
+          pnpm --filter @hpc-mail/worker test
+          pnpm --filter @hpc-mail/worker typecheck
+
+      - name: 依赖安全审计
+        run: pnpm audit --prod
+
+      - name: 部署预演（dry-run）
+        working-directory: apps/worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: npx wrangler deploy --dry-run
+
+      - name: 清空线上 D1 与 KV（仅 reset_database=true）
+        if: github.event_name == 'workflow_dispatch' && inputs.reset_database
+        working-directory: apps/worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          echo '::warning::正在清空线上数据库与 KV'
+          npx wrangler d1 execute "$D1_NAME" --remote -y --file=scripts/drop-legacy.sql
+          npx wrangler kv key list --namespace-id "$KV_NAMESPACE_ID" > /tmp/kv-keys.json
+          count=$(jq 'length' /tmp/kv-keys.json)
+          if [ "$count" -gt 0 ]; then
+            jq -c '[.[].name]' /tmp/kv-keys.json > /tmp/kv-del.json
+            npx wrangler kv bulk delete /tmp/kv-del.json --namespace-id "$KV_NAMESPACE_ID" --force
+          fi
+          echo "已清空 D1 旧表与 $count 个 KV key"
+
+      - name: 应用数据库迁移
+        working-directory: apps/worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: npx wrangler d1 migrations apply "$D1_NAME" --remote
+
+      - name: 部署 Worker
+        working-directory: apps/worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: npx wrangler deploy
+
+      - name: 同步 Worker secrets
+        working-directory: apps/worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          RESEND_WEBHOOK_SECRET: ${{ secrets.RESEND_WEBHOOK_SECRET }}
+        run: |
+          set -euo pipefail
+          echo "$JWT_SECRET" | npx wrangler secret put jwt_secret
+          if [ -n "${RESEND_WEBHOOK_SECRET:-}" ]; then
+            echo "$RESEND_WEBHOOK_SECRET" | npx wrangler secret put resend_webhook_secret
+          fi
+
+      - name: 校验迁移完整性
+        working-directory: apps/worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          expected=$(ls migrations/*.sql | wc -l)
+          applied=$(npx wrangler d1 execute "$D1_NAME" --remote --json \
+            --command 'SELECT COUNT(*) AS c FROM d1_migrations' | jq '.[0].results[0].c')
+          echo "migrations: 代码 $expected / 线上 $applied"
+          [ "$expected" = "$applied" ] || { echo '::error::线上迁移数与代码不一致'; exit 1; }
+
+      - name: 引导管理员账号（幂等）
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          ADMIN_USERNAME: ${{ vars.ADMIN_USERNAME }}
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+        run: node apps/worker/scripts/seed-admin.mjs
+
+      - name: 线上冒烟
+        env:
+          BASE_URL: https://${{ vars.CUSTOM_DOMAIN }}
+          ADMIN_USERNAME: ${{ vars.ADMIN_USERNAME }}
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+        run: |
+          sleep 10
+          bash scripts/smoke.sh

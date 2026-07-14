@@ -1,0 +1,24 @@
+From: "Weekly Digest" <digest@newsletter.example.com>
+To: <REPLACED_BY_QUERY@hpc.email>
+Subject: =?utf-8?B?5pys5ZGo57K+6YCJ77ya5rWF6Imy6K6+6K6h57O757uf5LiK57q/?=
+Date: Tue, 15 Jul 2026 09:30:00 +0000
+Message-ID: <fixture-html-002@newsletter.example.com>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="b1_fixture"
+
+--b1_fixture
+Content-Type: text/plain; charset=utf-8
+
+本周精选：浅色设计系统上线。查看网页版获取完整内容。
+
+--b1_fixture
+Content-Type: text/html; charset=utf-8
+
+<html><body style="font-family:sans-serif">
+<h1 style="color:#334">本周精选</h1>
+<p>浅色设计系统上线，<a href="https://example.com/post">阅读全文</a>。</p>
+<img src="https://example.com/banner.png" alt="banner" width="480">
+<script>alert('xss-should-be-stripped')</script>
+</body></html>
+
+--b1_fixture--
