@@ -210,7 +210,16 @@ jobs:
               echo "Versioned database schema initialized"
               exit 0
             fi
-            echo "Schema initialization endpoint not ready (attempt $attempt/10, HTTP ${status:-000})"
+            detail=$(jq -r '
+              if type == "object" then
+                "code=\(.code // "unknown"), message=\(.message // "unknown")"
+              else
+                "non-JSON response"
+              end
+              | gsub("[\\r\\n]+"; " ")
+              | .[0:500]
+            ' "$response_file" 2>/dev/null || printf '%s' 'unreadable response')
+            echo "Schema initialization endpoint not ready (attempt $attempt/10, HTTP ${status:-000}, $detail)"
             sleep 6
           done
           echo "::error::Versioned database schema initialization did not complete"
