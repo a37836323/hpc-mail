@@ -1,10 +1,11 @@
 <template>
   <section class="mailboxes" :aria-label="$t('mailboxPanel')">
     <header class="mailboxes__header">
-      <div><p>{{ $t('mailboxes') }}</p><span>{{ accounts.length ? $t('mailboxCount', { count: accounts.length }) : $t('optional') }}</span></div>
+      <div><p>{{ $t('manageMailboxes') }}</p><span>{{ accounts.length ? $t('mailboxCount', { count: accounts.length }) : $t('optional') }}</span></div>
       <div class="mailboxes__actions">
         <IconButton v-perm="'account:add'" :label="$t('addAccount')" @click="openAdd"><Plus :size="19" /></IconButton>
         <IconButton :label="$t('refresh')" @click="refresh"><RefreshCw :size="18" :class="{ spin: loading }" /></IconButton>
+        <IconButton :label="$t('closeMailboxManager')" @click="uiStore.accountShow = false"><X :size="19" /></IconButton>
       </div>
     </header>
 
@@ -60,7 +61,7 @@
 
 <script setup>
 import { computed, nextTick, reactive, ref, watch } from 'vue'
-import { Check, Copy, Inbox, MoreHorizontal, Plus, RefreshCw, Route, SquarePen } from '@lucide/vue'
+import { Check, Copy, Inbox, MoreHorizontal, Plus, RefreshCw, Route, SquarePen, X } from '@lucide/vue'
 import { useI18n } from 'vue-i18n'
 import AppButton from '@/components/ui/AppButton.vue'
 import FormField from '@/components/ui/FormField.vue'

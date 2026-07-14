@@ -158,13 +158,7 @@ router.afterEach((to) => {
     }
 
     const uiStore = useUiStore()
-    if (to.meta.menu) {
-        if (['content', 'email', 'send'].includes(to.meta.name)) {
-            uiStore.accountShow = window.innerWidth > 767;
-        } else {
-            uiStore.accountShow = false
-        }
-    }
+    uiStore.accountShow = false
 
     if (window.innerWidth < 768) {
         uiStore.asideShow = false

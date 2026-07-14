@@ -9,10 +9,24 @@
                :time-sort="params.timeSort"
                :email-read="emailRead"
                :show-unread="true"
+               :show-account-icon="false"
                actionLeft="4px"
+               @refresh-before="refreshMailboxOptions"
                @jump="jumpContent"
   >
     <template #first>
+      <label class="mailbox-filter" for="inbox-mailbox-filter">
+        <Mail :size="17" aria-hidden="true" />
+        <span>{{ $t('filterByMailbox') }}</span>
+        <select id="inbox-mailbox-filter" v-model.number="selectedAccountId" :disabled="mailboxLoading" @change="changeMailboxFilter">
+          <option :value="ALL_MAILBOXES_ID">{{ $t('allMailboxes') }}</option>
+          <option v-for="mailbox in mailboxes" :key="mailbox.accountId" :value="mailbox.accountId">{{ mailbox.email }}</option>
+        </select>
+        <ChevronDown :size="15" aria-hidden="true" />
+      </label>
+      <IconButton v-perm="'account:query'" :label="$t('manageMailboxes')" @click="uiStore.accountShow = true">
+        <Settings2 :size="18" />
+      </IconButton>
       <IconButton :label="params.timeSort === 0 ? $t('sortOldestFirst') : $t('sortNewestFirst')" @click="changeTimeSort">
         <ArrowDownNarrowWide v-if="params.timeSort === 0" :size="19" />
         <ArrowUpNarrowWide v-else :size="19" />
@@ -23,18 +37,20 @@
 </template>
 
 <script setup>
-import {useAccountStore} from "@/store/account.js";
 import {useEmailStore} from "@/store/email.js";
 import {useSettingStore} from "@/store/setting.js";
+import {useUiStore} from "@/store/ui.js";
 import emailScroll from "@/components/email-scroll/index.vue"
 import {emailList, emailDelete, emailLatest, emailRead} from "@/request/email.js";
+import {accountList} from "@/request/account.js";
 import {starAdd, starCancel} from "@/request/star.js";
-import {defineOptions, h, onMounted, reactive, ref, watch} from "vue";
+import {defineOptions, onMounted, reactive, ref, watch} from "vue";
 import {sleep} from "@/utils/time-utils.js";
 import router from "@/router/index.js";
-import { ArrowDownNarrowWide, ArrowUpNarrowWide } from '@lucide/vue'
+import { ArrowDownNarrowWide, ArrowUpNarrowWide, ChevronDown, Mail, Settings2 } from '@lucide/vue'
 import IconButton from '@/components/ui/IconButton.vue'
 import { useRoute } from 'vue-router'
+import { ALL_MAILBOXES_ID, resolveMailboxFilter } from '@/utils/mailbox-filter.js'
 
 defineOptions({
   name: 'email'
@@ -42,22 +58,61 @@ defineOptions({
 
 const route = useRoute();
 const emailStore = useEmailStore();
-const accountStore = useAccountStore();
 const settingStore = useSettingStore();
+const uiStore = useUiStore();
 const scroll = ref({})
+const mailboxes = ref([])
+const mailboxLoading = ref(false)
+const selectedAccountId = ref(ALL_MAILBOXES_ID)
 const params = reactive({
   timeSort: 0,
 })
 
 onMounted(() => {
   emailStore.emailScroll = scroll;
+  loadMailboxOptions()
   latest()
 })
 
-
-watch(() => accountStore.currentAccountId, () => {
-  scroll.value.refreshList();
+watch(() => uiStore.accountShow, (open, previous) => {
+  if (!open && previous) loadMailboxOptions()
 })
+
+async function loadMailboxOptions() {
+  if (mailboxLoading.value) return
+  mailboxLoading.value = true
+  try {
+    const nextMailboxes = []
+    let lastAccountId = 0
+    let lastSort = null
+    while (true) {
+      const page = await accountList(lastAccountId, 30, lastSort)
+      nextMailboxes.push(...page)
+      if (page.length < 30) break
+      const last = page.at(-1)
+      if (!last || (last.accountId === lastAccountId && last.sort === lastSort)) break
+      lastAccountId = last.accountId
+      lastSort = last.sort
+    }
+    mailboxes.value = nextMailboxes
+    if (selectedAccountId.value !== ALL_MAILBOXES_ID && !nextMailboxes.some(item => item.accountId === selectedAccountId.value)) {
+      selectedAccountId.value = ALL_MAILBOXES_ID
+      changeMailboxFilter()
+    }
+  } finally {
+    mailboxLoading.value = false
+  }
+}
+
+function refreshMailboxOptions() {
+  existIds.clear()
+  loadMailboxOptions()
+}
+
+function changeMailboxFilter() {
+  existIds.clear()
+  scroll.value.refreshList?.()
+}
 
 function changeTimeSort() {
   params.timeSort = params.timeSort ? 0 : 1
@@ -89,8 +144,7 @@ async function latest() {
 
     if (!scroll.value.firstLoad && autoRefresh > 1) {
       try {
-        const accountId = accountStore.currentAccountId
-        const allReceive = scroll.value.latestEmail?.allReceive ?? accountStore.currentAccount?.allReceive ?? 0
+        const { accountId, allReceive } = resolveMailboxFilter(selectedAccountId.value)
         const curTimeSort = params.timeSort
         let list = []
 
@@ -100,7 +154,8 @@ async function latest() {
         }
 
         //确保请求回来后，账号没有切换，时间排序没有改变，全部邮件类型没变
-        if (accountId === accountStore.currentAccountId && params.timeSort === curTimeSort && allReceive === (accountStore.currentAccount?.allReceive ?? 0)) {
+        const currentFilter = resolveMailboxFilter(selectedAccountId.value)
+        if (accountId === currentFilter.accountId && params.timeSort === curTimeSort && allReceive === currentFilter.allReceive) {
           if (list.length > 0) {
 
             for (let email of list) {
@@ -140,8 +195,7 @@ function cancelStar(email) {
 }
 
 function getEmailList(emailId, size) {
-  const accountId =  accountStore.currentAccountId;
-  const allReceive = accountStore.currentAccount?.allReceive ?? 0;
+  const { accountId, allReceive } = resolveMailboxFilter(selectedAccountId.value)
   return emailList(accountId, allReceive, emailId, params.timeSort, size, 0).then(data => {
     if (data.latestEmail) {
       data.latestEmail.reqAccountId = accountId;
@@ -152,8 +206,16 @@ function getEmailList(emailId, size) {
 }
 
 </script>
-<style>
-.icon {
-  cursor: pointer;
+<style scoped>
+.mailbox-filter { min-width: 220px; height: 40px; padding-inline: 11px 8px; display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; align-items: center; gap: 8px; border: 1px solid var(--border); border-radius: var(--radius-control); color: var(--muted-foreground); background: var(--surface); cursor: pointer; }
+.mailbox-filter:focus-within { border-color: var(--focus-ring); box-shadow: 0 0 0 3px color-mix(in oklch, var(--focus-ring) 18%, transparent); }
+.mailbox-filter > span { font-size: .75rem; font-weight: 650; white-space: nowrap; }
+.mailbox-filter select { min-width: 0; height: 38px; border: 0; outline: 0; color: var(--foreground); background: transparent; font-size: .8125rem; cursor: pointer; }
+.mailbox-filter select:disabled { cursor: wait; opacity: .65; }
+.mailbox-filter > svg:last-child { pointer-events: none; }
+
+@media (max-width: 767px) {
+  .mailbox-filter { min-width: 0; width: min(54vw, 240px); grid-template-columns: auto minmax(0, 1fr) auto; }
+  .mailbox-filter > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 }
 </style>

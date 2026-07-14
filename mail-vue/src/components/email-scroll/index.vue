@@ -1282,11 +1282,12 @@ function loadData() {
 }
 
 .header-actions {
+  min-height: 56px;
   display: grid;
   grid-template-columns: auto 1fr auto;
   align-items: center;
-  gap: 15px;
-  padding: 3px 15px;
+  gap: 10px;
+  padding: 7px 12px;
   box-shadow: var(--header-actions-border);
 
   .header-left {
@@ -1294,8 +1295,8 @@ function loadData() {
     flex-wrap: wrap;
     align-items: center;
     position: relative;
-    column-gap: 20px;
-    row-gap: 8px;
+    column-gap: 6px;
+    row-gap: 6px;
     padding-left: 2px;
     color: var(--el-text-color-primary);;
   }

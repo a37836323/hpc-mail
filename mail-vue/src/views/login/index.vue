@@ -8,25 +8,15 @@
       </IconButton>
     </div>
 
-    <section class="auth-brand" aria-labelledby="auth-brand-title">
-      <div class="auth-brand__content">
-        <span class="brand-mark"><Mail :size="28" aria-hidden="true" /></span>
-        <p class="brand-kicker">{{ settingStore.settings.title }}</p>
-        <h1 id="auth-brand-title">{{ $t('authBrandTitle') }}</h1>
-        <p class="brand-intro">{{ $t('authBrandDescription') }}</p>
-        <ul class="brand-capabilities">
-          <li><Check :size="18" aria-hidden="true" /><span>{{ $t('authCapabilityCatchAll') }}</span></li>
-          <li><Check :size="18" aria-hidden="true" /><span>{{ $t('authCapabilitySender') }}</span></li>
-          <li><Check :size="18" aria-hidden="true" /><span>{{ $t('authCapabilityIdentity') }}</span></li>
-        </ul>
-      </div>
-      <p class="brand-footnote">{{ $t('authPrivateWorkspace') }}</p>
-    </section>
-
-    <section class="auth-panel" :aria-labelledby="show === 'login' ? 'login-title' : 'register-title'">
+    <section class="auth-shell" :aria-labelledby="show === 'login' ? 'login-title' : 'register-title'">
+      <header class="auth-brandline">
+        <span class="brand-mark"><Mail :size="22" aria-hidden="true" /></span>
+        <div>
+          <p>{{ settingStore.settings.title }}</p>
+          <span>{{ $t('authPrivateWorkspace') }}</span>
+        </div>
+      </header>
       <div class="auth-card">
-        <div class="mobile-brand"><span class="brand-mark"><Mail :size="23" /></span><h1>{{ settingStore.settings.title }}</h1></div>
-
         <form v-if="show === 'login'" class="auth-form" novalidate @submit.prevent="submitLogin">
           <header class="auth-form__header">
             <p class="auth-form__kicker">{{ $t('welcomeBack') }}</p>
@@ -37,7 +27,7 @@
           <div v-if="loginErrors.service" class="auth-alert" role="alert"><CircleAlert :size="18" /><span>{{ loginErrors.service }}</span></div>
 
           <FormField :label="$t('username')" for-id="login-username" :error="loginErrors.username" :hint="$t('legacyEmailHint')">
-            <div class="input-wrap"><UserRound :size="18" aria-hidden="true" /><input id="login-username" ref="loginUsernameRef" v-model.trim="loginForm.username" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" :placeholder="$t('usernameExample')" :aria-invalid="Boolean(loginErrors.username)" :aria-describedby="loginErrors.username ? 'login-username-error' : 'login-username-hint'" @blur="validateLoginUsername" /></div>
+            <div class="input-wrap"><UserRound :size="18" aria-hidden="true" /><input id="login-username" ref="loginUsernameRef" v-model.trim="loginForm.username" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" :placeholder="$t('usernamePlaceholder')" :aria-invalid="Boolean(loginErrors.username)" :aria-describedby="loginErrors.username ? 'login-username-error' : 'login-username-hint'" @blur="validateLoginUsername" /></div>
           </FormField>
 
           <FormField :label="$t('password')" for-id="login-password" :error="loginErrors.password">
@@ -106,7 +96,7 @@
 
 <script setup>
 import { computed, nextTick, onMounted, reactive, ref } from 'vue'
-import { Check, CircleAlert, Code2, Languages, LoaderCircle, LockKeyhole, Mail, Moon, Sun, TicketCheck, UserRound, X } from '@lucide/vue'
+import { CircleAlert, Code2, Languages, LoaderCircle, LockKeyhole, Mail, Moon, Sun, TicketCheck, UserRound, X } from '@lucide/vue'
 import { DialogClose, DialogContent, DialogDescription, DialogOverlay, DialogPortal, DialogRoot, DialogTitle } from 'reka-ui'
 import { useI18n } from 'vue-i18n'
 import AppButton from '@/components/ui/AppButton.vue'
@@ -322,26 +312,20 @@ onMounted(() => { loginUsernameRef.value?.focus(); handleOAuthCallback() })
 </script>
 
 <style scoped>
-.auth-page { min-height: 100dvh; display: grid; grid-template-columns: minmax(320px, 1.05fr) minmax(420px, .95fr); color: var(--foreground); background: var(--background); }
+.auth-page { min-height: 100dvh; padding: max(76px, calc(env(safe-area-inset-top) + 56px)) 20px max(40px, env(safe-area-inset-bottom)); display: flex; align-items: center; justify-content: center; overflow-y: auto; color: var(--foreground); background: var(--background); }
 .auth-utilities { position: fixed; inset-block-start: max(12px, env(safe-area-inset-top)); inset-inline-end: max(14px, env(safe-area-inset-right)); z-index: 5; display: flex; gap: 2px; }
-.auth-brand { min-width: 0; padding: clamp(48px, 7vw, 104px); display: flex; flex-direction: column; justify-content: space-between; border-inline-end: 1px solid var(--border); background-color: var(--surface-subtle); background-image: linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px); background-size: 36px 36px; background-position: -1px -1px; }
-.auth-brand__content { max-width: 580px; padding: clamp(24px, 4vw, 48px); border-radius: 20px; background: color-mix(in oklch, var(--surface-subtle) 88%, transparent); }
-.brand-mark { width: 52px; height: 52px; display: inline-flex; align-items: center; justify-content: center; border-radius: 15px; color: var(--primary-foreground); background: var(--primary); }
-.brand-kicker { margin-block-start: 28px; color: var(--primary); font-size: .75rem; font-weight: 780; letter-spacing: .1em; text-transform: uppercase; }
-.auth-brand h1 { max-width: 11ch; margin-block-start: 12px; font-size: clamp(2.4rem, 4.5vw, 4.75rem); line-height: .98; letter-spacing: -.055em; text-wrap: balance; }
-.brand-intro { max-width: 48ch; margin-block-start: 24px; color: var(--muted-foreground); font-size: clamp(1rem, 1.4vw, 1.2rem); line-height: 1.65; }
-.brand-capabilities { margin-block-start: 36px; display: grid; gap: 14px; }
-.brand-capabilities li { display: flex; align-items: center; gap: 12px; font-weight: 620; }
-.brand-capabilities svg { flex: 0 0 auto; color: var(--success); }
-.brand-footnote { color: var(--subtle-foreground); font-size: .75rem; }
-.auth-panel { min-width: 0; padding: 72px clamp(24px, 6vw, 88px) 48px; display: flex; align-items: center; justify-content: center; background: var(--surface); }
-.auth-card { width: min(100%, 420px); }
-.mobile-brand { display: none; }
-.auth-form { display: grid; gap: 18px; }
-.auth-form__header { margin-block-end: 10px; }
+.auth-shell { width: min(100%, 400px); display: grid; gap: 18px; }
+.auth-brandline { display: flex; align-items: center; justify-content: center; gap: 11px; }
+.brand-mark { width: 40px; height: 40px; flex: 0 0 40px; display: inline-flex; align-items: center; justify-content: center; border-radius: 12px; color: var(--primary-foreground); background: var(--primary); }
+.auth-brandline div { min-width: 0; display: grid; gap: 1px; }
+.auth-brandline p { overflow: hidden; font-size: .9375rem; font-weight: 760; letter-spacing: -.015em; text-overflow: ellipsis; white-space: nowrap; }
+.auth-brandline span:not(.brand-mark) { color: var(--subtle-foreground); font-size: .6875rem; }
+.auth-card { width: 100%; padding: 30px; border: 1px solid var(--border); border-radius: 16px; background: var(--surface); box-shadow: 0 16px 50px color-mix(in oklch, var(--foreground) 7%, transparent); }
+.auth-form { display: grid; gap: 16px; }
+.auth-form__header { margin-block-end: 6px; }
 .auth-form__kicker { color: var(--primary) !important; font-size: .75rem !important; font-weight: 760; letter-spacing: .06em; text-transform: uppercase; }
-.auth-form__header h2 { margin-block-start: 7px; font-size: clamp(1.75rem, 3vw, 2.2rem); line-height: 1.12; letter-spacing: -.035em; }
-.auth-form__header p:last-child { margin-block-start: 10px; color: var(--muted-foreground); font-size: .9375rem; line-height: 1.55; }
+.auth-form__header h2 { margin-block-start: 6px; font-size: 1.5rem; line-height: 1.2; letter-spacing: -.03em; }
+.auth-form__header p:last-child { margin-block-start: 8px; color: var(--muted-foreground); font-size: .875rem; line-height: 1.5; }
 .auth-alert { padding: 12px 14px; display: flex; align-items: flex-start; gap: 10px; border: 1px solid color-mix(in oklch, var(--destructive) 35%, var(--border)); border-radius: var(--radius-control); color: var(--destructive); background: var(--destructive-soft); font-size: .875rem; }
 .auth-alert svg { flex: 0 0 auto; margin-block-start: 1px; }
 .input-wrap { min-height: 46px; padding-inline: 13px; display: flex; align-items: center; gap: 10px; border: 1px solid var(--border-strong); border-radius: var(--radius-control); background: var(--surface); transition: border-color var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) var(--ease-out); }
@@ -371,13 +355,13 @@ onMounted(() => { loginUsernameRef.value?.focus(); handleOAuthCallback() })
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes fade-in { from { opacity: 0; } }
 
-@media (max-width: 900px) {
-  .auth-page { grid-template-columns: minmax(0, 1fr); }
-  .auth-brand { display: none; }
-  .auth-panel { min-height: 100dvh; padding: 72px 20px 32px; align-items: flex-start; }
-  .mobile-brand { margin-block-end: 38px; display: flex; align-items: center; gap: 12px; }
-  .mobile-brand .brand-mark { width: 40px; height: 40px; border-radius: 12px; }
-.mobile-brand h1 { font-size: 1.05rem; }
+@media (max-width: 480px) {
+  .auth-page { padding-inline: 14px; align-items: flex-start; }
+  .auth-shell { gap: 16px; }
+  .auth-card { padding: 24px 20px; border-radius: 14px; }
 }
-@media (max-width: 420px) { .auth-panel { padding-inline: 16px; } .auth-form { gap: 16px; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .dialog-overlay, .auth-loading svg { animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
+}
 </style>
