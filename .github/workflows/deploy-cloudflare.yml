@@ -188,6 +188,11 @@ jobs:
         run: |
           set -euo pipefail
           endpoint="https://${CUSTOM_DOMAIN}/api/init"
+          expected_schema_version=$(sed -n "s/^const SCHEMA_VERSION = '\([^']*\)';$/\1/p" mail-worker/src/init/init.js)
+          if [ -z "$expected_schema_version" ]; then
+            echo "::error::Unable to determine the expected database schema version"
+            exit 1
+          fi
           rebuild=false
           if [ "${REBUILD_DATABASE,,}" = "true" ]; then rebuild=true; fi
           payload=$(jq -nc \
@@ -206,13 +211,16 @@ jobs:
               --header "Authorization: Bearer $INIT_SECRET" \
               --header 'Content-Type: application/json' \
               --data "$payload" || true)
-            if [[ "$status" =~ ^2[0-9][0-9]$ ]] && { jq -e '.code == 200' "$response_file" >/dev/null 2>&1 || grep -Eq '^[[:space:]]*success[[:space:]]*$' "$response_file"; }; then
-              echo "Versioned database schema initialized"
+            if [[ "$status" =~ ^2[0-9][0-9]$ ]] && jq -e \
+              --arg expected "$expected_schema_version" \
+              '.code == 200 and .data.schemaVersion == $expected' \
+              "$response_file" >/dev/null 2>&1; then
+              echo "Database schema v${expected_schema_version} initialized"
               exit 0
             fi
             detail=$(jq -r '
               if type == "object" then
-                "code=\(.code // "unknown"), message=\(.message // "unknown")"
+                "code=\(.code // "unknown"), schema=\(.data.schemaVersion // "unknown"), message=\(.message // "unknown")"
               else
                 "non-JSON response"
               end
@@ -232,6 +240,8 @@ jobs:
           login_response=$(mktemp)
           user_response=$(mktemp)
           legacy_login_response=$(mktemp)
+          api_config_response=$(mktemp)
+          public_api_response=$(mktemp)
           logout_response=$(mktemp)
           token=''
           cleanup() {
@@ -240,7 +250,7 @@ jobs:
                 "https://${CUSTOM_DOMAIN}/api/logout" \
                 --header "Authorization: $token" >/dev/null || true
             fi
-            rm -f "$login_response" "$user_response" "$legacy_login_response" "$logout_response"
+            rm -f "$login_response" "$user_response" "$legacy_login_response" "$api_config_response" "$public_api_response" "$logout_response"
           }
           trap cleanup EXIT
           curl --fail --silent --show-error --location --max-time 30 "https://${CUSTOM_DOMAIN}/" >/dev/null
@@ -285,6 +295,28 @@ jobs:
             "https://${CUSTOM_DOMAIN}/api/allEmail/list?emailId=0&timeSort=0&size=20&type=all" \
             --header "Authorization: $token" \
             | jq -e '.code == 200 and (.data.list | type == "array")' >/dev/null
+
+          api_config_status=$(curl --silent --show-error --max-time 30 \
+            --output "$api_config_response" --write-out '%{http_code}' \
+            "https://${CUSTOM_DOMAIN}/api/apiKey/config" \
+            --header "Authorization: $token")
+          if ! [[ "$api_config_status" =~ ^2[0-9][0-9]$ ]] || ! jq -e \
+            '.code == 200 and (.data.enabled | type == "boolean")' \
+            "$api_config_response" >/dev/null; then
+            detail=$(jq -r '"code=\(.code // "unknown"), message=\(.message // "unknown")" | .[0:500]' "$api_config_response" 2>/dev/null || printf '%s' 'unreadable response')
+            echo "::error::Production API control health check failed with HTTP $api_config_status ($detail)"
+            exit 1
+          fi
+
+          public_api_status=$(curl --silent --show-error --max-time 30 \
+            --output "$public_api_response" --write-out '%{http_code}' \
+            "https://${CUSTOM_DOMAIN}/api/v1/status")
+          if [[ "$public_api_status" != "401" && "$public_api_status" != "503" ]] || ! jq -e \
+            '(.error.code == 401 or .error.code == 503) and (.requestId | type == "string" and length > 0)' \
+            "$public_api_response" >/dev/null; then
+            echo "::error::Production public API authentication boundary failed with HTTP $public_api_status"
+            exit 1
+          fi
 
           legacy_login_payload=$(jq -nc --arg username "$ADMIN_MAILBOX" --arg password "$ADMIN_PASSWORD" '{username: $username, password: $password}')
           curl --silent --show-error --max-time 30 \
