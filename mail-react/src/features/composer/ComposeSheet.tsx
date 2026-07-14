@@ -442,7 +442,7 @@ export function ComposeSheet({
           if (!next) requestClose();
         }}
       >
-        <DialogContent className="!inset-x-0 !bottom-0 !top-auto !max-h-[100dvh] !w-full !max-w-none !translate-x-0 !translate-y-0 !gap-0 !rounded-b-none !p-0 sm:!left-auto sm:!right-4 sm:!top-auto sm:!w-[min(760px,calc(100vw-2rem))] sm:!rounded-b-2xl">
+        <DialogContent className="!inset-x-0 !bottom-0 !top-auto !max-h-[100dvh] !w-full !max-w-none !translate-x-0 !translate-y-0 !gap-0 !rounded-b-none !p-0 sm:!left-auto sm:!right-3 sm:!top-auto sm:!w-[min(680px,calc(100vw-2rem))] sm:!rounded-b-[var(--radius-panel)]">
           <DialogHeader className="border-b border-slate-200 px-5 py-4 pe-14">
             <DialogTitle>
               {form.sendType === "reply"
@@ -459,7 +459,7 @@ export function ComposeSheet({
           <div className="max-h-[calc(100dvh-10.5rem)] space-y-5 overflow-y-auto px-5 py-5 sm:max-h-[min(680px,calc(100dvh-13rem))]">
             {error && (
               <div
-                className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-800"
+                className="flex items-start gap-2 rounded-[var(--radius-control)] border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-800"
                 role="alert"
               >
                 <AlertCircle className="mt-0.5 size-4 shrink-0" />
@@ -505,7 +505,7 @@ export function ComposeSheet({
                 <label className="grid gap-1.5 text-xs font-medium text-slate-600">
                   授权域名
                   <select
-                    className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-950 shadow-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 disabled:bg-slate-100"
+                    className="h-10 w-full rounded-[var(--radius-control)] border border-slate-300 bg-white px-3 text-sm text-slate-950 outline-none transition-[border-color,box-shadow] hover:border-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15 disabled:bg-slate-100"
                     value={form.domain}
                     aria-invalid={Boolean(fieldErrors.domain) || undefined}
                     onChange={(event) => update("domain", event.target.value)}
@@ -563,7 +563,7 @@ export function ComposeSheet({
               <label className="grid gap-1.5 text-sm font-medium text-slate-700">
                 正文
                 <textarea
-                  className="min-h-52 w-full resize-y rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm leading-6 text-slate-950 shadow-sm outline-none placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                  className="min-h-52 w-full resize-y rounded-[var(--radius-control)] border border-slate-300 bg-white px-3 py-3 text-sm leading-6 text-slate-950 outline-none transition-[border-color,box-shadow] placeholder:text-slate-400 hover:border-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15"
                   value={form.body}
                   placeholder="输入邮件正文"
                   aria-invalid={Boolean(fieldErrors.body) || undefined}
@@ -607,7 +607,7 @@ export function ComposeSheet({
                 </Button>
               </div>
               {!!form.attachments.length && (
-                <ul className="mt-3 divide-y divide-slate-200 rounded-xl border border-slate-200">
+                <ul className="mt-3 divide-y divide-slate-200 rounded-[var(--radius-control)] border border-slate-200">
                   {form.attachments.map((attachment, index) => (
                     <li
                       key={`${attachment.filename}-${index}`}

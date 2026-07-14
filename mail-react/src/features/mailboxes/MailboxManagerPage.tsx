@@ -204,19 +204,20 @@ export function MailboxManagerPage() {
 
   return (
     <main
-      className="h-full min-h-0 overflow-y-auto bg-slate-50"
+      className="app-page h-full min-h-0 overflow-y-auto"
       aria-labelledby="mailbox-manager-heading"
     >
-      <header className="border-b border-slate-200 bg-white px-4 py-5 sm:px-6">
+      <div className="mx-auto w-full max-w-[1480px]">
+      <header className="mb-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h1
               id="mailbox-manager-heading"
-              className="text-xl font-semibold tracking-tight text-slate-950"
+              className="app-page-title"
             >
               邮箱管理
             </h1>
-            <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
+            <p className="app-page-description mt-1">
               这里管理平台账户可使用的邮箱地址。平台登录账户与邮箱相互独立，一个账户可以管理多个邮箱。
             </p>
           </div>
@@ -250,12 +251,12 @@ export function MailboxManagerPage() {
         </div>
       </header>
 
-      <div className="mx-auto w-full max-w-6xl space-y-5 px-4 py-5 sm:px-6">
+      <div className="w-full space-y-4">
         {!config.isPending &&
           canCreate &&
           !mailboxCreationEnabled(config.data) && (
             <div
-              className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+              className="rounded-[var(--radius-control)] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
               role="status"
             >
               管理员当前已关闭创建多邮箱能力。已有邮箱仍可重命名、置顶或删除。
@@ -263,7 +264,7 @@ export function MailboxManagerPage() {
           )}
         {!user.isPending && creationEnabled && !domains.length && (
           <div
-            className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+            className="rounded-[var(--radius-control)] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
             role="status"
           >
             当前账户没有可用于创建邮箱的授权域名，请联系管理员分配域名权限。
@@ -271,7 +272,7 @@ export function MailboxManagerPage() {
         )}
         {operationError && (
           <div
-            className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
+            className="rounded-[var(--radius-control)] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
             role="alert"
           >
             {errorMessage(operationError, "邮箱数据加载失败，请重试。")}
@@ -282,7 +283,7 @@ export function MailboxManagerPage() {
         </p>
 
         <section
-          className="overflow-hidden rounded-2xl border border-slate-200 bg-white"
+          className="app-panel overflow-hidden"
           aria-labelledby="mailbox-list-heading"
         >
           <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-4 sm:px-5">
@@ -331,9 +332,9 @@ export function MailboxManagerPage() {
           ) : (
             <ul className="divide-y divide-slate-200">
               {mailboxes.data.map((mailbox, index) => (
-                <li key={mailbox.accountId} className="p-4 sm:p-5">
+                <li key={mailbox.accountId} className="px-4 py-3">
                   <article className="flex flex-col gap-4 sm:flex-row sm:items-center">
-                    <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-blue-50 text-blue-700">
+                    <span className="grid size-9 shrink-0 place-items-center rounded-[var(--radius-control)] bg-blue-50 text-blue-700">
                       <AtSign className="size-5" />
                     </span>
                     <div className="min-w-0 flex-1">
@@ -358,7 +359,7 @@ export function MailboxManagerPage() {
                       <Button
                         size="icon"
                         variant="ghost"
-                        className="size-11"
+                        className="size-10"
                         aria-label={`复制 ${mailbox.email}`}
                         title="复制地址"
                         onClick={() => void copyAddress(mailbox.email)}
@@ -368,7 +369,7 @@ export function MailboxManagerPage() {
                       <Button
                         size="icon"
                         variant="ghost"
-                        className="size-11"
+                        className="size-10"
                         aria-label={`重命名 ${mailbox.email}`}
                         title="重命名"
                         onClick={() => openRename(mailbox)}
@@ -378,7 +379,7 @@ export function MailboxManagerPage() {
                       <Button
                         size="icon"
                         variant="ghost"
-                        className="size-11"
+                        className="size-10"
                         aria-label={`置顶 ${mailbox.email}`}
                         title="置顶"
                         disabled={pin.isPending || index === 0}
@@ -390,7 +391,7 @@ export function MailboxManagerPage() {
                         <Button
                           size="icon"
                           variant="ghost"
-                          className="size-11 text-slate-500 hover:bg-red-50 hover:text-red-700"
+                          className="size-10 text-slate-500 hover:bg-red-50 hover:text-red-700"
                           aria-label={`删除 ${mailbox.email}`}
                           title="删除"
                           onClick={() => setDeleteMailbox(mailbox)}
@@ -405,6 +406,7 @@ export function MailboxManagerPage() {
             </ul>
           )}
         </section>
+      </div>
       </div>
 
       <Dialog
@@ -440,7 +442,7 @@ export function MailboxManagerPage() {
               >
                 邮箱地址
               </label>
-              <div className="mt-1.5 grid min-h-11 grid-cols-[minmax(0,1fr)_auto_minmax(8rem,.9fr)] items-center rounded-xl border border-slate-300 bg-white px-3 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20">
+              <div className="mt-1.5 grid min-h-11 grid-cols-[minmax(0,1fr)_auto_minmax(8rem,.9fr)] items-center rounded-[var(--radius-control)] border border-slate-300 bg-white px-3 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/15">
                 <input
                   id="mailbox-local-part"
                   className="h-10 min-w-0 border-0 bg-transparent text-sm outline-none"

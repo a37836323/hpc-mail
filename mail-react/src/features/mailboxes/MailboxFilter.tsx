@@ -10,7 +10,7 @@ export interface MailboxFilterProps {
 
 export function MailboxFilter({ mailboxes, value, loading, onChange }: MailboxFilterProps) {
   return (
-    <label className="grid min-h-11 grid-cols-[auto_auto_minmax(0,1fr)] items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 text-slate-600 shadow-sm focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20" htmlFor="mailbox-filter">
+    <label className="grid min-h-10 grid-cols-[auto_auto_minmax(0,1fr)] items-center gap-2 rounded-[var(--radius-control)] border border-slate-300 bg-white px-3 text-slate-600 transition-[border-color,box-shadow] hover:border-slate-400 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/15" htmlFor="mailbox-filter">
       <Mail className="size-4.5" aria-hidden="true" />
       <span className="text-xs font-medium">邮箱筛选</span>
       <select

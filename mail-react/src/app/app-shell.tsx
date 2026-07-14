@@ -1,28 +1,23 @@
-import { useEffect, useMemo, useRef, useState, Suspense, type ComponentType } from 'react'
+import { Suspense, type ComponentType, useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import {
   AtSign,
   BarChart3,
   Braces,
-  ChevronUp,
+  ChevronDown,
   FileKey2,
   FileText,
   Inbox,
-  KeyRound,
+  LayoutDashboard,
   LogOut,
   Mail,
   MailSearch,
-  Monitor,
-  Moon,
-  PanelLeftClose,
-  PanelLeftOpen,
   PenLine,
   Send,
   Settings,
   ShieldCheck,
   SlidersHorizontal,
   Star,
-  Sun,
   UserRound,
   Users,
   type LucideProps,
@@ -35,7 +30,6 @@ import { queryClient } from '@/lib/query-client'
 import { useAuthStore } from '@/stores/auth-store'
 import { ComposeSheet } from './route-modules'
 import { hasPermission, SessionContext, type SessionUser } from './session-context'
-import { useTheme, type ThemePreference } from './use-theme'
 
 interface NavigationItem {
   label: string
@@ -54,10 +48,10 @@ const primaryNavigation: NavigationItem[] = [
 ]
 
 const adminNavigation: NavigationItem[] = [
-  { label: '分析页', path: '/admin/analytics', icon: BarChart3, permission: 'analysis:query' },
-  { label: '用户列表', path: '/admin/users', icon: Users, permission: 'user:query' },
-  { label: '全部邮件', path: '/admin/mail', icon: MailSearch, permission: 'all-email:query' },
-  { label: '权限控制', path: '/admin/roles', icon: ShieldCheck, permission: 'role:query' },
+  { label: '数据概览', path: '/admin/analytics', icon: BarChart3, permission: 'analysis:query' },
+  { label: '用户管理', path: '/admin/users', icon: Users, permission: 'user:query' },
+  { label: '邮件审计', path: '/admin/mail', icon: MailSearch, permission: 'all-email:query' },
+  { label: '角色权限', path: '/admin/roles', icon: ShieldCheck, permission: 'role:query' },
   { label: '注册密钥', path: '/admin/invite-keys', icon: FileKey2, permission: 'reg-key:query' },
   { label: 'API 控制', path: '/admin/api', icon: Braces, permission: 'api-key:query' },
   { label: '系统设置', path: '/admin/system', icon: SlidersHorizontal, permission: 'setting:query' },
@@ -65,8 +59,13 @@ const adminNavigation: NavigationItem[] = [
 
 function RouteLoading() {
   return (
-    <div className="grid h-full min-h-48 place-items-center" role="status" aria-live="polite">
-      <span className="text-sm text-[var(--color-text-muted)]">正在打开页面…</span>
+    <div className="app-page" role="status" aria-live="polite">
+      <div className="mx-auto grid h-full max-w-[1480px] content-start gap-3">
+        <div className="h-7 w-36 animate-pulse rounded-md bg-slate-200" />
+        <div className="h-4 w-72 max-w-full animate-pulse rounded bg-slate-200" />
+        <div className="app-panel mt-2 min-h-64 animate-pulse bg-white" />
+      </div>
+      <span className="sr-only">正在打开页面…</span>
     </div>
   )
 }
@@ -76,7 +75,7 @@ function navIsActive(currentPath: string, itemPath: string): boolean {
   return currentPath === itemPath || currentPath.startsWith(`${itemPath}/`)
 }
 
-function NavigationLink({ item, collapsed = false }: { item: NavigationItem; collapsed?: boolean }) {
+function NavigationLink({ item }: { item: NavigationItem }) {
   const location = useLocation()
   const active = navIsActive(location.pathname, item.path)
   const Icon = item.icon
@@ -84,38 +83,28 @@ function NavigationLink({ item, collapsed = false }: { item: NavigationItem; col
     <NavLink
       to={item.path}
       aria-current={active ? 'page' : undefined}
-      title={collapsed ? item.label : undefined}
+      title={item.label}
       className={[
-        'flex min-h-11 items-center rounded-[var(--radius-control)] px-3 text-sm font-semibold outline-none transition-colors duration-[var(--motion-fast)]',
-        'focus-visible:ring-2 focus-visible:ring-[var(--color-focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-surface)]',
+        'group relative flex min-h-10 items-center justify-center rounded-[var(--radius-control)] px-2 text-sm font-medium outline-none transition-colors duration-[var(--motion-fast)] lg:justify-start lg:gap-2.5 lg:px-3',
+        'focus-visible:ring-2 focus-visible:ring-[var(--color-focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-white',
         active
-          ? 'bg-[var(--color-primary-soft)] text-[var(--color-primary)]'
-          : 'text-[var(--color-text-muted)] hover:bg-[var(--color-surface-muted)] hover:text-[var(--color-text)]',
-        collapsed ? 'justify-center' : 'gap-3',
+          ? 'bg-blue-50 text-blue-700'
+          : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900',
       ].join(' ')}
     >
-      <Icon className="size-5 shrink-0" strokeWidth={1.8} aria-hidden />
-      {!collapsed && <span className="min-w-0 truncate">{item.label}</span>}
+      <Icon className="size-[18px] shrink-0" strokeWidth={active ? 2 : 1.7} aria-hidden />
+      <span className="hidden min-w-0 truncate lg:block">{item.label}</span>
+      {active && <span className="absolute inset-y-2 left-0 w-0.5 rounded-full bg-blue-600" aria-hidden />}
     </NavLink>
   )
 }
 
-const themeOptions: Array<{ value: ThemePreference; label: string; icon: ComponentType<LucideProps> }> = [
-  { value: 'system', label: '跟随系统', icon: Monitor },
-  { value: 'light', label: '浅色', icon: Sun },
-  { value: 'dark', label: '深色', icon: Moon },
-]
-
-function UserMenu({ user, compact = false, placement = 'top' }: {
-  user: SessionUser
-  compact?: boolean
-  placement?: 'top' | 'bottom'
-}) {
+function UserMenu({ user, compact = false }: { user: SessionUser; compact?: boolean }) {
   const [open, setOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
   const navigate = useNavigate()
   const clearToken = useAuthStore((state) => state.clearToken)
-  const { theme, setTheme } = useTheme()
+  const hasAdminAccess = adminNavigation.some((item) => hasPermission(user, item.permission))
   const logout = useMutation({
     mutationFn: () => api.delete<void>('/logout'),
     onSettled: () => {
@@ -146,144 +135,112 @@ function UserMenu({ user, compact = false, placement = 'top' }: {
     <div className="relative" ref={menuRef}>
       <button
         type="button"
-        className={[
-          'flex min-h-11 w-full items-center rounded-[var(--radius-control)] text-left outline-none transition-colors',
-          'hover:bg-[var(--color-surface-muted)] focus-visible:ring-2 focus-visible:ring-[var(--color-focus)] focus-visible:ring-offset-2',
-          compact ? 'justify-center px-1' : 'gap-3 px-2',
-        ].join(' ')}
+        className="flex min-h-10 items-center gap-2 rounded-[var(--radius-control)] px-1.5 text-left outline-none transition-colors hover:bg-slate-100 focus-visible:ring-2 focus-visible:ring-blue-500"
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
-        title={compact ? name : undefined}
       >
-        <span className="grid size-9 shrink-0 place-items-center rounded-full bg-[var(--color-primary-soft)] font-semibold text-[var(--color-primary)]" aria-hidden>
+        <span className="grid size-8 shrink-0 place-items-center rounded-full bg-blue-50 text-xs font-bold text-blue-700" aria-hidden>
           {name.slice(0, 1).toUpperCase()}
         </span>
         {!compact && (
-          <span className="min-w-0 flex-1">
-            <strong className="block truncate text-sm font-semibold text-[var(--color-text)]">{name}</strong>
-            <span className="block truncate text-xs text-[var(--color-text-subtle)]">@{user.username}</span>
+          <span className="hidden min-w-0 md:block">
+            <strong className="block max-w-32 truncate text-sm font-semibold text-slate-900">{name}</strong>
+            <span className="block max-w-32 truncate text-[11px] text-slate-500">平台账户</span>
           </span>
         )}
-        {!compact && <ChevronUp className={`size-4 text-[var(--color-text-subtle)] transition-transform ${open ? '' : 'rotate-180'}`} aria-hidden />}
+        {!compact && <ChevronDown className={`hidden size-4 text-slate-400 transition-transform md:block ${open ? 'rotate-180' : ''}`} aria-hidden />}
       </button>
 
       {open && (
-        <div
-          role="menu"
-          aria-label="平台账户菜单"
-          className={[
-            'absolute z-[var(--z-dropdown)] w-64 rounded-[var(--radius-panel)] border border-[var(--color-border)] bg-[var(--color-surface-raised)] p-2 shadow-[var(--shadow-popover)]',
-            placement === 'top' ? 'bottom-[calc(100%+8px)] left-0' : 'right-0 top-[calc(100%+8px)]',
-          ].join(' ')}
-        >
-          <div className="border-b border-[var(--color-border)] px-2 pb-2 pt-1">
-            <p className="truncate text-sm font-semibold text-[var(--color-text)]">{name}</p>
-            <p className="truncate text-xs text-[var(--color-text-muted)]">平台账户 · {user.username}</p>
+        <div role="menu" aria-label="平台账户菜单" className="absolute right-0 top-[calc(100%+8px)] z-[var(--z-dropdown)] w-64 rounded-[var(--radius-panel)] border border-slate-200 bg-white p-2 shadow-[var(--shadow-popover)]">
+          <div className="border-b border-slate-200 px-2 pb-2 pt-1">
+            <p className="truncate text-sm font-semibold text-slate-900">{name}</p>
+            <p className="truncate text-xs text-slate-500">用户名 · {user.username}</p>
           </div>
-          <button
-            type="button"
-            role="menuitem"
-            className="mt-1 flex min-h-11 w-full items-center gap-3 rounded-[var(--radius-control)] px-2 text-sm text-[var(--color-text-muted)] outline-none hover:bg-[var(--color-surface-muted)] hover:text-[var(--color-text)] focus-visible:ring-2 focus-visible:ring-[var(--color-focus)]"
-            onClick={() => { setOpen(false); navigate('/settings') }}
-          >
-            <UserRound className="size-4.5" strokeWidth={1.8} aria-hidden />平台账户设置
+          <button type="button" role="menuitem" className="mt-1 flex min-h-10 w-full items-center gap-3 rounded-[var(--radius-control)] px-2 text-sm text-slate-600 outline-none hover:bg-slate-100 hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-blue-500" onClick={() => { setOpen(false); navigate('/settings') }}>
+            <UserRound className="size-4.5" strokeWidth={1.7} aria-hidden />个人设置
           </button>
-          <div className="my-1 border-y border-[var(--color-border)] py-1" aria-label="主题">
-            {themeOptions.map(({ value, label, icon: Icon }) => (
-              <button
-                key={value}
-                type="button"
-                role="menuitemradio"
-                aria-checked={theme === value}
-                className="flex min-h-11 w-full items-center gap-3 rounded-[var(--radius-control)] px-2 text-sm text-[var(--color-text-muted)] outline-none hover:bg-[var(--color-surface-muted)] hover:text-[var(--color-text)] focus-visible:ring-2 focus-visible:ring-[var(--color-focus)]"
-                onClick={() => setTheme(value)}
-              >
-                <Icon className="size-4.5" strokeWidth={1.8} aria-hidden />
-                <span className="flex-1 text-left">{label}</span>
-                {theme === value && <span className="text-xs font-semibold text-[var(--color-primary)]">当前</span>}
-              </button>
-            ))}
+          {hasAdminAccess && (
+            <button type="button" role="menuitem" className="flex min-h-10 w-full items-center gap-3 rounded-[var(--radius-control)] px-2 text-sm text-slate-600 outline-none hover:bg-slate-100 hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-blue-500" onClick={() => { setOpen(false); navigate('/admin') }}>
+              <LayoutDashboard className="size-4.5" strokeWidth={1.7} aria-hidden />管理后台
+            </button>
+          )}
+          <div className="my-1 border-t border-slate-200 pt-1">
+            <button type="button" role="menuitem" className="flex min-h-10 w-full items-center gap-3 rounded-[var(--radius-control)] px-2 text-sm text-red-600 outline-none hover:bg-red-50 focus-visible:ring-2 focus-visible:ring-blue-500" disabled={logout.isPending} onClick={() => logout.mutate()}>
+              <LogOut className="size-4.5" strokeWidth={1.7} aria-hidden />{logout.isPending ? '正在退出…' : '退出登录'}
+            </button>
           </div>
-          <button
-            type="button"
-            role="menuitem"
-            className="flex min-h-11 w-full items-center gap-3 rounded-[var(--radius-control)] px-2 text-sm text-[var(--color-danger)] outline-none hover:bg-[var(--color-danger-soft)] focus-visible:ring-2 focus-visible:ring-[var(--color-focus)]"
-            disabled={logout.isPending}
-            onClick={() => logout.mutate()}
-          >
-            <LogOut className="size-4.5" strokeWidth={1.8} aria-hidden />{logout.isPending ? '正在退出…' : '退出登录'}
-          </button>
         </div>
       )}
     </div>
   )
 }
 
-function DesktopSidebar({ user, adminItems }: { user: SessionUser; adminItems: NavigationItem[] }) {
-  const [collapsed, setCollapsed] = useState(false)
+function DesktopHeader({ user, adminItems }: { user: SessionUser; adminItems: NavigationItem[] }) {
   const sendAllowed = hasPermission(user, 'email:send')
+  const mailboxAllowed = hasPermission(user, 'account:query')
   return (
-    <aside
-      className={[
-        'hidden h-dvh shrink-0 flex-col border-r border-[var(--color-border)] bg-[var(--color-surface)] md:flex',
-        'w-[72px]',
-        collapsed ? 'lg:w-[72px]' : 'lg:w-[216px] xl:w-56',
-      ].join(' ')}
-      aria-label="主导航"
-    >
-      <div className={`flex h-16 shrink-0 items-center border-b border-[var(--color-border)] ${collapsed ? 'justify-center px-2' : 'gap-3 px-4 md:justify-center lg:justify-start'}`}>
-        <span className="grid size-9 shrink-0 place-items-center rounded-[var(--radius-control)] bg-[var(--color-primary)] text-[var(--color-on-primary)]">
-          <Mail className="size-5" strokeWidth={1.8} aria-hidden />
+    <header className="col-span-2 hidden h-14 items-center border-b border-slate-200 bg-white md:flex">
+      <NavLink to="/inbox" className="flex h-full w-[72px] shrink-0 items-center justify-center border-r border-slate-200 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 lg:w-[188px] lg:justify-start lg:gap-2.5 lg:px-4">
+        <span className="grid size-8 place-items-center rounded-[var(--radius-control)] bg-blue-600 text-white">
+          <Mail className="size-[18px]" strokeWidth={1.9} aria-hidden />
         </span>
-        {!collapsed && <strong className="hidden truncate text-base font-semibold text-[var(--color-text)] lg:block">HPC Mail</strong>}
-      </div>
-
-      <div className="min-h-0 flex-1 overflow-y-auto px-2 py-3">
+        <strong className="hidden text-[15px] font-bold tracking-tight text-slate-950 lg:block">HPC Mail</strong>
+      </NavLink>
+      <nav className="flex h-full min-w-0 items-center gap-1 px-3" aria-label="快捷入口">
+        <NavLink to="/inbox" className="flex min-h-9 items-center rounded-md px-3 text-sm font-semibold text-slate-700 hover:bg-slate-100">邮件</NavLink>
+        {mailboxAllowed && <NavLink to="/mailboxes" className="flex min-h-9 items-center rounded-md px-3 text-sm font-semibold text-slate-700 hover:bg-slate-100">邮箱</NavLink>}
+        {adminItems.length > 0 && <NavLink to="/admin" className="flex min-h-9 items-center rounded-md px-3 text-sm font-semibold text-slate-700 hover:bg-slate-100">管理</NavLink>}
+      </nav>
+      <div className="ml-auto flex items-center gap-2 px-3">
         {sendAllowed && (
-          <Button className={`mb-3 w-full ${collapsed ? 'px-0' : 'md:px-0 lg:px-4'}`} size="md" onClick={openComposer} aria-label="写邮件">
-            <PenLine className="size-5 shrink-0" strokeWidth={1.8} aria-hidden />
-            {!collapsed && <span className="hidden lg:inline">写邮件</span>}
+          <Button size="sm" onClick={openComposer}>
+            <PenLine className="size-4" strokeWidth={1.8} aria-hidden />写邮件
           </Button>
         )}
-        <nav className="grid gap-1" aria-label="邮件">
-          {primaryNavigation
-            .filter((item) => hasPermission(user, item.permission))
-            .map((item) => <NavigationLink key={item.path} item={item} collapsed={collapsed} />)}
+        <UserMenu user={user} />
+      </div>
+    </header>
+  )
+}
+
+function DesktopSidebar({ user, adminItems }: { user: SessionUser; adminItems: NavigationItem[] }) {
+  return (
+    <aside className="hidden min-h-0 border-r border-slate-200 bg-white md:flex md:flex-col" aria-label="主导航">
+      <div className="min-h-0 flex-1 overflow-y-auto px-2 py-3">
+        <p className="mb-1 hidden px-3 text-[11px] font-medium text-slate-400 lg:block">邮件</p>
+        <nav className="grid gap-0.5" aria-label="邮件功能">
+          {primaryNavigation.filter((item) => hasPermission(user, item.permission)).map((item) => <NavigationLink key={item.path} item={item} />)}
         </nav>
         {adminItems.length > 0 && (
-          <div className="mt-5 border-t border-[var(--color-border)] pt-4">
-            {!collapsed && <p className="mb-2 hidden px-3 text-xs font-semibold text-[var(--color-text-subtle)] lg:block">管理</p>}
-            <nav className="grid gap-1" aria-label="管理">
-              {adminItems.map((item) => <NavigationLink key={item.path} item={item} collapsed={collapsed} />)}
+          <div className="mt-4 border-t border-slate-200 pt-3">
+            <p className="mb-1 hidden px-3 text-[11px] font-medium text-slate-400 lg:block">平台管理</p>
+            <nav className="grid gap-0.5" aria-label="平台管理">
+              {adminItems.map((item) => <NavigationLink key={item.path} item={item} />)}
             </nav>
           </div>
         )}
       </div>
-
-      <div className="shrink-0 border-t border-[var(--color-border)] p-2">
-        <UserMenu user={user} compact={collapsed} />
-        <button
-          type="button"
-          className="mt-1 hidden min-h-11 w-full items-center justify-center gap-2 rounded-[var(--radius-control)] text-sm text-[var(--color-text-subtle)] outline-none hover:bg-[var(--color-surface-muted)] hover:text-[var(--color-text)] focus-visible:ring-2 focus-visible:ring-[var(--color-focus)] lg:flex"
-          onClick={() => setCollapsed((value) => !value)}
-          aria-label={collapsed ? '展开侧栏' : '折叠侧栏'}
-        >
-          {collapsed ? <PanelLeftOpen className="size-5" aria-hidden /> : <PanelLeftClose className="size-5" aria-hidden />}
-          {!collapsed && <span>折叠侧栏</span>}
-        </button>
+      <div className="border-t border-slate-200 px-3 py-2 text-center text-[11px] text-slate-400 lg:text-left">
+        <span className="inline-flex items-center gap-2"><span className="size-1.5 rounded-full bg-emerald-600" aria-hidden /><span className="hidden lg:inline">服务运行正常</span></span>
       </div>
     </aside>
   )
 }
 
 function MobileHeader({ user }: { user: SessionUser }) {
+  const sendAllowed = hasPermission(user, 'email:send')
   return (
-    <header className="flex min-w-0 items-center justify-between border-b border-[var(--color-border)] bg-[var(--color-surface)] px-4 md:hidden">
-      <span className="flex min-w-0 items-center gap-2 font-semibold text-[var(--color-text)]">
-        <Mail className="size-5 shrink-0 text-[var(--color-primary)]" strokeWidth={1.8} aria-hidden />HPC Mail
-      </span>
-      <UserMenu user={user} compact placement="bottom" />
+    <header className="flex min-w-0 items-center border-b border-slate-200 bg-white px-3 md:hidden">
+      <NavLink to="/inbox" className="flex min-w-0 items-center gap-2 font-bold text-slate-950">
+        <span className="grid size-8 place-items-center rounded-[var(--radius-control)] bg-blue-600 text-white"><Mail className="size-[18px]" aria-hidden /></span>
+        <span>HPC Mail</span>
+      </NavLink>
+      <div className="ml-auto flex items-center gap-1">
+        {sendAllowed && <Button size="icon" variant="ghost" aria-label="写邮件" onClick={openComposer}><PenLine className="size-5" aria-hidden /></Button>}
+        <UserMenu user={user} compact />
+      </div>
     </header>
   )
 }
@@ -291,33 +248,17 @@ function MobileHeader({ user }: { user: SessionUser }) {
 function MobileNavigation({ user }: { user: SessionUser }) {
   const location = useLocation()
   const sendAllowed = hasPermission(user, 'email:send')
-  const navigationItem = (path: string) => primaryNavigation.find((item) => item.path === path)!
-  const items = [
-    navigationItem('/inbox'),
-    navigationItem('/sent'),
-    sendAllowed ? null : navigationItem('/starred'),
-    navigationItem('/settings'),
-  ].filter(Boolean) as NavigationItem[]
-  const mobileLink = (item: NavigationItem) => {
-    const Icon = item.icon
-    const active = navIsActive(location.pathname, item.path)
-    return (
-      <NavLink key={item.path} to={item.path} className={`flex min-h-[60px] flex-col items-center justify-center gap-1 px-1 text-xs font-medium outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--color-focus)] ${active ? 'text-[var(--color-primary)]' : 'text-[var(--color-text-muted)]'}`} aria-current={active ? 'page' : undefined}>
-        <Icon className="size-5" strokeWidth={1.8} aria-hidden />{item.label}
-      </NavLink>
-    )
-  }
+  const items: NavigationItem[] = [primaryNavigation[0]!, primaryNavigation[1]!, primaryNavigation[3]!, primaryNavigation[5]!]
   return (
-    <nav className="grid grid-cols-4 border-t border-[var(--color-border)] bg-[var(--color-surface)] pb-[env(safe-area-inset-bottom)] md:hidden" aria-label="移动导航">
-      {items.slice(0, 2).map(mobileLink)}
-      {sendAllowed ? (
-        <button type="button" className="flex min-h-[60px] flex-col items-center justify-center gap-1 px-1 text-xs font-semibold text-[var(--color-primary)] outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--color-focus)]" onClick={openComposer}>
-          <PenLine className="size-5" strokeWidth={1.8} aria-hidden />写邮件
-        </button>
-      ) : items[2] ? (
-        mobileLink(items[2])
-      ) : null}
-      {mobileLink(items.at(-1)!)}
+    <nav className="grid grid-cols-4 border-t border-slate-200 bg-white pb-[env(safe-area-inset-bottom)] md:hidden" aria-label="移动导航">
+      {items.map((item, index) => {
+        const Icon = item.icon
+        const active = navIsActive(location.pathname, item.path)
+        if (index === 2 && sendAllowed) {
+          return <button key="compose" type="button" className="flex min-h-[60px] flex-col items-center justify-center gap-1 text-xs font-semibold text-blue-700 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500" onClick={openComposer}><PenLine className="size-5" strokeWidth={1.8} aria-hidden />写邮件</button>
+        }
+        return <NavLink key={item.path} to={item.path} aria-current={active ? 'page' : undefined} className={`relative flex min-h-[60px] flex-col items-center justify-center gap-1 text-xs font-medium outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 ${active ? 'text-blue-700' : 'text-slate-500'}`}><Icon className="size-5" strokeWidth={active ? 2 : 1.7} aria-hidden />{item.label}{active && <span className="absolute inset-x-[30%] top-0 h-0.5 rounded-full bg-blue-600" aria-hidden />}</NavLink>
+      })}
     </nav>
   )
 }
@@ -325,14 +266,11 @@ function MobileNavigation({ user }: { user: SessionUser }) {
 function SessionError({ onRetry }: { onRetry: () => void }) {
   const clearToken = useAuthStore((state) => state.clearToken)
   return (
-    <main className="grid min-h-dvh place-items-center px-4 py-12">
-      <div className="max-w-md text-center">
-        <h1 className="text-xl font-semibold text-[var(--color-text)]">无法载入工作台</h1>
-        <p className="mt-2 text-sm leading-6 text-[var(--color-text-muted)]">网络连接或服务暂时不可用。重试不会清除当前会话。</p>
-        <div className="mt-6 flex flex-wrap justify-center gap-2">
-          <Button onClick={onRetry}>重新加载</Button>
-          <Button variant="secondary" onClick={clearToken}>返回登录</Button>
-        </div>
+    <main className="grid min-h-dvh place-items-center bg-slate-50 px-4 py-12">
+      <div className="app-panel max-w-md p-8 text-center">
+        <h1 className="text-xl font-semibold text-slate-950">无法载入工作台</h1>
+        <p className="mt-2 text-sm leading-6 text-slate-600">网络连接或服务暂时不可用。重试不会清除当前会话。</p>
+        <div className="mt-6 flex flex-wrap justify-center gap-2"><Button onClick={onRetry}>重新加载</Button><Button variant="secondary" onClick={clearToken}>返回登录</Button></div>
       </div>
     </main>
   )
@@ -351,11 +289,7 @@ export function AppShell() {
     staleTime: 60_000,
     retry: (count, error) => !(error instanceof ApiError && error.unauthorized) && count < 2,
   })
-
-  const adminItems = useMemo(
-    () => session.data ? adminNavigation.filter((item) => hasPermission(session.data!, item.permission)) : [],
-    [session.data],
-  )
+  const adminItems = useMemo(() => session.data ? adminNavigation.filter((item) => hasPermission(session.data!, item.permission)) : [], [session.data])
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
@@ -363,9 +297,7 @@ export function AppShell() {
       if (heading) {
         if (!heading.hasAttribute('tabindex')) heading.setAttribute('tabindex', '-1')
         heading.focus({ preventScroll: true })
-      } else {
-        contentRef.current?.focus({ preventScroll: true })
-      }
+      } else contentRef.current?.focus({ preventScroll: true })
     })
     return () => cancelAnimationFrame(frame)
   }, [location.pathname])
@@ -376,12 +308,8 @@ export function AppShell() {
     try {
       destination = sessionStorage.getItem('hpc-mail:return-path') || ''
       sessionStorage.removeItem('hpc-mail:return-path')
-    } catch {
-      return
-    }
-    if (destination.startsWith('/') && !destination.startsWith('//') && destination !== `${location.pathname}${location.search}`) {
-      navigate(destination, { replace: true })
-    }
+    } catch { return }
+    if (destination.startsWith('/') && !destination.startsWith('//') && destination !== `${location.pathname}${location.search}`) navigate(destination, { replace: true })
   }, [location.pathname, location.search, navigate, session.data])
 
   useEffect(() => {
@@ -389,10 +317,7 @@ export function AppShell() {
     const shortcut = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null
       if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey || target?.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target?.tagName || '')) return
-      if (event.key.toLowerCase() === 'c') {
-        event.preventDefault()
-        openComposer()
-      }
+      if (event.key.toLowerCase() === 'c') { event.preventDefault(); openComposer() }
     }
     window.addEventListener('keydown', shortcut)
     return () => window.removeEventListener('keydown', shortcut)
@@ -405,20 +330,15 @@ export function AppShell() {
   return (
     <SessionContext.Provider value={session.data}>
       <a className="skip-link" href="#main-content">跳到主要内容</a>
-      <div className="grid h-dvh min-w-0 grid-rows-[52px_minmax(0,1fr)_calc(60px+env(safe-area-inset-bottom))] overflow-hidden bg-[var(--color-canvas)] md:flex md:grid-rows-none">
-        <DesktopSidebar user={session.data} adminItems={adminItems} />
+      <div className="grid h-dvh min-w-0 grid-cols-1 grid-rows-[52px_minmax(0,1fr)_calc(60px+env(safe-area-inset-bottom))] overflow-hidden bg-slate-50 md:grid-cols-[72px_minmax(0,1fr)] md:grid-rows-[56px_minmax(0,1fr)] lg:grid-cols-[188px_minmax(0,1fr)]">
+        <DesktopHeader user={session.data} adminItems={adminItems} />
         <MobileHeader user={session.data} />
-        <div id="main-content" ref={contentRef} className="min-h-0 min-w-0 overflow-hidden outline-none md:flex-1" tabIndex={-1}>
-          <Suspense fallback={<RouteLoading />}>
-            <Outlet />
-          </Suspense>
+        <DesktopSidebar user={session.data} adminItems={adminItems} />
+        <div id="main-content" ref={contentRef} className="min-h-0 min-w-0 overflow-hidden bg-slate-50 outline-none" tabIndex={-1}>
+          <Suspense fallback={<RouteLoading />}><Outlet /></Suspense>
         </div>
         <MobileNavigation user={session.data} />
-        {composerOpen && (
-          <Suspense fallback={null}>
-            <ComposeSheet />
-          </Suspense>
-        )}
+        {composerOpen && <Suspense fallback={null}><ComposeSheet /></Suspense>}
       </div>
     </SessionContext.Provider>
   )

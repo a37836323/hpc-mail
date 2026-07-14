@@ -202,19 +202,20 @@ export function MailListPage({
 
   return (
     <main
-      className="flex h-full min-h-0 flex-col bg-slate-50"
+      className="app-page flex h-full min-h-0 flex-col overflow-hidden"
       aria-labelledby={`${timeline}-heading`}
     >
-      <header className="border-b border-slate-200 bg-white px-4 py-4 sm:px-6">
+      <div className="mx-auto flex h-full min-h-0 w-full max-w-[1480px] flex-col gap-3">
+      <header className="shrink-0">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
             <h1
               id={`${timeline}-heading`}
-              className="text-xl font-semibold tracking-tight text-slate-950"
+              className="app-page-title"
             >
               {title}
             </h1>
-            <p className="mt-1 text-sm text-slate-500">{description}</p>
+            <p className="app-page-description mt-1">{description}</p>
           </div>
           <div className="flex min-h-11 items-center gap-1">
             {timeline !== "starred" && (
@@ -247,7 +248,7 @@ export function MailListPage({
           </div>
         </div>
         {timeline === "inbox" && (
-          <div className="mt-4 max-w-sm">
+          <div className="mt-3 max-w-sm">
             <MailboxFilter
               mailboxes={mailboxes.data ?? []}
               value={accountId}
@@ -260,7 +261,7 @@ export function MailListPage({
 
       {actionError && (
         <div
-          className="border-b border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
+          className="shrink-0 rounded-[var(--radius-control)] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
           role="alert"
         >
           {actionError}
@@ -268,7 +269,7 @@ export function MailListPage({
       )}
 
       <section
-        className="min-h-0 flex-1 overflow-y-auto"
+        className="app-panel min-h-0 flex-1 overflow-y-auto"
         aria-label={`${title}邮件列表`}
       >
         {query.isPending ? (
@@ -293,19 +294,22 @@ export function MailListPage({
               return (
                 <li
                   key={message.emailId}
-                  className={unread ? "bg-blue-50/50" : undefined}
+                  className={unread ? "bg-blue-50/40" : undefined}
                 >
-                  <article className="group relative flex min-h-[76px] items-stretch sm:min-h-[68px]">
+                  <article className="group relative flex min-h-[76px] items-stretch sm:min-h-[64px]">
                     <button
                       type="button"
-                      className="min-w-0 flex-1 px-4 py-3 text-left outline-none transition-colors hover:bg-slate-50 focus-visible:bg-blue-50 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 sm:grid sm:grid-cols-[minmax(10rem,0.7fr)_minmax(12rem,1.4fr)_auto] sm:items-center sm:gap-5 sm:px-6"
+                      className="min-w-0 flex-1 px-3 py-3 text-left outline-none transition-colors hover:bg-slate-50 focus-visible:bg-blue-50 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 sm:grid sm:grid-cols-[minmax(12rem,0.72fr)_minmax(14rem,1.4fr)_auto] sm:items-center sm:gap-4 sm:px-4"
                       onClick={() => openMessage(message)}
                       aria-label={`打开邮件：${message.subject || "无主题"}`}
                     >
-                      <span className="flex min-w-0 items-center gap-2">
+                      <span className="flex min-w-0 items-center gap-2.5">
+                        <span className={`grid size-8 shrink-0 place-items-center rounded-full text-xs font-bold ${unread ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"}`} aria-hidden>
+                          {messagePeer(message, timeline).slice(0, 1).toUpperCase()}
+                        </span>
                         {unread && (
                           <span
-                            className="size-2 shrink-0 rounded-full bg-blue-600"
+                            className="sr-only"
                             aria-label="未读"
                           />
                         )}
@@ -341,7 +345,7 @@ export function MailListPage({
                       <Button
                         size="icon"
                         variant="ghost"
-                        className="size-11"
+                        className="size-10"
                         aria-label={message.isStar ? "取消收藏" : "收藏邮件"}
                         title={message.isStar ? "取消收藏" : "收藏邮件"}
                         disabled={starMutation.isPending}
@@ -359,7 +363,7 @@ export function MailListPage({
                       <Button
                         size="icon"
                         variant="ghost"
-                        className="size-11 text-slate-500 hover:bg-red-50 hover:text-red-700"
+                        className="size-10 text-slate-500 hover:bg-red-50 hover:text-red-700"
                         aria-label="删除邮件"
                         title="删除邮件"
                         disabled={deleteMutation.isPending}
@@ -409,6 +413,7 @@ export function MailListPage({
           })
         }
       />
+      </div>
     </main>
   );
 }

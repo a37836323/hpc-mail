@@ -33,29 +33,30 @@ export function DraftsPage() {
 
   return (
     <main
-      className="flex h-full min-h-0 flex-col bg-slate-50"
+      className="app-page flex h-full min-h-0 flex-col overflow-hidden"
       aria-labelledby="drafts-heading"
     >
-      <header className="border-b border-slate-200 bg-white px-4 py-4 sm:px-6">
+      <div className="mx-auto flex h-full min-h-0 w-full max-w-[1480px] flex-col gap-3">
+      <header className="shrink-0">
         <h1
           id="drafts-heading"
-          className="text-xl font-semibold tracking-tight text-slate-950"
+          className="app-page-title"
         >
           草稿箱
         </h1>
-        <p className="mt-1 text-sm text-slate-500">
+        <p className="app-page-description mt-1">
           草稿仅保存在当前浏览器，并按平台账户隔离。
         </p>
       </header>
       {error && (
         <div
-          className="border-b border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
+          className="shrink-0 rounded-[var(--radius-control)] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
           role="alert"
         >
           {readableError(error, "草稿操作失败，请重试。")}
         </div>
       )}
-      <section className="min-h-0 flex-1 overflow-y-auto" aria-label="草稿列表">
+      <section className="app-panel min-h-0 flex-1 overflow-y-auto" aria-label="草稿列表">
         {user.isPending || (user.isSuccess && drafts.isPending) ? (
           <div
             className="flex min-h-72 items-center justify-center gap-2 text-sm text-slate-500"
@@ -108,7 +109,7 @@ export function DraftsPage() {
               >
                 <button
                   type="button"
-                  className="min-w-0 flex-1 rounded-lg text-left outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                  className="min-w-0 flex-1 rounded-[var(--radius-control)] text-left outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                   onClick={() => openDraft(draft)}
                 >
                   <strong className="block truncate text-sm font-medium text-slate-900">
@@ -124,7 +125,7 @@ export function DraftsPage() {
                 <Button
                   size="icon"
                   variant="ghost"
-                  className="size-11"
+                  className="size-10"
                   aria-label="继续编辑草稿"
                   onClick={() => openDraft(draft)}
                 >
@@ -133,7 +134,7 @@ export function DraftsPage() {
                 <Button
                   size="icon"
                   variant="ghost"
-                  className="size-11 text-slate-500 hover:bg-red-50 hover:text-red-700"
+                  className="size-10 text-slate-500 hover:bg-red-50 hover:text-red-700"
                   aria-label="删除草稿"
                   disabled={remove.isPending}
                   onClick={() => setPendingDelete(draft)}
@@ -162,6 +163,7 @@ export function DraftsPage() {
           })
         }
       />
+      </div>
     </main>
   );
 }

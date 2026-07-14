@@ -208,28 +208,28 @@ export function LoginPage() {
   const pending = loginMutation.isPending || registerMutation.isPending;
   return (
     <main className="grid h-dvh content-start overflow-y-auto bg-slate-50 px-4 py-[max(2rem,env(safe-area-inset-top))] text-slate-950 sm:content-center sm:place-items-center sm:py-10">
-      <section className="w-full max-w-[400px]" aria-labelledby="auth-title">
-        <div className="mb-8 flex items-center justify-center gap-3">
-          <span className="grid size-10 place-items-center rounded-xl bg-blue-600 text-white">
-            <Mail className="size-5" aria-hidden="true" />
+      <section className="w-full max-w-[388px]" aria-labelledby="auth-title">
+        <div className="mb-6 flex items-center justify-center gap-2.5">
+          <span className="grid size-9 place-items-center rounded-[var(--radius-control)] bg-blue-600 text-white">
+            <Mail className="size-[18px]" strokeWidth={1.9} aria-hidden="true" />
           </span>
-          <span className="text-base font-semibold">
+          <span className="text-[15px] font-bold tracking-tight">
             {config.data?.title || "HPC Mail"}
           </span>
         </div>
         <form
-          className="grid gap-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8"
+          className="grid gap-4 rounded-[var(--radius-panel)] border border-slate-200 bg-white p-6 shadow-[var(--shadow-card)] sm:p-7"
           noValidate
           onSubmit={submit}
         >
-          <header>
+          <header className="mb-1 border-b border-slate-200 pb-5">
             <h1
               id="auth-title"
-              className="text-2xl font-semibold tracking-tight"
+              className="text-xl font-bold tracking-tight"
             >
               {mode === "login" ? "欢迎回来" : "创建平台账户"}
             </h1>
-            <p className="mt-2 text-sm leading-6 text-slate-600">
+            <p className="mt-1.5 text-sm leading-6 text-slate-500">
               {mode === "login"
                 ? "使用用户名和密码登录。"
                 : "一个账户可以管理多个域名与邮箱。"}
@@ -237,7 +237,7 @@ export function LoginPage() {
           </header>
           {errors.service && (
             <div
-              className="rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-800"
+              className="rounded-[var(--radius-control)] border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-800"
               role="alert"
             >
               {errors.service}
@@ -296,7 +296,7 @@ export function LoginPage() {
               />
               <button
                 type="button"
-                className="absolute right-0 top-0 grid size-11 place-items-center rounded-lg text-slate-500 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                className="absolute right-0 top-0 grid size-11 place-items-center rounded-[var(--radius-control)] text-slate-500 hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                 aria-label={showPassword ? "隐藏密码" : "显示密码"}
                 onClick={() => setShowPassword((value) => !value)}
               >
@@ -359,13 +359,13 @@ export function LoginPage() {
               )}
             </div>
           )}
-          <Button type="submit" className="h-11 w-full" loading={pending}>
+          <Button type="submit" className="mt-1 h-11 w-full" loading={pending}>
             {mode === "login" ? "登录" : "创建账户"}
           </Button>
           {registrationEnabled && (
             <button
               type="button"
-              className="min-h-11 text-sm text-slate-600 hover:text-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+              className="min-h-10 rounded-[var(--radius-control)] text-sm text-slate-500 hover:bg-slate-100 hover:text-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
               onClick={() =>
                 switchMode(mode === "login" ? "register" : "login")
               }

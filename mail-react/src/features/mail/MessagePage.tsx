@@ -121,8 +121,8 @@ export function MessagePage({
 
   if (!message) {
     return (
-      <main className="grid h-full min-h-80 place-items-center bg-slate-50 px-6 py-16 text-center">
-        <div className="max-w-md">
+      <main className="app-page grid h-full min-h-80 place-items-center text-center">
+        <div className="app-panel max-w-md p-8">
           <h1 className="text-lg font-semibold text-slate-950">
             无法打开这封邮件
           </h1>
@@ -143,17 +143,17 @@ export function MessagePage({
 
   return (
     <main
-      className="flex h-full min-h-0 flex-col bg-slate-50"
+      className="app-page flex h-full min-h-0 flex-col gap-3 overflow-hidden"
       aria-labelledby="message-subject"
     >
       <header
-        className="flex min-h-14 items-center gap-1 border-b border-slate-200 bg-white px-2 sm:px-4"
+        className="app-panel mx-auto flex min-h-12 w-full max-w-5xl shrink-0 items-center gap-1 px-2 sm:px-3"
         aria-label="邮件操作"
       >
         <Button
           size="icon"
           variant="ghost"
-          className="size-11"
+          className="size-10"
           aria-label="返回"
           onClick={() => (onBack ? onBack() : navigate(-1))}
         >
@@ -162,7 +162,7 @@ export function MessagePage({
         <Button
           size="icon"
           variant="ghost"
-          className="size-11 text-slate-500 hover:bg-red-50 hover:text-red-700"
+          className="size-10 text-slate-500 hover:bg-red-50 hover:text-red-700"
           aria-label="删除邮件"
           loading={deleteMutation.isPending}
           onClick={() => setDeleteOpen(true)}
@@ -172,7 +172,7 @@ export function MessagePage({
         <Button
           size="icon"
           variant="ghost"
-          className="size-11"
+          className="size-10"
           aria-label={isStar ? "取消收藏" : "收藏邮件"}
           disabled={starMutation.isPending}
           onClick={() => starMutation.mutate(!isStar)}
@@ -184,7 +184,7 @@ export function MessagePage({
         <span className="flex-1" />
         <Button
           variant="ghost"
-          className="min-h-11 px-3"
+          className="min-h-10 px-3"
           onClick={() => openReply(message)}
         >
           <Reply className="size-4.5" />
@@ -192,7 +192,7 @@ export function MessagePage({
         </Button>
         <Button
           variant="ghost"
-          className="min-h-11 px-3"
+          className="min-h-10 px-3"
           onClick={() => openForward(message)}
         >
           <Forward className="size-4.5" />
@@ -202,7 +202,7 @@ export function MessagePage({
 
       {actionError && (
         <div
-          className="border-b border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
+          className="mx-auto w-full max-w-5xl shrink-0 rounded-[var(--radius-control)] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
           role="alert"
         >
           {actionError}
@@ -210,14 +210,14 @@ export function MessagePage({
       )}
 
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <article className="mx-auto min-h-full w-full max-w-5xl bg-white sm:my-5 sm:min-h-0 sm:w-[calc(100%-2rem)] sm:overflow-hidden sm:rounded-2xl sm:border sm:border-slate-200">
-          <header className="border-b border-slate-200 bg-slate-50/80 px-4 py-6 sm:px-8 sm:py-8">
+        <article className="app-panel mx-auto min-h-full w-full max-w-5xl overflow-hidden sm:min-h-0">
+          <header className="border-b border-slate-200 bg-slate-50 px-4 py-6 sm:px-7 sm:py-7">
             <p className="text-xs font-semibold uppercase tracking-wider text-blue-700">
               邮件详情
             </p>
             <h1
               id="message-subject"
-              className="mt-2 break-words text-2xl font-semibold tracking-tight text-slate-950 sm:text-3xl"
+              className="mt-2 break-words text-2xl font-bold tracking-tight text-slate-950 sm:text-[1.75rem]"
             >
               {message.subject || "无主题"}
             </h1>
@@ -248,7 +248,7 @@ export function MessagePage({
             </dl>
             {delivery && (
               <div
-                className={`mt-5 rounded-xl border px-3 py-2.5 text-sm ${message.status === 3 ? "border-red-200 bg-red-50 text-red-800" : "border-amber-200 bg-amber-50 text-amber-900"}`}
+                className={`mt-5 rounded-[var(--radius-control)] border px-3 py-2.5 text-sm ${message.status === 3 ? "border-red-200 bg-red-50 text-red-800" : "border-amber-200 bg-amber-50 text-amber-900"}`}
                 role="status"
               >
                 {delivery}
@@ -257,7 +257,7 @@ export function MessagePage({
           </header>
 
           <section
-            className="min-h-56 px-4 py-6 sm:px-8 sm:py-8"
+            className="min-h-56 px-4 py-6 sm:px-7 sm:py-7"
             aria-label="邮件正文"
           >
             <div className="mb-4 flex justify-end">
@@ -318,7 +318,7 @@ export function MessagePage({
                       key={
                         attachment.attId || `${attachment.filename}-${index}`
                       }
-                      className="flex min-h-14 min-w-0 items-center gap-3 rounded-xl border border-slate-200 px-3 py-2"
+                      className="flex min-h-14 min-w-0 items-center gap-3 rounded-[var(--radius-control)] border border-slate-200 px-3 py-2"
                     >
                       <Paperclip className="size-4.5 shrink-0 text-blue-600" />
                       <span className="min-w-0 flex-1">
@@ -330,7 +330,7 @@ export function MessagePage({
                         </small>
                       </span>
                       <a
-                        className="grid size-11 shrink-0 place-items-center rounded-xl text-slate-600 outline-none hover:bg-slate-100 focus-visible:ring-2 focus-visible:ring-blue-500"
+                        className="grid size-11 shrink-0 place-items-center rounded-[var(--radius-control)] text-slate-600 outline-none hover:bg-slate-100 focus-visible:ring-2 focus-visible:ring-blue-500"
                         href={objectUrl(attachment.key, config.data)}
                         download={attachment.filename}
                         aria-label={`下载附件 ${attachment.filename}`}

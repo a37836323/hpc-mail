@@ -305,19 +305,20 @@ export function ApiControlPage() {
 
   return (
     <main
-      className="h-full min-h-0 overflow-y-auto bg-slate-50"
+      className="app-page h-full min-h-0 overflow-y-auto"
       aria-labelledby="api-control-heading"
     >
-      <header className="border-b border-slate-200 bg-white px-4 py-5 sm:px-6">
+      <div className="mx-auto w-full max-w-[1480px]">
+      <header className="mb-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h1
               id="api-control-heading"
-              className="text-xl font-semibold tracking-tight text-slate-950"
+              className="app-page-title"
             >
               API 控制
             </h1>
-            <p className="mt-1 text-sm text-slate-500">
+            <p className="app-page-description mt-1">
               管理公共 API、访问密钥、调用审计与本地测试。
             </p>
           </div>
@@ -328,10 +329,10 @@ export function ApiControlPage() {
         </div>
       </header>
 
-      <div className="mx-auto w-full max-w-7xl space-y-5 px-4 py-5 sm:px-6">
+      <div className="w-full space-y-4">
         {(operationError || formError) && (
           <div
-            className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-800"
+            className="flex items-start gap-2 rounded-[var(--radius-control)] border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-800"
             role="alert"
           >
             <ShieldAlert className="mt-0.5 size-4 shrink-0" />
@@ -345,13 +346,13 @@ export function ApiControlPage() {
         )}
 
         <section
-          className="grid gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(13rem,.65fr)_minmax(13rem,.65fr)]"
+          className="grid grid-cols-2 gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(13rem,.65fr)_minmax(13rem,.65fr)]"
           aria-label="API 概览"
         >
-          <article className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
+          <article className="app-panel col-span-2 p-4 sm:p-5 lg:col-span-1">
             <div className="flex items-start gap-3">
               <span
-                className={`grid size-10 shrink-0 place-items-center rounded-xl ${config.data?.enabled ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}
+                className={`grid size-9 shrink-0 place-items-center rounded-[var(--radius-control)] ${config.data?.enabled ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}
               >
                 <Power className="size-5" />
               </span>
@@ -373,7 +374,7 @@ export function ApiControlPage() {
                 {config.data?.enabled ? "停用服务" : "启用服务"}
               </Button>
             </div>
-            <div className="mt-4 flex min-w-0 items-center gap-2 rounded-xl bg-slate-50 px-3 py-2">
+            <div className="mt-4 flex min-w-0 items-center gap-2 rounded-[var(--radius-control)] bg-slate-50 px-3 py-2">
               <code className="min-w-0 flex-1 truncate text-xs text-slate-700">
                 {apiBaseUrl}
               </code>
@@ -388,7 +389,7 @@ export function ApiControlPage() {
               </Button>
             </div>
           </article>
-          <article className="rounded-2xl border border-slate-200 bg-white p-4">
+          <article className="app-panel p-4">
             <KeyRound className="size-5 text-blue-600" />
             <p className="mt-4 text-xs font-medium text-slate-500">活动密钥</p>
             <strong className="mt-1 block text-3xl font-semibold text-slate-950">
@@ -398,7 +399,7 @@ export function ApiControlPage() {
               共 {config.data?.totalKeys ?? 0} 个
             </small>
           </article>
-          <article className="rounded-2xl border border-slate-200 bg-white p-4">
+          <article className="app-panel p-4">
             <Activity className="size-5 text-blue-600" />
             <p className="mt-4 text-xs font-medium text-slate-500">
               24 小时调用
@@ -412,10 +413,10 @@ export function ApiControlPage() {
           </article>
         </section>
 
-        <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+        <section className="app-panel overflow-hidden">
           <div className="flex flex-col gap-3 border-b border-slate-200 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-4">
             <div
-              className="grid grid-cols-3 gap-1 rounded-xl bg-slate-100 p-1"
+              className="grid grid-cols-3 gap-1 rounded-[var(--radius-control)] bg-slate-100 p-1"
               role="tablist"
               aria-label="API 控制"
             >
@@ -431,7 +432,7 @@ export function ApiControlPage() {
                   type="button"
                   role="tab"
                   aria-selected={tab === value}
-                  className={`flex min-h-10 items-center justify-center gap-1.5 rounded-lg px-3 text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${tab === value ? "bg-white text-slate-950 shadow-sm" : "text-slate-600 hover:text-slate-900"}`}
+                  className={`flex min-h-10 items-center justify-center gap-1.5 rounded-[var(--radius-sm)] px-3 text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${tab === value ? "bg-white text-blue-700 shadow-sm" : "text-slate-600 hover:text-slate-900"}`}
                   onClick={() => setTab(value)}
                 >
                   <Icon className="size-4" />
@@ -455,7 +456,7 @@ export function ApiControlPage() {
                   onChange={(event) => setSearchInput(event.target.value)}
                 />
                 <select
-                  className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm"
+                  className="h-10 rounded-[var(--radius-control)] border border-slate-300 bg-white px-3 text-sm"
                   value={status}
                   aria-label="密钥状态"
                   onChange={(event) => {
@@ -755,7 +756,7 @@ export function ApiControlPage() {
             <label className="grid gap-1.5 text-sm font-medium text-slate-700">
               绑定平台账户
               <select
-                className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm"
+                  className="h-10 rounded-[var(--radius-control)] border border-slate-300 bg-white px-3 text-sm"
                 value={createForm.userId}
                 onChange={(event) =>
                   setCreateForm((current) => ({
@@ -782,7 +783,7 @@ export function ApiControlPage() {
                 {(Object.keys(scopeLabels) as ApiScope[]).map((scope) => (
                   <label
                     key={scope}
-                    className="flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 px-3 text-sm"
+                    className="flex min-h-11 items-center gap-2 rounded-[var(--radius-control)] border border-slate-200 px-3 text-sm"
                   >
                     <input
                       type="checkbox"
@@ -827,7 +828,7 @@ export function ApiControlPage() {
             <label className="grid gap-1.5 text-sm font-medium text-slate-700">
               IP 白名单（可选）
               <textarea
-                className="min-h-20 rounded-xl border border-slate-300 px-3 py-2 text-sm"
+                className="min-h-20 rounded-[var(--radius-control)] border border-slate-300 px-3 py-2 text-sm"
                 value={createForm.allowedIps}
                 placeholder="每行或逗号分隔，最多 20 个"
                 onChange={(event) =>
@@ -868,11 +869,11 @@ export function ApiControlPage() {
               请立即复制。关闭后无法再次查看完整密钥，只能重新创建。
             </DialogDescription>
           </DialogHeader>
-          <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          <div className="rounded-[var(--radius-control)] border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
             <strong>只显示这一次</strong>
             <p className="mt-1">不要将密钥写入前端代码、聊天记录或公开仓库。</p>
           </div>
-          <div className="flex items-center gap-2 rounded-xl bg-slate-950 p-3">
+          <div className="flex items-center gap-2 rounded-[var(--radius-control)] bg-slate-950 p-3">
             <code className="min-w-0 flex-1 break-all text-xs text-slate-100">
               {createdSecret}
             </code>
@@ -916,6 +917,7 @@ export function ApiControlPage() {
           })
         }
       />
+      </div>
     </main>
   );
 }

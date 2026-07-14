@@ -11,17 +11,17 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const variants: Record<ButtonVariant, string> = {
-  primary: 'bg-blue-600 text-white shadow-sm hover:bg-blue-700 focus-visible:ring-blue-500',
-  secondary: 'border border-slate-300 bg-white text-slate-800 shadow-sm hover:bg-slate-50 focus-visible:ring-blue-500',
-  ghost: 'text-slate-700 hover:bg-slate-100 focus-visible:ring-slate-400',
-  danger: 'bg-red-600 text-white shadow-sm hover:bg-red-700 focus-visible:ring-red-500',
+  primary: 'border border-blue-600 bg-blue-600 text-white hover:border-blue-700 hover:bg-blue-700 focus-visible:ring-blue-500',
+  secondary: 'border border-slate-300 bg-white text-slate-800 hover:border-blue-500 hover:bg-blue-50 hover:text-blue-700 focus-visible:ring-blue-500',
+  ghost: 'border border-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-900 focus-visible:ring-blue-500',
+  danger: 'border border-red-600 bg-red-600 text-white hover:bg-red-700 focus-visible:ring-red-500',
 }
 
 const sizes: Record<ButtonSize, string> = {
-  sm: 'h-8 rounded-lg px-3 text-sm',
-  md: 'h-10 rounded-xl px-4 text-sm',
-  lg: 'h-12 rounded-xl px-5 text-base',
-  icon: 'size-10 rounded-xl p-0',
+  sm: 'h-8 rounded-[var(--radius-control)] px-3 text-sm',
+  md: 'h-10 rounded-[var(--radius-control)] px-4 text-sm',
+  lg: 'h-11 rounded-[var(--radius-control)] px-5 text-base',
+  icon: 'size-10 rounded-[var(--radius-control)] p-0',
 }
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
@@ -32,7 +32,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
     <button
       ref={ref}
       className={cn(
-        'inline-flex shrink-0 items-center justify-center gap-2 font-medium transition-colors',
+        'inline-flex shrink-0 items-center justify-center gap-2 font-semibold transition-[background-color,border-color,color,opacity] duration-[var(--motion-fast)]',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2',
         'disabled:pointer-events-none disabled:opacity-50',
         variants[variant],

@@ -56,7 +56,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
               if (!open) setItems((current) => current.filter(({ id }) => id !== item.id))
             }}
             className={cn(
-              'grid grid-cols-[auto_1fr_auto] items-start gap-3 rounded-xl border bg-white p-4 shadow-xl',
+              'grid grid-cols-[auto_1fr_auto] items-start gap-3 rounded-[var(--radius-panel)] border bg-white p-4 shadow-[var(--shadow-popover)]',
               'data-[state=closed]:animate-out data-[state=open]:animate-in',
               variant === 'error' ? 'border-red-200' : 'border-slate-200',
             )}

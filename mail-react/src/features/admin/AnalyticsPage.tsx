@@ -40,9 +40,9 @@ function PolylineChart({ title, series }: {
         <title>{title}</title>
         {ticks.map((tick) => {
           const tickY = y(max * tick)
-          return <g key={tick}><line x1={padding.left} y1={tickY} x2={width - padding.right} y2={tickY} stroke="#e2e8f0" /><text x={padding.left - 8} y={tickY + 4} textAnchor="end" fill="#64748b" fontSize="11">{Math.round(max * tick)}</text></g>
+          return <g key={tick}><line x1={padding.left} y1={tickY} x2={width - padding.right} y2={tickY} stroke="var(--color-border)" /><text x={padding.left - 8} y={tickY + 4} textAnchor="end" fill="var(--color-text-subtle)" fontSize="11">{Math.round(max * tick)}</text></g>
         })}
-        {dates.map((point, index) => (index % 3 === 0 || index === dates.length - 1) && <text key={point.date} x={x(index)} y={height - 8} textAnchor="middle" fill="#64748b" fontSize="11">{shortDate(point.date)}</text>)}
+        {dates.map((point, index) => (index % 3 === 0 || index === dates.length - 1) && <text key={point.date} x={x(index)} y={height - 8} textAnchor="middle" fill="var(--color-text-subtle)" fontSize="11">{shortDate(point.date)}</text>)}
         {series.map((item) => {
           const points = item.data.map((point, index) => `${x(index)},${y(Number(point.total) || 0)}`).join(' ')
           return <polyline key={item.label} points={points} fill="none" stroke={item.color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
@@ -80,8 +80,8 @@ function Metric({ label, total, active, deleted, icon: Icon }: {
 }) {
   const activeRatio = total ? Math.round((active / total) * 100) : 0
   return (
-    <article className="rounded-2xl border border-slate-200 bg-white p-4">
-      <div className="flex items-start justify-between gap-3"><div><p className="text-xs font-medium text-slate-500">{label}</p><strong className="mt-2 block text-3xl font-semibold tracking-tight text-slate-950">{number(total)}</strong></div><span className="grid size-10 place-items-center rounded-xl bg-blue-50 text-blue-700"><Icon className="size-5" /></span></div>
+    <article className="app-panel p-4">
+      <div className="flex items-start justify-between gap-3"><div><p className="text-xs font-medium text-slate-500">{label}</p><strong className="mt-2 block text-2xl font-bold tracking-tight text-slate-950">{number(total)}</strong></div><span className="grid size-9 place-items-center rounded-[var(--radius-control)] bg-blue-50 text-blue-700"><Icon className="size-4.5" /></span></div>
       <div className="mt-5 h-2 overflow-hidden rounded-full bg-slate-100" aria-label={`${label}有效占比 ${activeRatio}%`}><div className="h-full rounded-full bg-emerald-500" style={{ width: `${activeRatio}%` }} /></div>
       <div className="mt-2 flex justify-between gap-2 text-xs text-slate-500"><span>有效 {number(active)}</span><span>已删除 {number(deleted)}</span></div>
     </article>
@@ -103,20 +103,22 @@ export function AnalyticsPage() {
   }, [data])
 
   return (
-    <main className="h-full min-h-0 overflow-y-auto bg-slate-50" aria-labelledby="analytics-heading">
-      <header className="border-b border-slate-200 bg-white px-4 py-5 sm:px-6">
+    <main className="app-page h-full min-h-0 overflow-y-auto" aria-labelledby="analytics-heading">
+      <div className="mx-auto w-full max-w-[1480px]">
+      <header className="mb-5">
         <div className="flex items-start justify-between gap-4">
-          <div><h1 id="analytics-heading" className="text-xl font-semibold tracking-tight text-slate-950">分析页</h1><p className="mt-1 text-sm text-slate-500">查看平台邮件、邮箱与用户的整体趋势。</p></div>
+          <div><p className="app-eyebrow">管理后台</p><h1 id="analytics-heading" className="app-page-title mt-1">数据概览</h1><p className="app-page-description mt-1">查看平台邮件、邮箱与用户的整体趋势。</p></div>
           <Button size="icon" variant="secondary" aria-label="刷新分析数据" disabled={query.isFetching} onClick={() => void query.refetch()}><RefreshCw className={`size-4.5 ${query.isFetching ? 'animate-spin' : ''}`} /></Button>
         </div>
       </header>
 
-      <div className="mx-auto w-full max-w-7xl space-y-5 px-4 py-5 sm:px-6">
+      <div className="w-full space-y-4">
         {query.isPending ? (
           <div className="grid min-h-72 place-items-center text-sm text-slate-500" role="status">正在加载分析数据…</div>
         ) : query.isError ? (
           <div className="grid min-h-72 place-items-center text-center" role="alert"><div><h2 className="font-semibold text-slate-900">分析数据加载失败</h2><p className="mt-2 text-sm text-slate-600">{query.error instanceof Error ? query.error.message : '请检查网络连接后重试。'}</p><Button className="mt-5" variant="secondary" onClick={() => void query.refetch()}>重新加载</Button></div></div>
         ) : data ? <AnalyticsContent data={data} weekly={weekly} /> : null}
+      </div>
       </div>
     </main>
   )
@@ -134,18 +136,18 @@ function AnalyticsContent({ data, weekly }: { data: AnalyticsData; weekly: { use
       </section>
 
       <section className="grid gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(18rem,.7fr)]">
-        <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
+        <article className="app-panel overflow-hidden p-4 sm:p-5">
           <PolylineChart title="近 15 天邮件趋势" series={[
-            { label: '收件', color: '#2563eb', data: data.emailDayCount.receiveDayCount },
-            { label: '发件', color: '#059669', data: data.emailDayCount.sendDayCount },
+            { label: '收件', color: 'var(--color-primary)', data: data.emailDayCount.receiveDayCount },
+            { label: '发件', color: 'var(--color-success)', data: data.emailDayCount.sendDayCount },
           ]} />
         </article>
-        <article className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5"><SenderBars data={data.receiveRatio.nameRatio} /></article>
+        <article className="app-panel p-4 sm:p-5"><SenderBars data={data.receiveRatio.nameRatio} /></article>
       </section>
 
       <section className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(16rem,.6fr)]">
-        <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 sm:p-5"><PolylineChart title="近 15 天用户增长" series={[{ label: '新增用户', color: '#7c3aed', data: data.userDayCount }]} /></article>
-        <article className="rounded-2xl border border-slate-200 bg-white p-5">
+        <article className="app-panel overflow-hidden p-4 sm:p-5"><PolylineChart title="近 15 天用户增长" series={[{ label: '新增用户', color: 'var(--color-primary-hover)', data: data.userDayCount }]} /></article>
+        <article className="app-panel p-5">
           <div className="flex items-start justify-between gap-3"><div><p className="text-xs font-medium text-slate-500">今日发件</p><strong className="mt-2 block text-4xl font-semibold tracking-tight text-slate-950">{number(data.daySendTotal)}</strong></div><TrendingUp className="size-6 text-blue-600" /></div>
           <dl className="mt-8 grid grid-cols-3 gap-2 border-t border-slate-200 pt-4 text-center"><div><dt className="text-xs text-slate-500">近 7 天收件</dt><dd className="mt-1 font-semibold text-slate-900">{number(weekly.received)}</dd></div><div><dt className="text-xs text-slate-500">近 7 天发件</dt><dd className="mt-1 font-semibold text-slate-900">{number(weekly.sent)}</dd></div><div><dt className="text-xs text-slate-500">新增用户</dt><dd className="mt-1 font-semibold text-slate-900">{number(weekly.users)}</dd></div></dl>
           <p className="mt-5 text-xs leading-5 text-slate-500">统计时区：{Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'}</p>
