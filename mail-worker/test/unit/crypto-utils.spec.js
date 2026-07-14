@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import cryptoUtils, { PBKDF2_ITERATIONS } from '../../src/utils/crypto-utils';
+import { describe, expect, it, vi } from 'vitest';
+import cryptoUtils, { PBKDF2_ITERATIONS, PBKDF2_MAX_ITERATIONS } from '../../src/utils/crypto-utils';
 
 describe('password hashing', () => {
 	it('uses a versioned PBKDF2-SHA256 hash with the hardened iteration count', async () => {
@@ -16,6 +16,15 @@ describe('password hashing', () => {
 		await expect(cryptoUtils.verifyPassword('secret123', salt, hash)).resolves.toBe(true);
 		await expect(cryptoUtils.verifyPassword('wrong', salt, hash)).resolves.toBe(false);
 		expect(cryptoUtils.needsRehash(hash)).toBe(true);
+	});
+
+	it('rejects PBKDF2 hashes above the Cloudflare Workers limit before calling WebCrypto', async () => {
+		const derivePbkdf2 = vi.spyOn(cryptoUtils, 'derivePbkdf2');
+		const unsupportedHash = `pbkdf2-sha256$${PBKDF2_MAX_ITERATIONS + 1}$c2FsdA$aGFzaA`;
+
+		await expect(cryptoUtils.verifyPassword('secret123', 'unused', unsupportedHash)).resolves.toBe(false);
+		expect(derivePbkdf2).not.toHaveBeenCalled();
+		expect(cryptoUtils.needsRehash(unsupportedHash)).toBe(true);
 	});
 
 	it('generates independent cryptographically random credentials', () => {

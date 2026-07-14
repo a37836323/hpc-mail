@@ -4,7 +4,7 @@ import userService from '../../src/service/user-service';
 import accountService from '../../src/service/account-service';
 import settingService from '../../src/service/setting-service';
 import roleService from '../../src/service/role-service';
-import cryptoUtils from '../../src/utils/crypto-utils';
+import cryptoUtils, { PBKDF2_ITERATIONS } from '../../src/utils/crypto-utils';
 import permService from '../../src/service/perm-service';
 import { FakeKV, makeContext } from './test-utils';
 
@@ -67,7 +67,7 @@ describe('username authentication service', () => {
 		const token = await loginService.login(c, { username: 'legacy-user', password: 'secret123' });
 
 		expect(token.split('.')).toHaveLength(3);
-		expect(updateHash).toHaveBeenCalledWith(c, 9, expect.stringMatching(/^pbkdf2-sha256\$310000\$/), expect.any(String));
+		expect(updateHash).toHaveBeenCalledWith(c, 9, expect.stringMatching(new RegExp(`^pbkdf2-sha256\\$${PBKDF2_ITERATIONS}\\$`)), expect.any(String));
 		const stored = await kv.get('auth-uid:9', { type: 'json' });
 		expect(stored.user).not.toHaveProperty('password');
 		expect(stored.user).not.toHaveProperty('salt');

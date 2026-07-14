@@ -1,6 +1,8 @@
 const encoder = new TextEncoder();
 const PBKDF2_VERSION = 'pbkdf2-sha256';
-const PBKDF2_ITERATIONS = 310000;
+// Cloudflare Workers rejects PBKDF2 requests above 100,000 iterations.
+const PBKDF2_MAX_ITERATIONS = 100000;
+const PBKDF2_ITERATIONS = PBKDF2_MAX_ITERATIONS;
 const PBKDF2_KEY_BYTES = 32;
 
 function bytesToBase64url(bytes) {
@@ -63,7 +65,7 @@ const saltHashUtils = {
 				const [version, iterationValue, encodedSalt, encodedHash] = storedHash.split('$');
 				if (version !== PBKDF2_VERSION || !encodedSalt || !encodedHash) return false;
 				const iterations = Number(iterationValue);
-				if (!Number.isInteger(iterations) || iterations < 100000 || iterations > 1000000) return false;
+				if (!Number.isInteger(iterations) || iterations < 100000 || iterations > PBKDF2_MAX_ITERATIONS) return false;
 				const actual = await this.derivePbkdf2(inputPassword, encodedSalt, iterations);
 				return constantTimeEqual(actual, base64urlToBytes(encodedHash));
 			} catch (_) {
@@ -78,7 +80,7 @@ const saltHashUtils = {
 	needsRehash(storedHash) {
 		if (typeof storedHash !== 'string' || !storedHash.startsWith(`${PBKDF2_VERSION}$`)) return true;
 		const iterations = Number(storedHash.split('$')[1]);
-		return !Number.isInteger(iterations) || iterations < PBKDF2_ITERATIONS;
+		return !Number.isInteger(iterations) || iterations !== PBKDF2_ITERATIONS;
 	},
 
 	genRandomPwd(length = 16) {
@@ -98,5 +100,5 @@ const saltHashUtils = {
 	}
 };
 
-export { PBKDF2_VERSION, PBKDF2_ITERATIONS, constantTimeEqual };
+export { PBKDF2_VERSION, PBKDF2_ITERATIONS, PBKDF2_MAX_ITERATIONS, constantTimeEqual };
 export default saltHashUtils;
