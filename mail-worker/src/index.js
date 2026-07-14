@@ -4,7 +4,6 @@ import userService from './service/user-service';
 import verifyRecordService from './service/verify-record-service';
 import emailService from './service/email-service';
 import kvObjService from './service/kv-obj-service';
-import oauthService from "./service/oauth-service";
 import analysisService from './service/analysis-service';
 export default {
 	 async fetch(req, env, ctx) {
@@ -33,7 +32,6 @@ export default {
 		await verifyRecordService.clearRecord({ env })
 		await userService.resetDaySendCount({ env })
 		await emailService.completeReceiveAll({ env })
-		await oauthService.clearNoBindOathUser({ env })
 		await analysisService.refreshEchartsCache({ env })
 	},
 };

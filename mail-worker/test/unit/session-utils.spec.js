@@ -19,13 +19,12 @@ describe('absolute session lifetime', () => {
 
 	it('removes one device without extending the absolute KV expiry', async () => {
 		const now = 1_700_000_000_000;
-		const user = { userId: 7, username: 'user', password: 'secret-hash', salt: 'secret-salt' };
+		const user = { userId: 7, username: 'user', passwordHash: 'secret-hash' };
 		let authInfo = addSessionToken(null, 'device-a', user, now);
 		authInfo = addSessionToken(authInfo, 'device-b', user, now + 1_000);
 		removeSessionToken(authInfo, 'device-a');
 		expect(authInfo.tokens).toEqual(['device-b']);
-		expect(authInfo.user).not.toHaveProperty('password');
-		expect(authInfo.user).not.toHaveProperty('salt');
+		expect(authInfo.user).not.toHaveProperty('passwordHash');
 
 		const kv = new FakeKV();
 		const c = makeContext(kv);

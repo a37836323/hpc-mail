@@ -7,3 +7,14 @@ export function getTextWidth(text, font = '14px sans-serif') {
     ctx.font = font;
     return ctx.measureText(text).width;
 }
+
+export function selectLongestDisplayText(rows, key) {
+    return (rows || []).reduce((longest, row) => {
+        const value = String(row?.[key] ?? '')
+        if (value.length !== longest.length) return value.length > longest.length ? value : longest
+
+        const upperCaseCount = (value.match(/[A-Z]/g) || []).length
+        const longestUpperCaseCount = (longest.match(/[A-Z]/g) || []).length
+        return upperCaseCount > longestUpperCaseCount ? value : longest
+    }, '')
+}

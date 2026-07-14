@@ -3,6 +3,7 @@ import publicService from '../../src/service/public-service';
 import userService from '../../src/service/user-service';
 import cryptoUtils from '../../src/utils/crypto-utils';
 import loginRateLimitService from '../../src/service/login-rate-limit-service';
+import roleService from '../../src/service/role-service';
 import { FakeKV, makeContext } from './test-utils';
 
 describe('public admin token authentication', () => {
@@ -29,12 +30,12 @@ describe('public admin token authentication', () => {
 		vi.spyOn(userService, 'selectByUsernameIncludeDel').mockResolvedValue({
 			userId: 1,
 			username: 'admin',
-			email: c.env.admin,
-			password: 'stored-hash',
-			salt: 'stored-salt',
+			passwordHash: 'stored-hash',
+			type: 1,
 			status: 0,
 			isDel: 0
 		});
+		vi.spyOn(roleService, 'selectById').mockResolvedValue({ roleId: 1, key: 'admin' });
 		vi.spyOn(cryptoUtils, 'verifyPassword').mockResolvedValue(true);
 
 		await expect(publicService.verifyUser(c, { username: 'admin', password: 'correct' })).resolves.toBeUndefined();

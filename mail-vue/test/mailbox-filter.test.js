@@ -3,11 +3,11 @@ import { ALL_MAILBOXES_ID, resolveMailboxFilter } from '../src/utils/mailbox-fil
 
 describe('inbox mailbox filter', () => {
   it('uses all mailboxes by default', () => {
-    expect(resolveMailboxFilter(ALL_MAILBOXES_ID)).toEqual({ accountId: 0, allReceive: 1 })
-    expect(resolveMailboxFilter(undefined)).toEqual({ accountId: 0, allReceive: 1 })
+    expect(resolveMailboxFilter(ALL_MAILBOXES_ID)).toBe(0)
+    expect(resolveMailboxFilter(undefined)).toBe(0)
   })
 
-  it('filters a selected mailbox without inheriting its catch-all setting', () => {
-    expect(resolveMailboxFilter('7')).toEqual({ accountId: 7, allReceive: 0 })
+	it('filters a selected mailbox by its account id', () => {
+    expect(resolveMailboxFilter('7')).toBe(7)
   })
 })

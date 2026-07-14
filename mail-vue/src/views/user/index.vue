@@ -41,7 +41,7 @@
             @cell-contextmenu="handleContextmenu"
             :cell-class-name="cellClassName"
         >
-          <el-table-column :width="expandWidth" type="selection" :selectable="row => row.type !== 0" />
+          <el-table-column :width="expandWidth" type="selection" :selectable="row => isUserSelectable(row.roleKey)" />
           <el-table-column show-overflow-tooltip :tooltip-formatter="tableRowFormatter" :label="$t('username')"
                            :min-width="emailWidth">
             <template #default="props">
@@ -77,20 +77,20 @@
           <el-table-column v-if="typeShow" :label="$t('tabRole')" min-width="140" prop="type">
             <template #default="props">
               <div class="type">
-                {{ toRoleName(props.row.type) }}
+                {{ toRoleName(props.row) }}
               </div>
             </template>
           </el-table-column>
           <el-table-column :label="$t('tabSetting')" :width="settingWidth">
             <template #default="props">
-              <el-button size="small" type="primary" v-if="(props.row.type === 0 && userStore.user.type !== 0)" >{{ $t('action') }}</el-button>
+              <el-button size="small" type="primary" v-if="!canManageUser(userStore.user.role?.key, props.row.roleKey)" >{{ $t('action') }}</el-button>
               <el-dropdown v-else >
                 <el-button size="small" type="primary">{{ $t('action') }}</el-button>
                 <template #dropdown>
                   <el-dropdown-menu>
                     <el-dropdown-item @click="openSetPwd(props.row)" >{{ $t('chgPwd') }}</el-dropdown-item>
                     <el-dropdown-item @click="openSetType(props.row)" >{{ $t('perm') }}</el-dropdown-item>
-                    <template v-if="props.row.type !== 0">
+                    <template v-if="!isAdminRoleKey(props.row.roleKey)">
                       <el-dropdown-item v-if="props.row.isDel !== 1" @click="setStatus(props.row)">
                         {{ setStatusName(props.row) }}
                       </el-dropdown-item>
@@ -144,11 +144,10 @@
     </el-dialog>
     <el-dialog class="dialog" v-model="setTypeShow" :title="$t('changePerm')" @closed="resetUserForm">
       <div class="dialog-box">
-        <el-input disabled :model-value="$t('admin')" v-if="userForm.type === 0"/>
-        <el-select v-else v-model="userForm.type" placeholder="Select">
+        <el-select v-model="userForm.type" :disabled="isAdminRoleKey(userForm.roleKey)" placeholder="Select">
           <el-option v-for="item in roleList" :label="item.name" :value="item.roleId" :key="item.roleId"/>
         </el-select>
-        <el-button :disabled="userForm.type === 0" class="btn" :loading="settingLoading" type="primary" @click="setType"
+        <el-button :disabled="isAdminRoleKey(userForm.roleKey)" class="btn" :loading="settingLoading" type="primary" @click="setType"
         >{{ $t('save') }}
         </el-button>
       </div>
@@ -206,13 +205,6 @@
     </el-dialog>
     <el-dialog class="account-dialog" v-model="detailsShow" :title="t('userDetails')"  >
       <div class="details">
-        <div v-if="userDetails.oauthUsername"><span class="details-item-title">LinuxDo:</span>
-          <el-avatar :src="userDetails.avatar" :size="30" class="linuxdo-avatar"  />
-          <span style="margin: 0 10px">{{ $t('username') }}：{{userDetails.oauthUsername}}</span>
-          <span>
-                    等级：<el-tag type="success">{{userDetails.trustLevel}}</el-tag>
-                  </span>
-        </div>
         <div v-if="!sendNumShow"><span
             class="details-item-title">{{ $t('tabSent') }}:</span>{{ userDetails.sendEmailCount }}
         </div>
@@ -225,7 +217,7 @@
           }}
         </div>
         <div v-if="!typeShow"><span class="details-item-title">{{ $t('perm') }}:</span>
-          {{ toRoleName(userDetails.type) }}
+          {{ toRoleName(userDetails) }}
         </div>
         <div v-if="!statusShow">
           <span class="details-item-title">{{ $t('tabStatus') }}:</span>
@@ -300,7 +292,7 @@
               </div>
             </template>
           </el-dropdown-item>
-          <el-dropdown-item v-if="rightClickUser.type !== 0">
+          <el-dropdown-item v-if="!isAdminRoleKey(rightClickUser.roleKey)">
             <template #default>
               <div class="right-dropdown-item" v-if="rightClickUser.isDel !== 1" @click="setStatus(rightClickUser)" >
                 <Icon icon="ion:reload" v-if="rightClickUser.status" style="margin-left: 1px;margin-right: 1px" width="19" height="19" />
@@ -329,7 +321,7 @@
               </div>
             </template>
           </el-dropdown-item>
-          <el-dropdown-item v-if="rightClickUser.type !== 0" @click="delOneUser(rightClickUser)" >
+          <el-dropdown-item v-if="!isAdminRoleKey(rightClickUser.roleKey)" @click="delOneUser(rightClickUser)" >
             <template #default>
               <div class="right-dropdown-item" >
                 <Icon icon="uiw:delete" width="18" height="18" style="margin-left: 1px;margin-right: 1px" />
@@ -367,6 +359,9 @@ import {tzDayjs} from "@/utils/day.js";
 import {useRoleStore} from "@/store/role.js";
 import {useUserStore} from "@/store/user.js";
 import {useI18n} from 'vue-i18n';
+import {isValidUsername} from '@/utils/username.js';
+import {resolveDisplayName, resolveUsername} from '@/utils/user-identity.js';
+import {canManageUser, isAdminRoleKey, isUserSelectable, resolveUserRoleName} from '@/utils/user-role.js';
 
 defineOptions({
   name: 'user'
@@ -431,6 +426,7 @@ let chooseUser = {}
 const userForm = reactive({
   password: null,
   type: -1,
+  roleKey: '',
   userId: 0,
 })
 
@@ -509,7 +505,7 @@ function cellClassName({ row }) {
 
 const handleContextmenu = (row, column, cell, event) => {
 
-  if (row.type === 0 && userStore.user.type !== 0) {
+  if (!canManageUser(userStore.user.role?.key, row.roleKey)) {
     return
   }
 
@@ -652,17 +648,12 @@ const tableRowFormatter = (data) => {
   return displayUserIdentity(data.row)
 }
 
-function legacyEmailFor(user) {
-  const value = user?.legacyEmail || user?.email || ''
-  return /@auth\.invalid$/i.test(value) ? '' : value
-}
-
 function displayUserIdentity(user) {
-  return user?.username || legacyEmailFor(user) || '—'
+  return resolveUsername(user) || '—'
 }
 
 function displayUserSecondary(user) {
-  return user?.displayName || (user?.username ? legacyEmailFor(user) : '')
+  return resolveDisplayName(user)
 }
 
 function resetAddForm() {
@@ -687,7 +678,7 @@ function submit() {
     return
   }
 
-  if (!/^[A-Za-z0-9._-]{3,32}$/.test(addForm.username) || addForm.username.startsWith('.') || addForm.username.endsWith('.') || addForm.username.includes('..')) {
+  if (!isValidUsername(addForm.username)) {
     ElMessage({
       message: t('usernameInvalid'),
       type: "error",
@@ -762,17 +753,8 @@ function formatSendCount(user) {
   return count
 }
 
-function toRoleName(type) {
-
-  if (type === 0) {
-    return t('admin')
-  }
-
-  const index = roleList.findIndex(role => role.roleId === type)
-  if (index > -1) {
-    return roleList[index].name
-  }
-  return ""
+function toRoleName(user) {
+  return resolveUserRoleName(user, roleList)
 }
 
 function resetSendCount(user) {
@@ -883,6 +865,7 @@ function setType() {
   userSetType({type: userForm.type, userId: userForm.userId}).then(() => {
     chooseUser.type = userForm.type
     setTypeShow.value = false
+    getUserList(false)
     ElMessage({
       message: t('saveSuccessMsg'),
       type: "success",
@@ -897,6 +880,8 @@ function setType() {
 
 function resetUserForm() {
   userForm.password = null
+  userForm.type = -1
+  userForm.roleKey = ''
   userForm.userId = 0
 }
 
@@ -942,6 +927,7 @@ function openSetType(user) {
   chooseUser = user
   userForm.userId = user.userId
   userForm.type = user.type
+  userForm.roleKey = user.roleKey
   setTypeShow.value = true
 }
 
@@ -1153,11 +1139,6 @@ function adjustWidth() {
     font-weight: bold;
     padding-right: 10px;
   }
-}
-
-:deep(.linuxdo-avatar) {
-  position: relative !important;
-  top: 10px;
 }
 
 .account-pagination {

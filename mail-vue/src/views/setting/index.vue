@@ -4,7 +4,7 @@
       <div class="title">{{$t('profile')}}</div>
       <div class="item">
         <div>{{$t('username')}}</div>
-        <div>{{ userStore.user.username || userStore.user.legacyEmail || '—' }}</div>
+        <div>{{ userStore.user.username || '—' }}</div>
       </div>
       <div class="item">
         <div>{{$t('displayName')}}</div>
@@ -16,16 +16,16 @@
             </button>
           </span>
           <span v-else class="user-name">
-            <span >{{ userStore.user.displayName || userStore.user.name || '—' }}</span>
-            <button v-if="userStore.user.account?.accountId" type="button" class="edit-name" @click="showSetName">
+            <span >{{ userStore.user.displayName || '—' }}</span>
+            <button v-if="userStore.user.defaultAccount?.accountId" type="button" class="edit-name" @click="showSetName">
              {{$t('change')}}
             </button>
           </span>
         </div>
       </div>
-      <div v-if="userStore.user.legacyEmail" class="item">
-        <div>{{$t('legacyEmail')}}</div>
-        <div>{{ userStore.user.legacyEmail }}</div>
+      <div class="item">
+        <div>{{$t('emailAccount')}}</div>
+        <div>{{ userStore.user.defaultAccount?.email || '—' }}</div>
       </div>
       <div class="item">
         <div>{{$t('password')}}</div>
@@ -88,7 +88,7 @@ defineOptions({
 })
 
 function showSetName() {
-  accountName.value = userStore.user.displayName || userStore.user.name
+  accountName.value = userStore.user.displayName || ''
   setNameShow.value = true
 }
 
@@ -106,14 +106,14 @@ function setName() {
   setNameShow.value = false
   let name = accountName.value
 
-  if (name === (userStore.user.displayName || userStore.user.name)) {
+  if (name === userStore.user.displayName) {
     return
   }
 
-  userStore.user.name = accountName.value
+  const previousName = userStore.user.displayName
   userStore.user.displayName = accountName.value
 
-  const accountId = userStore.user.account?.accountId
+  const accountId = userStore.user.defaultAccount?.accountId
   if (!accountId) return
   accountSetName(accountId,name).then(() => {
     ElMessage({
@@ -125,7 +125,7 @@ function setName() {
     accountStore.changeUserAccountName = name
 
   }).catch(() => {
-    userStore.user.name = name
+    userStore.user.displayName = previousName
   })
 }
 

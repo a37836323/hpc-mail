@@ -44,7 +44,7 @@ describe('dynamic sender validation', () => {
 		expect(() => buildDynamicSender({ localPart: 'billing', domain: 'evil.example' }, ['hpc.email'], '*')).toThrow();
 	});
 
-	it('uses the same wildcard semantics for legacy account and receive paths', () => {
+	it('uses the same wildcard semantics for account and receive paths', () => {
 		expect(roleService.hasAvailDomainPerm('*', 'billing@hpc.email')).toBe(true);
 		expect(roleService.hasAvailDomainPerm('option.red,*', 'billing@hpc.email')).toBe(true);
 	});

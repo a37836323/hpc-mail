@@ -10,6 +10,7 @@ export const role = sqliteTable('role', {
 	availDomain: text('avail_domain').default(''),
 	sort: integer('sort'),
 	isDefault: integer('is_default').default(0),
+	isSystem: integer('is_system').default(0).notNull(),
 	createTime: text('create_time').default(sql`CURRENT_TIMESTAMP`).notNull(),
 	userId: integer('user_id'),
 	sendCount: integer('send_count'),

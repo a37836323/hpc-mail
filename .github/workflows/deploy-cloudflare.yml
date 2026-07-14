@@ -18,14 +18,16 @@ concurrency:
 
 jobs:
   deploy:
-    name: Test, migrate, and deploy
+    name: Test, deploy, and initialize schema
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
       NAME: ${{ vars.NAME }}
       CUSTOM_DOMAIN: ${{ vars.CUSTOM_DOMAIN }}
       DOMAIN: ${{ vars.DOMAIN }}
-      ADMIN: ${{ vars.ADMIN }}
+      ADMIN_USERNAME: ${{ vars.ADMIN_USERNAME }}
+      ADMIN_MAILBOX: ${{ vars.ADMIN_MAILBOX }}
+      REBUILD_DATABASE: ${{ vars.REBUILD_DATABASE || 'false' }}
       D1_DATABASE_ID: ${{ vars.D1_DATABASE_ID }}
       KV_NAMESPACE_ID: ${{ vars.KV_NAMESPACE_ID }}
       R2_BUCKET_NAME: ${{ vars.R2_BUCKET_NAME }}
@@ -33,11 +35,9 @@ jobs:
       AI_MODEL: ${{ vars.AI_MODEL || '@cf/meta/llama-3.1-8b-instruct' }}
       CF_EMAIL: ${{ vars.CF_EMAIL || 'false' }}
       ANALYSIS_CACHE: ${{ vars.ANALYSIS_CACHE || 'false' }}
-      LINUXDO_CLIENT_ID: ${{ vars.LINUXDO_CLIENT_ID }}
-      LINUXDO_CALLBACK_URL: ${{ vars.LINUXDO_CALLBACK_URL }}
-      LINUXDO_SWITCH: ${{ vars.LINUXDO_SWITCH || 'false' }}
       JWT_SECRET: ${{ secrets.JWT_SECRET }}
-      LINUXDO_CLIENT_SECRET: ${{ secrets.LINUXDO_CLIENT_SECRET }}
+      ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+      INIT_SECRET: ${{ secrets.INIT_SECRET }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
 
@@ -63,7 +63,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          required=(NAME CUSTOM_DOMAIN DOMAIN ADMIN D1_DATABASE_ID KV_NAMESPACE_ID R2_BUCKET_NAME CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_API_TOKEN JWT_SECRET)
+          required=(NAME CUSTOM_DOMAIN DOMAIN ADMIN_USERNAME ADMIN_MAILBOX D1_DATABASE_ID KV_NAMESPACE_ID R2_BUCKET_NAME CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_API_TOKEN JWT_SECRET ADMIN_PASSWORD INIT_SECRET)
           for key in "${required[@]}"; do
             if [ -z "${!key:-}" ]; then
               echo "::error::$key is not configured"
@@ -78,12 +78,34 @@ jobs:
             echo "::error::JWT_SECRET must be a URL-safe random value of at least 43 characters"
             exit 1
           fi
-          if [ "${LINUXDO_SWITCH,,}" = "true" ] && { [ -z "${LINUXDO_CLIENT_ID:-}" ] || [ -z "${LINUXDO_CLIENT_SECRET:-}" ] || [ -z "${LINUXDO_CALLBACK_URL:-}" ]; }; then
-            echo "::error::LinuxDo OAuth is enabled but its credentials are incomplete"
+          if [ "${#INIT_SECRET}" -lt 32 ]; then
+            echo "::error::INIT_SECRET must contain at least 32 characters"
+            exit 1
+          fi
+          if [ "${#ADMIN_PASSWORD}" -lt 12 ] || [ "${#ADMIN_PASSWORD}" -gt 128 ]; then
+            echo "::error::ADMIN_PASSWORD must contain 12 to 128 characters"
+            exit 1
+          fi
+          if ! [[ "$ADMIN_USERNAME" =~ ^[A-Za-z0-9._-]{3,32}$ ]] || [[ "$ADMIN_USERNAME" == .* ]] || [[ "$ADMIN_USERNAME" == *. ]] || [[ "$ADMIN_USERNAME" == *..* ]]; then
+            echo "::error::ADMIN_USERNAME must satisfy the HPC Mail username rules"
+            exit 1
+          fi
+          if [[ "$ADMIN_MAILBOX" != *@* ]] || [[ "$ADMIN_MAILBOX" == @* ]] || [[ "$ADMIN_MAILBOX" == *@ ]]; then
+            echo "::error::ADMIN_MAILBOX must be a valid mailbox address"
+            exit 1
+          fi
+          mailbox_domain="${ADMIN_MAILBOX##*@}"
+          if ! jq -e --arg domain "${mailbox_domain,,}" 'map(ascii_downcase) | index($domain) != null' <<< "$DOMAIN" >/dev/null; then
+            echo "::error::ADMIN_MAILBOX must use one of the configured DOMAIN values"
+            exit 1
+          fi
+          if [[ "${REBUILD_DATABASE,,}" != "true" && "${REBUILD_DATABASE,,}" != "false" ]]; then
+            echo "::error::REBUILD_DATABASE must be true or false"
             exit 1
           fi
           echo "::add-mask::$JWT_SECRET"
-          if [ -n "${LINUXDO_CLIENT_SECRET:-}" ]; then echo "::add-mask::$LINUXDO_CLIENT_SECRET"; fi
+          echo "::add-mask::$ADMIN_PASSWORD"
+          echo "::add-mask::$INIT_SECRET"
 
       - name: Install Worker dependencies
         working-directory: mail-worker
@@ -128,21 +150,15 @@ jobs:
             KV_NAMESPACE_ID: process.env.KV_NAMESPACE_ID,
             R2_BUCKET_NAME: process.env.R2_BUCKET_NAME,
             AI_MODEL: process.env.AI_MODEL,
-            ADMIN: process.env.ADMIN,
-            LINUXDO_CLIENT_ID: process.env.LINUXDO_CLIENT_ID || '',
-            LINUXDO_CALLBACK_URL: process.env.LINUXDO_CALLBACK_URL || '',
           }
           for (const [key, value] of Object.entries(stringValues)) {
             config = config.replaceAll(`"\${${key}}"`, JSON.stringify(value))
           }
           const domains = JSON.parse(process.env.DOMAIN)
           config = config.replace('"${DOMAIN}"', JSON.stringify(domains))
-          for (const key of ['PROJECT_LINK', 'ANALYSIS_CACHE', 'LINUXDO_SWITCH']) {
+          for (const key of ['PROJECT_LINK', 'ANALYSIS_CACHE']) {
             const value = String(process.env[key] || 'false').toLowerCase() === 'true'
             config = config.replace(`"\${${key}}"`, String(value))
-          }
-          if (!process.env.LINUXDO_CLIENT_ID || String(process.env.LINUXDO_SWITCH).toLowerCase() !== 'true') {
-            config = config.replace(/^linuxdo_client_id = .*\nlinuxdo_callback_url = .*\nlinuxdo_switch = .*\n?/m, '')
           }
           if (String(process.env.CF_EMAIL).toLowerCase() === 'true') {
             config += '\n[[send_email]]\nname = "email"\n'
@@ -165,31 +181,122 @@ jobs:
         run: |
           set -euo pipefail
           printf '%s' "$JWT_SECRET" | pnpm exec wrangler secret put jwt_secret --config wrangler-action.toml
-          if [ "${LINUXDO_SWITCH,,}" = "true" ]; then
-            printf '%s' "$LINUXDO_CLIENT_SECRET" | pnpm exec wrangler secret put linuxdo_client_secret --config wrangler-action.toml
-          fi
+          printf '%s' "$INIT_SECRET" | pnpm exec wrangler secret put init_secret --config wrangler-action.toml
 
-      - name: Run idempotent database migration
+      - name: Initialize versioned database schema
         shell: bash
         run: |
           set -euo pipefail
-          endpoint="https://${CUSTOM_DOMAIN}/api/init/${JWT_SECRET}"
+          endpoint="https://${CUSTOM_DOMAIN}/api/init"
+          rebuild=false
+          if [ "${REBUILD_DATABASE,,}" = "true" ]; then rebuild=true; fi
+          payload=$(jq -nc \
+            --arg adminUsername "$ADMIN_USERNAME" \
+            --arg adminPassword "$ADMIN_PASSWORD" \
+            --arg adminMailbox "$ADMIN_MAILBOX" \
+            --argjson rebuild "$rebuild" \
+            '{adminUsername: $adminUsername, adminPassword: $adminPassword, adminMailbox: $adminMailbox, rebuild: $rebuild}')
+          response_file=$(mktemp)
+          trap 'rm -f "$response_file"' EXIT
           for attempt in {1..10}; do
-            response=$(curl --silent --show-error --location --max-time 30 "$endpoint" || true)
-            if [ "$response" = "success" ]; then
-              echo "Database migration completed"
+            : > "$response_file"
+            status=$(curl --silent --show-error --max-time 30 \
+              --output "$response_file" --write-out '%{http_code}' \
+              --request POST "$endpoint" \
+              --header "Authorization: Bearer $INIT_SECRET" \
+              --header 'Content-Type: application/json' \
+              --data "$payload" || true)
+            if [[ "$status" =~ ^2[0-9][0-9]$ ]] && { jq -e '.code == 200' "$response_file" >/dev/null 2>&1 || grep -Eq '^[[:space:]]*success[[:space:]]*$' "$response_file"; }; then
+              echo "Versioned database schema initialized"
               exit 0
             fi
-            echo "Migration endpoint not ready (attempt $attempt/10)"
+            echo "Schema initialization endpoint not ready (attempt $attempt/10, HTTP ${status:-000})"
             sleep 6
           done
-          echo "::error::Database migration did not complete"
+          echo "::error::Versioned database schema initialization did not complete"
           exit 1
 
       - name: Verify production health
         shell: bash
         run: |
           set -euo pipefail
+          login_response=$(mktemp)
+          user_response=$(mktemp)
+          legacy_login_response=$(mktemp)
+          logout_response=$(mktemp)
+          token=''
+          cleanup() {
+            if [ -n "$token" ]; then
+              curl --silent --max-time 15 --request DELETE \
+                "https://${CUSTOM_DOMAIN}/api/logout" \
+                --header "Authorization: $token" >/dev/null || true
+            fi
+            rm -f "$login_response" "$user_response" "$legacy_login_response" "$logout_response"
+          }
+          trap cleanup EXIT
           curl --fail --silent --show-error --location --max-time 30 "https://${CUSTOM_DOMAIN}/" >/dev/null
           curl --fail --silent --show-error --location --max-time 30 "https://${CUSTOM_DOMAIN}/api/setting/websiteConfig" | jq -e '.code == 200' >/dev/null
+
+          login_payload=$(jq -nc --arg username "$ADMIN_USERNAME" --arg password "$ADMIN_PASSWORD" '{username: $username, password: $password}')
+          login_status=$(curl --silent --show-error --max-time 30 \
+            --output "$login_response" --write-out '%{http_code}' \
+            --request POST "https://${CUSTOM_DOMAIN}/api/login" \
+            --header 'Content-Type: application/json' \
+            --data "$login_payload")
+          if ! [[ "$login_status" =~ ^2[0-9][0-9]$ ]]; then
+            echo "::error::Production administrator login failed with HTTP $login_status"
+            exit 1
+          fi
+          token=$(jq -er 'select(.code == 200) | .data.token | strings | select(length > 0)' "$login_response")
+
+          user_status=$(curl --silent --show-error --max-time 30 \
+            --output "$user_response" --write-out '%{http_code}' \
+            "https://${CUSTOM_DOMAIN}/api/my/loginUserInfo" \
+            --header "Authorization: $token")
+          if ! [[ "$user_status" =~ ^2[0-9][0-9]$ ]] || ! jq -e \
+            --arg username "$ADMIN_USERNAME" \
+            --arg mailbox "$ADMIN_MAILBOX" \
+            '.code == 200
+              and .data.username == $username
+              and .data.defaultAccount.email == $mailbox
+              and .data.role.key == "admin"
+              and (.data | has("email") | not)
+              and (.data | has("account") | not)
+              and (.data | has("legacyEmail") | not)' \
+            "$user_response" >/dev/null; then
+            echo "::error::Authenticated production health check failed"
+            exit 1
+          fi
+
+          curl --fail --silent --show-error --max-time 30 \
+            "https://${CUSTOM_DOMAIN}/api/email/list?accountId=0&emailId=0&timeSort=0&size=20&type=0" \
+            --header "Authorization: $token" \
+            | jq -e '.code == 200 and (.data.list | type == "array")' >/dev/null
+          curl --fail --silent --show-error --max-time 30 \
+            "https://${CUSTOM_DOMAIN}/api/allEmail/list?emailId=0&timeSort=0&size=20&type=all" \
+            --header "Authorization: $token" \
+            | jq -e '.code == 200 and (.data.list | type == "array")' >/dev/null
+
+          legacy_login_payload=$(jq -nc --arg username "$ADMIN_MAILBOX" --arg password "$ADMIN_PASSWORD" '{username: $username, password: $password}')
+          curl --silent --show-error --max-time 30 \
+            --output "$legacy_login_response" \
+            --request POST "https://${CUSTOM_DOMAIN}/api/login" \
+            --header 'Content-Type: application/json' \
+            --data "$legacy_login_payload"
+          if ! jq -e '.code == 401 and (.data | not)' "$legacy_login_response" >/dev/null; then
+            echo "::error::Legacy email-address login is still accepted"
+            exit 1
+          fi
+          unset legacy_login_payload
+
+          logout_status=$(curl --silent --show-error --max-time 30 \
+            --output "$logout_response" --write-out '%{http_code}' \
+            --request DELETE "https://${CUSTOM_DOMAIN}/api/logout" \
+            --header "Authorization: $token")
+          if ! [[ "$logout_status" =~ ^2[0-9][0-9]$ ]] || ! jq -e '.code == 200' "$logout_response" >/dev/null; then
+            echo "::error::Production logout health check failed"
+            exit 1
+          fi
+          token=''
+          unset login_payload
           echo "Production health checks passed"

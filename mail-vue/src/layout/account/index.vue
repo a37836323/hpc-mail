@@ -28,14 +28,13 @@
             <Check v-if="item.accountId === accountStore.currentAccountId" :size="17" class="mailbox-item__check" aria-hidden="true" />
           </button>
           <div class="mailbox-item__tools">
-            <button type="button" class="mini-action" :class="{ 'mini-action--active': item.allReceive }" :aria-label="item.allReceive ? $t('catchAllEnabled') : $t('enableCatchAll')" @click="setAllReceive(item)"><Route :size="17" /></button>
             <button type="button" class="mini-action" :aria-label="$t('copy')" @click="copyAccount(item.email)"><Copy :size="17" /></button>
             <el-dropdown trigger="click">
               <button type="button" class="mini-action" :aria-label="$t('mailboxActions')"><MoreHorizontal :size="18" /></button>
               <template #dropdown><el-dropdown-menu>
                 <el-dropdown-item v-if="hasPerm('email:send')" @click="openRename(item)">{{ $t('rename') }}</el-dropdown-item>
-                <el-dropdown-item v-if="item.accountId !== userStore.user?.account?.accountId" @click="pinMailbox(item)">{{ $t('pin') }}</el-dropdown-item>
-                <el-dropdown-item v-if="item.accountId !== userStore.user?.account?.accountId && hasPerm('account:delete')" divided @click="removeMailbox(item)">{{ $t('delete') }}</el-dropdown-item>
+                <el-dropdown-item v-if="item.accountId !== userStore.user?.defaultAccount?.accountId" @click="pinMailbox(item)">{{ $t('pin') }}</el-dropdown-item>
+                <el-dropdown-item v-if="item.accountId !== userStore.user?.defaultAccount?.accountId && hasPerm('account:delete')" divided @click="removeMailbox(item)">{{ $t('delete') }}</el-dropdown-item>
               </el-dropdown-menu></template>
             </el-dropdown>
           </div>
@@ -61,23 +60,20 @@
 
 <script setup>
 import { computed, nextTick, reactive, ref, watch } from 'vue'
-import { Check, Copy, Inbox, MoreHorizontal, Plus, RefreshCw, Route, SquarePen, X } from '@lucide/vue'
+import { Check, Copy, Inbox, MoreHorizontal, Plus, RefreshCw, SquarePen, X } from '@lucide/vue'
 import { useI18n } from 'vue-i18n'
 import AppButton from '@/components/ui/AppButton.vue'
 import FormField from '@/components/ui/FormField.vue'
 import IconButton from '@/components/ui/IconButton.vue'
-import { accountAdd, accountDelete, accountList, accountSetAllReceive, accountSetAsTop, accountSetName } from '@/request/account.js'
-import { AccountAllReceiveEnum } from '@/enums/account-enum.js'
+import { accountAdd, accountDelete, accountList, accountSetAsTop, accountSetName } from '@/request/account.js'
 import { hasPerm } from '@/perm/perm.js'
 import { useAccountStore } from '@/store/account.js'
-import { useEmailStore } from '@/store/email.js'
 import { useSettingStore } from '@/store/setting.js'
 import { useUiStore } from '@/store/ui.js'
 import { useUserStore } from '@/store/user.js'
 
 const { t } = useI18n()
 const accountStore = useAccountStore()
-const emailStore = useEmailStore()
 const settingStore = useSettingStore()
 const uiStore = useUiStore()
 const userStore = useUserStore()
@@ -158,13 +154,6 @@ async function saveName() {
   try { await accountSetName(activeAccount.accountId, accountName.value); activeAccount.name = accountName.value; showRename.value = false; ElMessage({ message: t('saveSuccessMsg'), type: 'success', plain: true }) }
   finally { renameLoading.value = false }
 }
-async function setAllReceive(account) {
-  const previous = accounts.find(item => item.allReceive === AccountAllReceiveEnum.ENABLED)
-  if (previous && previous !== account) previous.allReceive = AccountAllReceiveEnum.DISABLED
-  account.allReceive = account.allReceive === AccountAllReceiveEnum.ENABLED ? AccountAllReceiveEnum.DISABLED : AccountAllReceiveEnum.ENABLED
-  try { await accountSetAllReceive(account.accountId); changeAccount(account); emailStore.emailScroll?.refreshList?.() }
-  catch { account.allReceive = account.allReceive === AccountAllReceiveEnum.ENABLED ? AccountAllReceiveEnum.DISABLED : AccountAllReceiveEnum.ENABLED; if (previous) previous.allReceive = AccountAllReceiveEnum.ENABLED }
-}
 async function pinMailbox(account) { await accountSetAsTop(account.accountId); const index = accounts.indexOf(account); accounts.splice(index, 1); accounts.unshift(account) }
 function removeMailbox(account) {
   ElMessageBox.confirm(t('delConfirm', { msg: account.email }), { confirmButtonText: t('delete'), cancelButtonText: t('cancel'), type: 'warning' }).then(async () => {
@@ -199,7 +188,6 @@ getAccountList()
 .mailbox-item__tools { padding: 2px 4px 4px 50px; display: flex; justify-content: flex-end; gap: 2px; }
 .mini-action { width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--radius-sm); color: var(--subtle-foreground); background: transparent; cursor: pointer; }
 .mini-action:hover { color: var(--foreground); background: var(--surface); }
-.mini-action--active { color: var(--success); }
 .mailbox-empty { height: 100%; padding: 28px 14px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
 .mailbox-empty__icon { width: 48px; height: 48px; display: inline-flex; align-items: center; justify-content: center; border-radius: 14px; color: var(--primary); background: var(--primary-soft); }
 .mailbox-empty h2 { margin-block-start: 16px; font-size: .9375rem; }

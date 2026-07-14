@@ -12,8 +12,9 @@ import email from '../entity/email';
 import userService from './user-service';
 import KvConst from '../const/kv-const';
 import { configuredDomains } from '../utils/sender-utils';
-import { parseLoginIdentifier } from '../utils/auth-utils';
+import { isAdminRole, isValidUsername, normalizeUsername } from '../utils/auth-utils';
 import loginRateLimitService from './login-rate-limit-service';
+import accountService from './account-service';
 
 const publicService = {
 
@@ -105,18 +106,23 @@ const publicService = {
 			throw new BizError(t('roleNotExist'));
 		}
 
-		for (const emailRow of list) {
-			if (!verifyUtils.isEmail(emailRow.email)) {
-				throw new BizError(t('notEmail'));
+		for (const userRow of list) {
+			if (!isValidUsername(userRow.username)) {
+				throw new BizError(t('invalidUsername'));
 			}
-
-			if (!domains.includes(emailUtils.getDomain(emailRow.email).toLowerCase())) {
-				throw new BizError(t('notEmailDomain'));
+			if (typeof userRow.password !== 'string') {
+				throw new BizError(t('pwdMinLength'));
+			}
+			for (const emailAddress of userRow.accounts || []) {
+				if (!verifyUtils.isEmail(emailAddress)) throw new BizError(t('notEmail'));
+				if (!domains.includes(emailUtils.getDomain(emailAddress).toLowerCase())) {
+					throw new BizError(t('notEmailDomain'));
+				}
 			}
 		}
 
-		for (const emailRow of list) {
-			const { email, roleName } = emailRow;
+		for (const userRow of list) {
+			const { username, displayName, password, roleName, accounts = [] } = userRow;
 			let type = defRole.roleId;
 
 			if (roleName) {
@@ -124,11 +130,19 @@ const publicService = {
 				type = roleRow ? roleRow.roleId : type;
 			}
 
-			await userService.add(c, {
-				email,
-				password: emailRow.password || cryptoUtils.genRandomPwd(),
+			const created = await userService.add(c, {
+				username,
+				displayName,
+				password,
 				type
 			});
+			for (const emailAddress of accounts) {
+				await accountService.insert(c, {
+					userId: created.userId,
+					email: emailAddress,
+					name: emailUtils.getName(emailAddress)
+				});
+			}
 		}
 
 	},
@@ -146,23 +160,24 @@ const publicService = {
 
 	async verifyUser(c, params) {
 
-		const { identifier, type } = parseLoginIdentifier(params);
+		const identifier = normalizeUsername(params?.username);
 		const { password } = params;
 		await loginRateLimitService.assertAllowed(c, identifier);
 		if (!identifier || !password) {
 			await loginRateLimitService.recordFailure(c, identifier);
 			throw new BizError(t('invalidCredentials'), 401);
 		}
-		const userRow = type === 'username'
+		const userRow = isValidUsername(identifier)
 			? await userService.selectByUsernameIncludeDel(c, identifier)
-			: await userService.selectByEmailIncludeDel(c, identifier);
+			: null;
 		const passwordValid = userRow
-			? await cryptoUtils.verifyPassword(password, userRow.salt, userRow.password)
+			? await cryptoUtils.verifyPassword(password, userRow.passwordHash)
 			: false;
+		const roleRow = userRow ? await roleService.selectById(c, userRow.type) : null;
 
 		if (
 			!userRow ||
-			userRow.email !== c.env.admin ||
+			!isAdminRole(roleRow) ||
 			userRow.isDel === isDel.DELETE ||
 			userRow.status === userConst.status.BAN ||
 			!passwordValid

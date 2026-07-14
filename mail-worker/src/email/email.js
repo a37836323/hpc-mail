@@ -8,9 +8,9 @@ import fileUtils from '../utils/file-utils';
 import { emailConst, isDel, settingConst } from '../const/entity-const';
 import emailUtils from '../utils/email-utils';
 import roleService from '../service/role-service';
-import userService from '../service/user-service';
 import telegramService from '../service/telegram-service';
 import aiService from '../service/ai-service';
+import { isAdminRole } from '../utils/auth-utils';
 
 export async function email(message, env, ctx) {
 
@@ -57,22 +57,23 @@ export async function email(message, env, ctx) {
 			return;
 		}
 
-		const account = await accountService.selectByEmailIncludeDel({ env: env }, message.to);
+		const accountRow = await accountService.selectByEmailIncludeDel({ env: env }, message.to);
+		const account = accountRow?.isDel === isDel.NORMAL ? accountRow : null;
+		const recipient = await emailService.resolveRecipient({ env }, account, noRecipient);
 
-		if (!account && noRecipient === settingConst.noRecipient.CLOSE) {
+		if (!recipient) {
 			message.setReject('Recipient not found');
 			return;
 		}
 
-		let userRow = {}
-
 		if (account) {
-			 userRow = await userService.selectByIdIncludeDel({ env: env }, account.userId);
-		}
 
-		if (account && userRow.email !== env.admin) {
-
-			let { banEmail, availDomain } = await roleService.selectByUserId({ env: env }, account.userId);
+			const roleRow = await roleService.selectByUserId({ env: env }, account.userId);
+			let { banEmail, availDomain } = roleRow;
+			if (isAdminRole(roleRow)) {
+				banEmail = '';
+				availDomain = '*';
+			}
 
 			if (!roleService.hasAvailDomainPerm(availDomain, message.to)) {
 				message.setReject('The recipient is not authorized to use this domain.');
@@ -109,8 +110,8 @@ export async function email(message, env, ctx) {
 			inReplyTo: email.inReplyTo,
 			relation: email.references,
 			messageId: email.messageId,
-			userId: account ? account.userId : 0,
-			accountId: account ? account.accountId : 0,
+			userId: recipient.userId,
+			accountId: recipient.accountId,
 			isDel: isDel.DELETE,
 			status: emailConst.status.SAVING
 		};
@@ -144,7 +145,7 @@ export async function email(message, env, ctx) {
 			console.error(e);
 		}
 
-		emailRow = await emailService.completeReceive({ env }, account ? emailConst.status.RECEIVE : emailConst.status.NOONE, emailRow.emailId);
+		emailRow = await emailService.completeReceive({ env }, recipient.status, emailRow.emailId);
 
 
 		if (ruleType === settingConst.ruleType.RULE) {

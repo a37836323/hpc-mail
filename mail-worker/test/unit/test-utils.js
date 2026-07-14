@@ -21,15 +21,22 @@ export class FakeKV {
 		this.values.delete(key);
 		this.deletes.push(key);
 	}
+
+	async list({ prefix = '' } = {}) {
+		return {
+			keys: [...this.values.keys()].filter(key => key.startsWith(prefix)).map(name => ({ name })),
+			list_complete: true
+		};
+	}
 }
 
 export function makeContext(kv = new FakeKV(), headers = {}) {
 	const responseHeaders = new Map();
 	const normalizedHeaders = Object.fromEntries(Object.entries(headers).map(([key, value]) => [key.toLowerCase(), value]));
 	return {
-		env: { kv, jwt_secret: 'unit-test-jwt-secret', admin: 'admin@example.com' },
+		env: { kv, jwt_secret: 'unit-test-jwt-secret' },
 		req: {
-			url: 'https://mail.example.com/api/oauth/linuxDo/start',
+			url: 'https://mail.example.com/api/login',
 			header: name => normalizedHeaders[String(name).toLowerCase()] || ''
 		},
 		header(name, value) {

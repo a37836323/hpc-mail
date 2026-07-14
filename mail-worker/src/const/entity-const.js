@@ -1,16 +1,7 @@
-import verifyRecordService from '../service/verify-record-service';
-
 export const userConst = {
 	status: {
 		NORMAL: 0,
 		BAN: 1
-	}
-}
-
-export const accountConst = {
-	allReceive: {
-		CLOSE: 0,
-		OPEN: 1
 	}
 }
 
@@ -48,7 +39,6 @@ export const emailConst = {
 		COMPLAINED: 4,
 		DELAYED: 5,
 		SAVING: 6,
-		NOONE: 7,
 		FAILED: 8
 	},
 	unread: {

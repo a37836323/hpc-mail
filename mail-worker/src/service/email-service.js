@@ -15,6 +15,7 @@ import { parseHTML } from 'linkedom';
 import userService from './user-service';
 import roleService from './role-service';
 import user from '../entity/user';
+import { isAdminRole } from '../utils/auth-utils';
 import starService from './star-service';
 import dayjs from 'dayjs';
 import kvConst from '../const/kv-const';
@@ -29,16 +30,32 @@ const MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024;
 const MAX_TOTAL_ATTACHMENT_SIZE = 25 * 1024 * 1024;
 
 const emailService = {
+	async resolveRecipient(c, accountRow, noRecipient) {
+		if (accountRow) {
+			return {
+				userId: accountRow.userId,
+				accountId: accountRow.accountId,
+				status: emailConst.status.RECEIVE
+			};
+		}
+		if (noRecipient === settingConst.noRecipient.CLOSE) return null;
+		const adminUser = await userService.selectSystemAdmin(c);
+		if (!adminUser) return null;
+		return {
+			userId: adminUser.userId,
+			accountId: 0,
+			status: emailConst.status.RECEIVE
+		};
+	},
 
 	async list(c, params, userId) {
 
-		let { emailId, type, accountId, size, timeSort, allReceive } = params;
+		let { emailId, type, accountId, size, timeSort } = params;
 
 		size = Number(size);
 		emailId = Number(emailId);
 		timeSort = Number(timeSort);
 		accountId = Number(accountId);
-		allReceive = Number(allReceive);
 		type = Number(type);
 
 		if (size > 50) {
@@ -55,13 +72,7 @@ const emailService = {
 
 		}
 
-		if (isNaN(allReceive)) {
-			let accountRow = await accountService.selectById(c, accountId);
-			allReceive = accountRow?.allReceive ?? (accountId === 0 ? 1 : 0);
-		}
-		if (type === emailConst.type.SEND) {
-			allReceive = 1;
-		}
+		const showAllAccounts = accountId === 0 || type === emailConst.type.SEND;
 
 		const accountVisibilityCondition = this.accountVisibilityCondition(type);
 
@@ -83,7 +94,7 @@ const emailService = {
 			)
 			.where(
 				and(
-					allReceive ? eq(1,1) : eq(email.accountId, accountId),
+					showAllAccounts ? eq(1,1) : eq(email.accountId, accountId),
 					eq(email.userId, userId),
 					timeSort ? gt(email.emailId, emailId) : lt(email.emailId, emailId),
 					eq(email.type, type),
@@ -107,7 +118,7 @@ const emailService = {
 			)
 			.where(
 				and(
-					allReceive ? eq(1,1) : eq(email.accountId, accountId),
+					showAllAccounts ? eq(1,1) : eq(email.accountId, accountId),
 					eq(email.userId, userId),
 					eq(email.type, type),
 					eq(email.isDel, isDel.NORMAL),
@@ -119,7 +130,7 @@ const emailService = {
 			.leftJoin(account, eq(account.accountId, email.accountId))
 			.where(
 			and(
-				allReceive ? eq(1,1) : eq(email.accountId, accountId),
+				showAllAccounts ? eq(1,1) : eq(email.accountId, accountId),
 				eq(email.userId, userId),
 				eq(email.type, type),
 				eq(email.isDel, isDel.NORMAL),
@@ -220,7 +231,7 @@ const emailService = {
 			return domainList.includes(domain);
 		});
 
-		if (c.env.admin !== userRow.email) {
+		if (!isAdminRole(roleRow)) {
 
 			//发件被禁用
 			if (roleRow.sendType === 'ban') {
@@ -235,7 +246,7 @@ const emailService = {
 		}
 
 		//如果不是管理员，权限设置了发送次数
-		if (c.env.admin !== userRow.email && roleRow.sendCount) {
+		if (!isAdminRole(roleRow) && roleRow.sendCount) {
 
 			if (userRow.sendCount >= roleRow.sendCount) {
 				if (roleRow.sendType === 'day') throw new BizError(t('daySendLimit'), 403);
@@ -251,7 +262,7 @@ const emailService = {
 
 		let sender;
 		if (from !== undefined) {
-			sender = buildDynamicSender(from, c.env.domain, roleRow.availDomain, c.env.admin === userRow.email);
+			sender = buildDynamicSender(from, c.env.domain, roleRow.availDomain, isAdminRole(roleRow));
 			accountId = 0;
 			name = sender.name;
 		} else {
@@ -265,7 +276,7 @@ const emailService = {
 				throw new BizError(t('sendEmailNotCurUser'));
 			}
 
-			if (c.env.admin !== userRow.email && !roleService.hasAvailDomainPerm(roleRow.availDomain, accountRow.email)) {
+			if (!isAdminRole(roleRow) && !roleService.hasAvailDomainPerm(roleRow.availDomain, accountRow.email)) {
 				throw new BizError(t('noDomainPermSend'),403)
 			}
 
@@ -300,8 +311,7 @@ const emailService = {
 				throw new BizError(t('notExistEmailReply'));
 			}
 
-			const canReplyNoRecipient = c.env.admin === userRow.email && emailRow.status === emailConst.status.NOONE;
-			if (emailRow.userId !== userId && !canReplyNoRecipient) {
+			if (emailRow.userId !== userId) {
 				throw new BizError(t('notExistEmailReply'), 403);
 			}
 			assertNoHeaderInjection(emailRow.messageId);
@@ -624,11 +634,18 @@ const emailService = {
 		const { noRecipient  } = await settingService.query(c);
 
 		//查询所有收件人账号信息
-		let accountList = await orm(c).select().from(account).where(inArray(account.email, receiveEmail)).all();
+		let accountList = await orm(c).select().from(account).where(and(
+			inArray(account.email, receiveEmail),
+			eq(account.isDel, isDel.NORMAL)
+		)).all();
 
 		//查询所有收件人权限身份
 		const userIds = accountList.map(accountRow => accountRow.userId);
 		let roleList = await roleService.selectByUserIds(c, userIds);
+		const hasUnknownRecipient = receiveEmail.some(address => !accountList.some(accountRow => accountRow.email === address));
+		const catchAllRecipient = hasUnknownRecipient
+			? await this.resolveRecipient(c, null, noRecipient)
+			: null;
 
 		//封装数据库准备保存到数据库
 		const emailDataList = [];
@@ -659,7 +676,7 @@ const emailService = {
 				let { banEmail, availDomain } = roleRow;
 
 				//如果收件人没有这个域名的使用权限和有邮件拦截，就把邮件改为拒收状态
-				if (email !== c.env.admin) {
+				if (!isAdminRole(roleRow)) {
 
 					if (!roleService.hasAvailDomainPerm(availDomain, email)) {
 						emailValues.status = emailConst.status.BOUNCED;
@@ -675,14 +692,13 @@ const emailService = {
 
 			} else {
 
-				//设置无收件人邮件信息
-				emailValues.userId = 0;
-				emailValues.accountId = 0;
-				emailValues.type = emailConst.type.RECEIVE;
-				emailValues.status = emailConst.status.NOONE;
-
-				//如果无人收件关闭改为拒收
-				if (noRecipient === settingConst.noRecipient.CLOSE) {
+				if (catchAllRecipient) {
+					emailValues.userId = catchAllRecipient.userId;
+					emailValues.accountId = 0;
+					emailValues.status = emailConst.status.RECEIVE;
+				} else {
+					emailValues.userId = 0;
+					emailValues.accountId = 0;
 					emailValues.status = emailConst.status.BOUNCED;
 					emailValues.message = `Recipient not found: <${email}>`;
 				}
@@ -694,7 +710,7 @@ const emailService = {
 		}
 
 		//保存邮件
-		const receiveEmailList = emailDataList.filter(emailRow => emailRow.status === emailConst.status.RECEIVE || emailRow.status === emailConst.status.NOONE);
+		const receiveEmailList = emailDataList.filter(emailRow => emailRow.status === emailConst.status.RECEIVE);
 
 		for (const emailData of receiveEmailList) {
 
@@ -779,16 +795,10 @@ const emailService = {
 	},
 
 	async latest(c, params, userId) {
-		let { emailId, accountId, allReceive, type = emailConst.type.RECEIVE } = params;
+		let { emailId, accountId, type = emailConst.type.RECEIVE } = params;
 		accountId = Number(accountId);
-		allReceive = Number(allReceive);
 		type = Number(type);
-
-		if (isNaN(allReceive)) {
-			let accountRow = await accountService.selectById(c, accountId);
-			allReceive = accountRow?.allReceive ?? (accountId === 0 ? 1 : 0);
-		}
-		if (type === emailConst.type.SEND) allReceive = 1;
+		const showAllAccounts = accountId === 0 || type === emailConst.type.SEND;
 
 		const accountVisibilityCondition = this.accountVisibilityCondition(type);
 
@@ -803,7 +813,7 @@ const emailService = {
 					eq(email.userId, userId),
 					eq(email.isDel, isDel.NORMAL),
 					accountVisibilityCondition,
-					allReceive ? eq(1,1) : eq(email.accountId, accountId),
+					showAllAccounts ? eq(1,1) : eq(email.accountId, accountId),
 					eq(email.type, type)
 				))
 			.orderBy(desc(email.emailId))
@@ -854,7 +864,7 @@ const emailService = {
 
 	async allList(c, params) {
 
-		let { emailId, size, name, subject, accountEmail, userEmail, type, timeSort } = params;
+		let { emailId, size, name, subject, accountEmail, username, type, timeSort } = params;
 
 		size = Number(size);
 
@@ -889,12 +899,8 @@ const emailService = {
 			conditions.push(eq(email.isDel, isDel.DELETE));
 		}
 
-		if (type === 'noone') {
-			conditions.push(eq(email.status, emailConst.status.NOONE));
-		}
-
-		if (userEmail) {
-			conditions.push(sql`${user.email} COLLATE NOCASE LIKE ${'%'+ userEmail + '%'}`);
+		if (username) {
+			conditions.push(sql`${user.username} COLLATE NOCASE LIKE ${'%'+ username + '%'}`);
 		}
 
 		if (accountEmail) {
@@ -924,7 +930,7 @@ const emailService = {
 			conditions.unshift(lt(email.emailId, emailId));
 		}
 
-		const query = orm(c).select({ ...email, userEmail: user.email })
+		const query = orm(c).select({ ...email, username: user.username })
 			.from(email)
 			.leftJoin(user, eq(email.userId, user.userId))
 			.where(and(...conditions));
@@ -968,7 +974,7 @@ const emailService = {
 
 		const { emailId } = params;
 
-		let list = await orm(c).select({...email, userEmail: user.email}).from(email)
+		let list = await orm(c).select({...email, username: user.username}).from(email)
 			.leftJoin(user, eq(email.userId, user.userId))
 			.where(
 				and(
@@ -1011,8 +1017,35 @@ const emailService = {
 	},
 
 	async completeReceiveAll(c) {
-		await c.env.db.prepare(`UPDATE email as e SET status = ${emailConst.status.RECEIVE} WHERE status = ${emailConst.status.SAVING} AND EXISTS (SELECT 1 FROM account WHERE account_id = e.account_id)`).run();
-		await c.env.db.prepare(`UPDATE email as e SET status = ${emailConst.status.NOONE} WHERE status = ${emailConst.status.SAVING} AND NOT EXISTS (SELECT 1 FROM account WHERE account_id = e.account_id)`).run();
+		await c.env.db.prepare(`
+			UPDATE email
+			SET status = ${emailConst.status.RECEIVE}, is_del = ${isDel.NORMAL}
+			WHERE type = ${emailConst.type.RECEIVE}
+			  AND status = ${emailConst.status.SAVING}
+			  AND user_id > 0
+		`).run();
+		await c.env.db.prepare(`
+			UPDATE email
+			SET user_id = (
+					SELECT u.user_id
+					FROM user AS u
+					INNER JOIN role AS r ON r.role_id = u.type
+					WHERE r.key = 'admin' AND u.status = 0 AND u.is_del = 0
+					LIMIT 1
+				),
+				account_id = 0,
+				status = ${emailConst.status.RECEIVE},
+				is_del = ${isDel.NORMAL}
+			WHERE type = ${emailConst.type.RECEIVE}
+			  AND status = ${emailConst.status.SAVING}
+			  AND user_id = 0
+			  AND EXISTS (
+					SELECT 1
+					FROM user AS u
+					INNER JOIN role AS r ON r.role_id = u.type
+					WHERE r.key = 'admin' AND u.status = 0 AND u.is_del = 0
+			  )
+		`).run();
 	},
 
 	async batchDelete(c, params) {

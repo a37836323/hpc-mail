@@ -18,21 +18,6 @@ function isValidUsername(username) {
 	);
 }
 
-function parseLoginIdentifier(params = {}) {
-	const username = normalizeUsername(params.username);
-	const legacyEmail = typeof params.email === 'string' ? params.email.trim() : '';
-	const identifier = username || legacyEmail;
-
-	return {
-		identifier,
-		type: username && !username.includes('@') ? 'username' : 'email'
-	};
-}
-
-function buildLegacyAuthEmail(username) {
-	return `${normalizeUsername(username).toLowerCase()}@auth.invalid`;
-}
-
 function usernameBase(value, fallback = 'user') {
 	let base = normalizeUsername(value)
 		.toLowerCase()
@@ -52,15 +37,8 @@ function usernameBase(value, fallback = 'user') {
 	return base.slice(0, USERNAME_MAX_LENGTH);
 }
 
-function migratedUsernamePreference(current, accountName, emailPrefix, userId) {
-	const existing = normalizeUsername(current);
-	if (isValidUsername(existing)) return existing;
-
-	const mailboxName = normalizeUsername(accountName);
-	if (isValidUsername(mailboxName)) return mailboxName;
-
-	const prefix = normalizeUsername(emailPrefix);
-	return isValidUsername(prefix) ? prefix : usernameBase(prefix, `user-${userId}`);
+function isAdminRole(roleRow) {
+	return roleRow?.key === 'admin';
 }
 
 export {
@@ -68,8 +46,6 @@ export {
 	USERNAME_MAX_LENGTH,
 	normalizeUsername,
 	isValidUsername,
-	parseLoginIdentifier,
-	buildLegacyAuthEmail,
 	usernameBase,
-	migratedUsernamePreference
+	isAdminRole
 };

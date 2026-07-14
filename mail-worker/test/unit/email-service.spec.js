@@ -28,4 +28,26 @@ describe('email visibility predicates', () => {
 		expect(query.sql).toContain('account_id');
 		expect(query.sql).toContain('is_del');
 	});
+
+	it('recovers account-zero catch-all messages as received when they already have an owner', async () => {
+		const statements = [];
+		const c = {
+			env: {
+				db: {
+					prepare: sql => {
+						statements.push(sql);
+						return { run: async () => undefined };
+					}
+				}
+			}
+		};
+
+		await emailService.completeReceiveAll(c);
+
+		expect(statements[0]).toContain('user_id > 0');
+		expect(statements[0]).toContain(`status = ${emailConst.status.RECEIVE}`);
+		expect(statements[1]).toContain('user_id = 0');
+		expect(statements[1]).toContain("r.key = 'admin'");
+		expect(statements[1]).toContain(`status = ${emailConst.status.RECEIVE}`);
+	});
 });

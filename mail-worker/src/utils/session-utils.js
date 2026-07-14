@@ -24,7 +24,7 @@ function remainingSessionTtl(authInfo, now = Date.now()) {
 }
 
 function addSessionToken(authInfo, token, userRow, now = Date.now()) {
-	const { password: _password, salt: _salt, ...safeUser } = userRow;
+	const { passwordHash: _passwordHash, ...safeUser } = userRow;
 	const existing = authInfo && authInfo.user?.userId === userRow.userId && !isSessionExpired(authInfo, now);
 	const info = existing
 		? authInfo

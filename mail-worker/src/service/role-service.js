@@ -1,6 +1,6 @@
 import role from '../entity/role';
 import orm from '../entity/orm';
-import { eq, asc, inArray, and } from 'drizzle-orm';
+import { eq, asc, inArray, and, ne } from 'drizzle-orm';
 import BizError from '../error/biz-error';
 import rolePerm from '../entity/role-perm';
 import perm from '../entity/perm';
@@ -33,7 +33,8 @@ const roleService = {
 
 		availDomain = availDomain.join(',');
 
-		roleRow = await orm(c).insert(role).values({...params, banEmail, availDomain, userId}).returning().get();
+		const roleKey = `custom-${crypto.randomUUID()}`;
+		roleRow = await orm(c).insert(role).values({...params, key: roleKey, isSystem: 0, banEmail, availDomain, userId}).returning().get();
 
 		if (permIds.length === 0) {
 			return;
@@ -70,6 +71,12 @@ const roleService = {
 			throw new BizError(t('emptyRoleName'));
 		}
 
+		const currentRole = await this.selectById(c, roleId);
+		if (!currentRole) throw new BizError(t('roleNotExist'));
+		if (currentRole.isSystem || currentRole.key === 'admin') throw new BizError(t('unauthorized'), 403);
+		if (params.key && params.key !== currentRole.key) throw new BizError(t('unauthorized'), 403);
+		delete params.key;
+		delete params.isSystem;
 		delete params.isDefault
 
 		const notEmailIndex = banEmail.findIndex(item => (!verifyUtils.isEmail(item) && !verifyUtils.isDomain(item)) && item !== "*")
@@ -102,7 +109,7 @@ const roleService = {
 			throw new BizError(t('notExist'));
 		}
 
-		if (roleRow.isDefault) {
+		if (roleRow.isDefault || roleRow.isSystem || roleRow.key === 'admin') {
 			throw new BizError(t('delDefRole'));
 		}
 
@@ -116,7 +123,12 @@ const roleService = {
 	},
 
 	roleSelectUse(c) {
-		return orm(c).select({ name: role.name, roleId: role.roleId, isDefault: role.isDefault }).from(role).orderBy(asc(role.sort)).all();
+		return orm(c)
+			.select({ name: role.name, roleId: role.roleId, isDefault: role.isDefault })
+			.from(role)
+			.where(ne(role.key, 'admin'))
+			.orderBy(asc(role.sort))
+			.all();
 	},
 
 	async selectDefaultRole(c) {
@@ -128,6 +140,7 @@ const roleService = {
 		if (!roleRow) {
 			throw new BizError(t('roleNotExist'));
 		}
+		if (roleRow.key === 'admin') throw new BizError(t('unauthorized'), 403);
 		await orm(c).update(role).set({ isDefault: 0 }).run();
 		await orm(c).update(role).set({ isDefault: 1 }).where(eq(role.roleId, params.roleId)).run();
 	},
@@ -178,13 +191,17 @@ const roleService = {
 		return orm(c).select().from(role).where(eq(role.name, roleName)).get();
 	},
 
+	selectByKey(c, roleKey) {
+		return orm(c).select().from(role).where(eq(role.key, roleKey)).get();
+	},
+
 	selectByUserIds(c, userIds) {
 
 		if (!userIds || userIds.length === 0) {
 			return [];
 		}
 
-		return orm(c).select({ ...role, userId: user.userId }).from(user).leftJoin(role, eq(role.roleId, user.type)).where(inArray(user.userId, userIds)).all();
+		return orm(c).select({ ...role, userId: user.userId, username: user.username }).from(user).leftJoin(role, eq(role.roleId, user.type)).where(inArray(user.userId, userIds)).all();
 
 	},
 

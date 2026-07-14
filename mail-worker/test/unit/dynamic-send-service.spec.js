@@ -27,7 +27,7 @@ describe('dynamic sender service integration', () => {
 		vi.spyOn(attService, 'selectByEmailIds').mockResolvedValue([]);
 		vi.spyOn(userService, 'selectById').mockResolvedValue({
 			userId: 7,
-			email: 'riba2534@auth.invalid',
+			username: 'riba2534',
 			type: 1,
 			sendCount: 0
 		});
@@ -57,7 +57,6 @@ describe('dynamic sender service integration', () => {
 		const c = {
 			env: {
 				domain: ['hpc.email'],
-				admin: 'admin@hpc.email',
 				kv: {
 					get: vi.fn().mockResolvedValue(null),
 					put: vi.fn().mockResolvedValue()

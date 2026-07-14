@@ -92,7 +92,7 @@
                       <span>
                         <Icon icon="mynaui:user" width="20" height="20"/>
                       </span>
-                      <span>{{ item.userEmail }}</span>
+                      <span>{{ item.username }}</span>
                     </div>
                     <div class="account">
                       <span>
@@ -191,11 +191,11 @@
               </div>
             </template>
           </el-dropdown-item>
-          <el-dropdown-item v-if="props.type === 'all-email'" @click="handleSearch('user', rightClickEmail.userEmail)">
+          <el-dropdown-item v-if="props.type === 'all-email'" @click="handleSearch('username', rightClickEmail.username)">
             <template #default>
               <div class="right-dropdown-item">
                 <Icon icon="iconoir:search" width="20" height="20" />
-                <span>{{t('searchUser')}}</span>
+                <span>{{t('searchByUsername')}}</span>
               </div>
             </template>
           </el-dropdown-item>
@@ -881,7 +881,6 @@ function handleList(list) {
       8: { icon: 'bi:send-x-fill',         color: '#F56C6C', content: t('bounced') },
       4: { icon: 'bi:send-exclamation-fill', color: '#FBBD08', content: t('complained') },
       5: { icon: 'bi:send-arrow-up-fill',  color: '#FBBD08', content: t('delayed') },
-      7: { icon: 'ic:round-mark-email-read', color: '#FBBD08', content: t('noRecipient') },
     };
 
     if (email.isDel) {

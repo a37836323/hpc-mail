@@ -34,7 +34,7 @@
               >
                 <el-option key="3" :label="$t('sender')" :value="'name'"/>
                 <el-option key="4" :label="$t('subject')" :value="'subject'"/>
-                <el-option key="1" :label="$t('user')" :value="'user'"/>
+                <el-option key="1" :label="$t('username')" :value="'username'"/>
                 <el-option key="2" :label="$t('selectEmail')" :value="'account'"/>
               </el-select>
               <button type="button" class="search-type" :aria-label="$t('selectSearchType')" @click.stop="openSelect">
@@ -49,7 +49,6 @@
           <el-option key="3" :label="$t('received')" value="receive"/>
           <el-option key="2" :label="$t('sent')" value="send"/>
           <el-option key="4" :label="$t('selectDeleted')" value="delete"/>
-          <el-option key="4" :label="$t('noRecipientTitle')" value="noone"/>
         </el-select>
         <IconButton :label="$t('search')" @click="search"><Search :size="18" /></IconButton>
         <IconButton :label="params.timeSort === 0 ? $t('sortOldestFirst') : $t('sortNewestFirst')" @click="changeTimeSort">
@@ -134,7 +133,7 @@ const openSelect = () => {
 const params = reactive({
   timeSort: 0,
   type: 'receive',
-  userEmail: null,
+  username: null,
   accountEmail: null,
   name: null,
   subject: null,
@@ -168,7 +167,7 @@ function closedClear() {
 }
 
 const selectTitle = computed(() => {
-  if (params.searchType === 'user') return t('user')
+  if (params.searchType === 'username') return t('username')
   if (params.searchType === 'account') return t('selectEmail')
   if (params.searchType === 'name') return t('sender')
   if (params.searchType === 'subject') return t('subject')
@@ -239,7 +238,7 @@ function refreshBefore() {
   searchValue.value = null
   params.timeSort = 0
   params.type = 'receive'
-  params.userEmail = null
+  params.username = null
   params.accountEmail = null
   params.name = null
   params.subject = null
@@ -248,13 +247,13 @@ function refreshBefore() {
 
 function search() {
 
-  params.userEmail = null
+  params.username = null
   params.accountEmail = null
   params.name = null
   params.subject = null
 
-  if (params.searchType === 'user') {
-    params.userEmail = searchValue.value
+  if (params.searchType === 'username') {
+    params.username = searchValue.value
   }
 
   if (params.searchType === 'account') {

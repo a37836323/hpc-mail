@@ -4,14 +4,14 @@ import userService from '../../src/service/user-service';
 import accountService from '../../src/service/account-service';
 import settingService from '../../src/service/setting-service';
 import roleService from '../../src/service/role-service';
-import cryptoUtils, { PBKDF2_ITERATIONS } from '../../src/utils/crypto-utils';
+import cryptoUtils from '../../src/utils/crypto-utils';
 import permService from '../../src/service/perm-service';
+import schemaService from '../../src/service/schema-service';
+import jwtUtils from '../../src/utils/jwt-utils';
 import { FakeKV, makeContext } from './test-utils';
 
 describe('username authentication service', () => {
-	afterEach(() => {
-		vi.restoreAllMocks();
-	});
+	afterEach(() => vi.restoreAllMocks());
 
 	it('does not reveal whether a username exists', async () => {
 		const c = makeContext(new FakeKV(), { 'CF-Connecting-IP': '203.0.113.1' });
@@ -25,10 +25,8 @@ describe('username authentication service', () => {
 
 		vi.spyOn(userService, 'selectByUsernameIncludeDel').mockResolvedValueOnce({
 			userId: 1,
-			email: 'known-user@auth.invalid',
 			username: 'known-user',
-			password: 'hash',
-			salt: 'salt',
+			passwordHash: 'hash',
 			status: 0,
 			isDel: 0
 		});
@@ -47,30 +45,33 @@ describe('username authentication service', () => {
 		expect(missingError.code).toBe(401);
 	});
 
-	it('lazily upgrades a legacy password after a successful login', async () => {
-		const kv = new FakeKV();
-		const c = makeContext(kv, { 'CF-Connecting-IP': '203.0.113.2' });
-		const legacySalt = 'legacy-salt';
-		const legacyHash = await cryptoUtils.genHashPassword('secret123', legacySalt);
+	it('does not fall back to an email identifier', async () => {
+		const c = makeContext(new FakeKV(), { 'CF-Connecting-IP': '203.0.113.2' });
+		const lookup = vi.spyOn(userService, 'selectByUsernameIncludeDel');
+
+		await expect(loginService.login(c, { email: 'admin@hpc.email', password: 'secret123' }))
+			.rejects.toMatchObject({ code: 401 });
+		expect(lookup).not.toHaveBeenCalled();
+	});
+
+	it('binds successful login tokens to the current database epoch', async () => {
+		const c = makeContext(new FakeKV(), { 'CF-Connecting-IP': '203.0.113.3' });
 		vi.spyOn(userService, 'selectByUsernameIncludeDel').mockResolvedValue({
 			userId: 9,
-			username: 'legacy-user',
-			email: 'legacy-user@auth.invalid',
-			password: legacyHash,
-			salt: legacySalt,
+			username: 'current-user',
+			passwordHash: 'current-hash',
 			status: 0,
 			isDel: 0
 		});
+		vi.spyOn(cryptoUtils, 'verifyPassword').mockResolvedValue(true);
+		vi.spyOn(schemaService, 'instanceEpoch').mockResolvedValue('epoch-current');
 		vi.spyOn(userService, 'updateUserInfo').mockResolvedValue();
-		const updateHash = vi.spyOn(userService, 'updatePasswordHash').mockResolvedValue();
 
-		const token = await loginService.login(c, { username: 'legacy-user', password: 'secret123' });
-
-		expect(token.split('.')).toHaveLength(3);
-		expect(updateHash).toHaveBeenCalledWith(c, 9, expect.stringMatching(new RegExp(`^pbkdf2-sha256\\$${PBKDF2_ITERATIONS}\\$`)), expect.any(String));
-		const stored = await kv.get('auth-uid:9', { type: 'json' });
-		expect(stored.user).not.toHaveProperty('password');
-		expect(stored.user).not.toHaveProperty('salt');
+		const token = await loginService.login(c, { username: 'current-user', password: 'test-credential' });
+		await expect(jwtUtils.verifyToken(c, token)).resolves.toMatchObject({
+			userId: 9,
+			instanceEpoch: 'epoch-current'
+		});
 	});
 
 	it('registers a username identity without creating a mailbox account', async () => {
@@ -81,10 +82,9 @@ describe('username authentication service', () => {
 			regVerifyCount: 1
 		});
 		vi.spyOn(userService, 'selectByUsernameIncludeDel').mockResolvedValue(null);
-		vi.spyOn(userService, 'selectByEmailIncludeDel').mockResolvedValue(null);
-		vi.spyOn(roleService, 'selectDefaultRole').mockResolvedValue({ roleId: 1 });
-		vi.spyOn(roleService, 'selectById').mockResolvedValue({ roleId: 1 });
-		vi.spyOn(cryptoUtils, 'hashPassword').mockResolvedValue({ salt: 'salt', hash: 'hash' });
+		vi.spyOn(roleService, 'selectDefaultRole').mockResolvedValue({ roleId: 2 });
+		vi.spyOn(roleService, 'selectById').mockResolvedValue({ roleId: 2 });
+		vi.spyOn(cryptoUtils, 'hashPassword').mockResolvedValue({ hash: 'hash' });
 		const insert = vi.spyOn(userService, 'insert').mockResolvedValue(42);
 		vi.spyOn(userService, 'updateUserInfo').mockResolvedValue();
 		const accountInsert = vi.spyOn(accountService, 'insert').mockResolvedValue();
@@ -96,35 +96,37 @@ describe('username authentication service', () => {
 			{},
 			expect.objectContaining({
 				username: 'Riba2534',
-				email: 'riba2534@auth.invalid',
-				displayName: 'Riba2534'
+				displayName: 'Riba2534',
+				passwordHash: 'hash'
 			})
 		);
+		expect(insert.mock.calls[0][1]).not.toHaveProperty('email');
 		expect(accountInsert).not.toHaveBeenCalled();
 	});
 
-	it('returns safe login user info when the identity has no mailbox account', async () => {
+	it('returns a default mailbox separately from the username identity', async () => {
 		vi.spyOn(userService, 'selectById').mockResolvedValue({
 			userId: 42,
 			username: 'Riba2534',
 			displayName: 'Riba',
-			email: 'riba2534@auth.invalid',
-			type: 1,
+			type: 2,
 			sendCount: 0
 		});
 		vi.spyOn(accountService, 'selectDefaultByUserId').mockResolvedValue(null);
-		vi.spyOn(roleService, 'selectById').mockResolvedValue({ roleId: 1, name: 'user' });
+		vi.spyOn(roleService, 'selectById').mockResolvedValue({ roleId: 2, key: 'user', name: 'user' });
 		vi.spyOn(permService, 'userPermKeys').mockResolvedValue(['email:send']);
 
-		const result = await userService.loginUserInfo({ env: { admin: 'admin@hpc.email' } }, 42);
+		const result = await userService.loginUserInfo({ env: {} }, 42);
 
 		expect(result).toEqual(expect.objectContaining({
 			username: 'Riba2534',
 			displayName: 'Riba',
 			name: 'Riba',
-			email: null,
-			legacyEmail: null,
-			account: null
+			defaultAccount: null,
+			type: 2
 		}));
+		expect(result).not.toHaveProperty('email');
+		expect(result).not.toHaveProperty('legacyEmail');
+		expect(result).not.toHaveProperty('account');
 	});
 });

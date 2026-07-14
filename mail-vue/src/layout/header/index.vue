@@ -72,6 +72,7 @@ import { useSettingStore } from '@/store/setting.js'
 import { hasPerm } from '@/perm/perm.js'
 import { useI18n } from 'vue-i18n'
 import { setExtend } from '@/utils/day.js'
+import { resolveDisplayName, resolveUsername } from '@/utils/user-identity.js'
 
 const { t, locale } = useI18n()
 const route = useRoute()
@@ -80,8 +81,8 @@ const userStore = useUserStore()
 const uiStore = useUiStore()
 const logoutLoading = ref(false)
 
-const identity = computed(() => userStore.user?.username || userStore.user?.legacyEmail || t('profile'))
-const displayName = computed(() => userStore.user?.displayName || userStore.user?.name || identity.value)
+const identity = computed(() => resolveUsername(userStore.user) || t('profile'))
+const displayName = computed(() => resolveDisplayName(userStore.user) || identity.value)
 const avatarLetter = computed(() => Array.from(displayName.value || '?')[0]?.toUpperCase() || '?')
 const accountCount = computed(() => userStore.user?.role?.accountCount)
 const accountCountLabel = computed(() => {

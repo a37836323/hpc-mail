@@ -8,6 +8,7 @@ import permService from '../service/perm-service';
 import { t } from '../i18n/i18n'
 import app from '../hono/hono';
 import { isSessionExpired, putAuthInfo } from '../utils/session-utils';
+import schemaService from '../service/schema-service';
 
 const exclude = [
 	'/login',
@@ -18,8 +19,7 @@ const exclude = [
 	'/init',
 	'/public/genToken',
 	'/telegram',
-	'/test',
-	'/oauth'
+	'/test'
 ];
 
 const requirePerms = [
@@ -121,7 +121,10 @@ app.use('*', async (c, next) => {
 		throw new BizError(t('authExpired'), 401);
 	}
 
-	const { userId, token } = result;
+	const { userId, token, instanceEpoch } = result;
+	if (!instanceEpoch || instanceEpoch !== await schemaService.instanceEpoch(c)) {
+		throw new BizError(t('authExpired'), 401);
+	}
 	const authInfo = await c.env.kv.get(KvConst.AUTH_INFO + userId, { type: 'json' });
 
 	if (!authInfo) {
@@ -136,10 +139,9 @@ app.use('*', async (c, next) => {
 		throw new BizError(t('authExpired'), 401);
 	}
 
-	const containedCredentialMaterial = Boolean(authInfo.user && ('password' in authInfo.user || 'salt' in authInfo.user));
+	const containedCredentialMaterial = Boolean(authInfo.user && 'passwordHash' in authInfo.user);
 	if (authInfo.user) {
-		delete authInfo.user.password;
-		delete authInfo.user.salt;
+		delete authInfo.user.passwordHash;
 	}
 
 	const permIndex = requirePerms.findIndex(item => {
@@ -156,7 +158,7 @@ app.use('*', async (c, next) => {
 			return path.startsWith(item);
 		});
 
-		if (userPermIndex === -1 && authInfo.user.email !== c.env.admin) {
+		if (!permKeys.includes('*') && userPermIndex === -1) {
 			throw new BizError(t('unauthorized'), 403);
 		}
 

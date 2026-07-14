@@ -87,7 +87,7 @@
         <loading/>
       </div>
       <el-table v-if="!historyLoading" :data="historyList" :fit="true" style="height: 100%">
-        <el-table-column :min-width="emailColumnWidth" property="email" :label="$t('user')"
+        <el-table-column :min-width="usernameColumnWidth" property="username" :label="$t('username')"
                          :show-overflow-tooltip="true"/>
         <el-table-column :width="createTimeColumnWidth" :formatter="formatUserCreateTime" property="createTime"
                          :label="$t('date')" fixed="right" :show-overflow-tooltip="true"/>
@@ -106,7 +106,7 @@ import {useSettingStore} from "@/store/setting.js";
 import {roleSelectUse} from "@/request/role.js";
 import {useRoleStore} from "@/store/role.js";
 import {regKeyAdd, regKeyList, regKeyClearNotUse, regKeyDelete, regKeyHistory} from "@/request/reg-key.js";
-import {getTextWidth} from "@/utils/text.js";
+import {getTextWidth, selectLongestDisplayText} from "@/utils/text.js";
 import dayjs from "dayjs";
 import {tzDayjs} from "@/utils/day.js";
 import {useI18n} from "vue-i18n";
@@ -129,7 +129,7 @@ const regKeyLoading = ref(true)
 const regKeyFirst = ref(true)
 const showRegKeyHistory = ref(false)
 const historyList = reactive([])
-const emailColumnWidth = ref(0)
+const usernameColumnWidth = ref(0)
 const createTimeColumnWidth = ref(0)
 const historyLoading = ref(false)
 const isMobile = window.innerWidth < 1025
@@ -166,15 +166,9 @@ function openHistory(regKey) {
     historyList.push(...list)
     if (list.length > 0) {
 
-      const email = list.reduce((a, b) =>
-          compareByLengthAndUpperCase(a, b, 'email')
-      ).email;
-
-      emailColumnWidth.value = getTextWidth(email) + 30
-      emailColumnWidth.value = emailColumnWidth.value < 300 ? emailColumnWidth.value : 300
-      const createTime = list.reduce((a, b) =>
-          compareByLengthAndUpperCase(a, b, 'createTime')
-      ).createTime;
+      const username = selectLongestDisplayText(list, 'username')
+      usernameColumnWidth.value = Math.min(getTextWidth(username) + 30, 300)
+      const createTime = selectLongestDisplayText(list, 'createTime')
       createTimeColumnWidth.value = getTextWidth(createTime)
     }
 
@@ -184,14 +178,6 @@ function openHistory(regKey) {
 
   showRegKeyHistory.value = true
 }
-
-const compareByLengthAndUpperCase = (a, b, key) => {
-  const getUpperCaseCount = (str) => (str.match(/[A-Z]/g) || []).length;
-  if (a[key].length === b[key].length) {
-    return getUpperCaseCount(a[key]) > getUpperCaseCount(b[key]) ? a : b;
-  }
-  return a[key].length > b[key].length ? a : b;
-};
 
 function formatUserCreateTime(regKey) {
   const createTime = tzDayjs(regKey.createTime);

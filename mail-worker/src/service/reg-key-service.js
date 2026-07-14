@@ -6,6 +6,7 @@ import BizError from '../error/biz-error';
 import { formatDetailDate, toUtc } from '../utils/date-uitil';
 import userService from './user-service';
 import { t } from '../i18n/i18n.js';
+import { isAdminRole } from '../utils/auth-utils';
 
 const regKeyService = {
 
@@ -31,8 +32,8 @@ const regKeyService = {
 			throw new BizError(t('isExistRegKye'));
 		}
 
-		const roleRow = roleService.selectById(c, roleId);
-		if (!roleRow) {
+		const roleRow = await roleService.selectById(c, roleId);
+		if (!roleRow || isAdminRole(roleRow)) {
 			throw new BizError(t('roleNotExist'));
 		}
 

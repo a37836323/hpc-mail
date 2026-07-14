@@ -129,6 +129,7 @@ import { fileToBase64, formatBytes } from '@/utils/file-utils.js'
 import { isEmail } from '@/utils/verify-utils.js'
 import { toOssDomain } from '@/utils/convert.js'
 import { normalizeDomain, resolveAuthorizedDomains } from '@/utils/domain.js'
+import { resolveDefaultSenderAccount } from '@/utils/default-sender.js'
 
 defineExpose({ open, openReply, openForward, openDraft })
 
@@ -209,7 +210,7 @@ function setSenderFromAddress(address, name = '', accountId = 0) {
   if (!parsed || !availableDomains.value.includes(parsed.domain)) return false
   form.localPart = parsed.localPart
   form.domain = parsed.domain
-  form.name = name || writerStore.senderName || userStore.user?.displayName || userStore.user?.name || ''
+  form.name = name || writerStore.senderName || userStore.user?.displayName || ''
   form.accountId = accountId || 0
   form.sendEmail = `${parsed.localPart}@${parsed.domain}`
   validateSender()
@@ -223,16 +224,16 @@ function chooseDefaultSender(preferredAddress = '') {
     form.accountId = 0
     return false
   }
-  if (preferredAddress && setSenderFromAddress(preferredAddress)) return true
-  const history = recentSenders.value.find(item => setSenderFromAddress(item.address, item.name))
-  if (history) return true
-  const account = accountStore.currentAccount || {}
-  if (setSenderFromAddress(account.email, account.name, account.accountId)) return true
-  const legacy = userStore.user?.email
-  if (setSenderFromAddress(legacy, userStore.user?.name, userStore.user?.account?.accountId)) return true
+  const account = resolveDefaultSenderAccount(
+    accountStore.currentAccount,
+    userStore.user?.defaultAccount,
+    preferredAddress,
+  )
+  if (account && setSenderFromAddress(account.email, account.name, account.accountId)) return true
+  form.localPart = ''
   form.domain = availableDomains.value[0] || ''
-  form.sendEmail = senderAddress.value
-  form.name = writerStore.senderName || userStore.user?.displayName || userStore.user?.name || ''
+  form.sendEmail = ''
+  form.name = userStore.user?.displayName || ''
   form.accountId = 0
   return false
 }

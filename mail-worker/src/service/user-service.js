@@ -2,7 +2,8 @@ import BizError from '../error/biz-error';
 import accountService from './account-service';
 import orm from '../entity/orm';
 import user from '../entity/user';
-import { and, asc, count, desc, eq, inArray, or, sql } from 'drizzle-orm';
+import role from '../entity/role';
+import { and, asc, count, desc, eq, inArray, sql } from 'drizzle-orm';
 import { emailConst, isDel, roleConst, userConst } from '../const/entity-const';
 import kvConst from '../const/kv-const';
 import KvConst from '../const/kv-const';
@@ -11,17 +12,11 @@ import emailService from './email-service';
 import dayjs from 'dayjs';
 import permService from './perm-service';
 import roleService from './role-service';
-import emailUtils from '../utils/email-utils';
 import saltHashUtils from '../utils/crypto-utils';
-import constant from '../const/constant';
 import { t } from '../i18n/i18n'
 import reqUtils from '../utils/req-utils';
-import {oauth} from "../entity/oauth";
-import oauthService from "./oauth-service";
-import verifyUtils from '../utils/verify-utils';
-import { configuredDomains } from '../utils/sender-utils';
 import {
-	buildLegacyAuthEmail,
+	isAdminRole,
 	isValidUsername,
 	normalizeUsername,
 	usernameBase,
@@ -29,6 +24,26 @@ import {
 } from '../utils/auth-utils';
 
 const userService = {
+	selectSystemAdmin(c) {
+		return orm(c)
+			.select({ userId: user.userId, username: user.username, type: user.type })
+			.from(user)
+			.innerJoin(role, eq(role.roleId, user.type))
+			.where(and(
+				eq(role.key, 'admin'),
+				eq(user.status, userConst.status.NORMAL),
+				eq(user.isDel, isDel.NORMAL)
+			))
+			.get();
+	},
+
+	async assertMutableUser(c, userId) {
+		const target = await this.selectByIdIncludeDel(c, userId);
+		if (!target) throw new BizError(t('notExist'));
+		const targetRole = await roleService.selectById(c, target.type);
+		if (isAdminRole(targetRole)) throw new BizError(t('unauthorized'), 403);
+		return target;
+	},
 
 	async loginUserInfo(c, userId) {
 
@@ -39,29 +54,21 @@ const userService = {
 		}
 
 		const [account, roleRow, permKeys] = await Promise.all([
-			accountService.selectDefaultByUserId(c, userRow.userId, userRow.email),
+			accountService.selectDefaultByUserId(c, userRow.userId),
 			roleService.selectById(c, userRow.type),
-			userRow.email === c.env.admin ? Promise.resolve(['*']) : permService.userPermKeys(c, userId)
+			permService.userPermKeys(c, userId)
 		]);
 
 		const user = {};
-		const hasLegacyEmail = typeof userRow.email === 'string' && !userRow.email.toLowerCase().endsWith('@auth.invalid');
 		user.userId = userRow.userId;
 		user.sendCount = userRow.sendCount;
-		user.email = hasLegacyEmail ? userRow.email : null;
-		user.legacyEmail = hasLegacyEmail ? userRow.email : null;
 		user.username = userRow.username;
 		user.displayName = userRow.displayName || '';
-		user.account = account;
+		user.defaultAccount = account;
 		user.name = userRow.displayName || account?.name || userRow.username;
 		user.permKeys = permKeys;
 		user.role = roleRow;
 		user.type = userRow.type;
-
-		if (c.env.admin === userRow.email) {
-			user.role = constant.ADMIN_ROLE
-			user.type = 0;
-		}
 
 		return user;
 	},
@@ -74,29 +81,13 @@ const userService = {
 		if (password.length < 6) {
 			throw new BizError(t('pwdMinLength'));
 		}
-		const { salt, hash } = await cryptoUtils.hashPassword(password);
-		await orm(c).update(user).set({ password: hash, salt: salt }).where(eq(user.userId, userId)).run();
-	},
-
-	async updatePasswordHash(c, userId, password, salt) {
-		await orm(c).update(user).set({ password, salt }).where(eq(user.userId, userId)).run();
-	},
-
-	selectByEmail(c, email) {
-		return orm(c).select().from(user).where(
-			and(
-				eq(user.email, email),
-				eq(user.isDel, isDel.NORMAL)))
-			.get();
+		const { hash } = await cryptoUtils.hashPassword(password);
+		await orm(c).update(user).set({ passwordHash: hash }).where(eq(user.userId, userId)).run();
 	},
 
 	async insert(c, params) {
 		const { userId } = await orm(c).insert(user).values({ ...params }).returning().get();
 		return userId;
-	},
-
-	selectByEmailIncludeDel(c, email) {
-		return orm(c).select().from(user).where(sql`${user.email} COLLATE NOCASE = ${email}`).get();
 	},
 
 	selectByUsernameIncludeDel(c, username) {
@@ -129,6 +120,7 @@ const userService = {
 	},
 
 	async delete(c, userId) {
+		await this.assertMutableUser(c, userId);
 		await orm(c).update(user).set({ isDel: isDel.DELETE }).where(eq(user.userId, userId)).run();
 		await c.env.kv.delete(kvConst.AUTH_INFO + userId)
 	},
@@ -136,14 +128,14 @@ const userService = {
 	async physicsDelete(c, params) {
 		let { userIds } = params;
 		userIds = userIds.split(',').map(Number);
+		for (const userId of userIds) await this.assertMutableUser(c, userId);
 		await accountService.physicsDeleteByUserIds(c, userIds);
-		await oauthService.deleteByUserIds(c, userIds);
 		await orm(c).delete(user).where(inArray(user.userId, userIds)).run();
 	},
 
 	async list(c, params) {
 
-		let { num, size, email, username, timeSort, status } = params;
+		let { num, size, username, timeSort, status } = params;
 
 		size = Number(size);
 		num = Number(num);
@@ -163,15 +155,6 @@ const userService = {
 		}
 
 
-		if (email) {
-			conditions.push(
-				or(
-					sql`${user.email} COLLATE NOCASE LIKE ${'%' + email + '%'}`,
-					sql`${user.username} COLLATE NOCASE LIKE ${'%' + email + '%'}`
-				)
-			);
-		}
-
 		if (username) {
 			conditions.push(sql`${user.username} COLLATE NOCASE LIKE ${'%' + username + '%'}`);
 		}
@@ -184,11 +167,9 @@ const userService = {
 
 		const query = orm(c).select({
 			...user,
-			oauthUsername: oauth.username,
-			trustLevel: oauth.trustLevel,
-			avatar: oauth.avatar,
-			oauthName: oauth.name
-		}).from(user).leftJoin(oauth, eq(oauth.userId, user.userId))
+			roleKey: role.key,
+			roleName: role.name
+		}).from(user).leftJoin(role, eq(role.roleId, user.type))
 			.where(and(...conditions));
 
 
@@ -208,14 +189,15 @@ const userService = {
 
 		const types = [...new Set(list.map(user => user.type))];
 
-		const [emailCounts, delEmailCounts, sendCounts, delSendCounts, accountCounts, delAccountCounts, roleList] = await Promise.all([
+		const [emailCounts, delEmailCounts, sendCounts, delSendCounts, accountCounts, delAccountCounts, roleList, adminRole] = await Promise.all([
 			emailService.selectUserEmailCountList(c, userIds, emailConst.type.RECEIVE),
 			emailService.selectUserEmailCountList(c, userIds, emailConst.type.RECEIVE, isDel.DELETE),
 			emailService.selectUserEmailCountList(c, userIds, emailConst.type.SEND),
 			emailService.selectUserEmailCountList(c, userIds, emailConst.type.SEND, isDel.DELETE),
 			accountService.selectUserAccountCountList(c, userIds),
 			accountService.selectUserAccountCountList(c, userIds, isDel.DELETE),
-			roleService.selectByIdsHasPermKey(c, types,'email:send')
+			roleService.selectByIdsHasPermKey(c, types,'email:send'),
+			roleService.selectByKey(c, 'admin')
 		]);
 
 		const receiveMap = Object.fromEntries(emailCounts.map(item => [item.userId, item.count]));
@@ -227,8 +209,7 @@ const userService = {
 		const delAccountMap = Object.fromEntries(delAccountCounts.map(item => [item.userId, item.count]));
 
 		for (const user of list) {
-			delete user.password;
-			delete user.salt;
+			delete user.passwordHash;
 
 			const userId = user.userId;
 
@@ -251,11 +232,10 @@ const userService = {
 				sendAction.hasPerm = false;
 			}
 
-			if (user.email === c.env.admin) {
-				sendAction.sendType = constant.ADMIN_ROLE.sendType;
-				sendAction.sendCount = constant.ADMIN_ROLE.sendCount;
+			if (adminRole && user.type === adminRole.roleId) {
+				sendAction.sendType = adminRole.sendType;
+				sendAction.sendCount = adminRole.sendCount;
 				sendAction.hasPerm = true;
-				user.type = 0
 			}
 
 			user.sendAction = sendAction;
@@ -294,6 +274,7 @@ const userService = {
 	async setPwd(c, params) {
 
 		const { password, userId } = params;
+		await this.assertMutableUser(c, userId);
 		await this.resetPassword(c, { password }, userId);
 		await c.env.kv.delete(KvConst.AUTH_INFO + userId);
 	},
@@ -301,6 +282,7 @@ const userService = {
 	async setStatus(c, params) {
 
 		const { status, userId } = params;
+		await this.assertMutableUser(c, userId);
 
 		await orm(c)
 			.update(user)
@@ -316,10 +298,11 @@ const userService = {
 	async setType(c, params) {
 
 		const { type, userId } = params;
+		await this.assertMutableUser(c, userId);
 
 		const roleRow = await roleService.selectById(c, type);
 
-		if (!roleRow) {
+		if (!roleRow || isAdminRole(roleRow)) {
 			throw new BizError(t('roleNotExist'));
 		}
 
@@ -349,8 +332,7 @@ const userService = {
 
 	async add(c, params) {
 
-		let { email, username, displayName, type, password } = params;
-		const useUsernameIdentity = Boolean(normalizeUsername(username));
+		let { username, displayName, type, password } = params;
 
 		if (typeof password !== 'string' || password.length < 6) {
 			throw new BizError(t('pwdMinLength'));
@@ -360,55 +342,30 @@ const userService = {
 			throw new BizError(t('pwdLengthLimit'));
 		}
 
-		if (useUsernameIdentity) {
-			username = normalizeUsername(username);
-			if (!isValidUsername(username)) {
-				throw new BizError(t('invalidUsername'));
-			}
-			if (await this.selectByUsernameIncludeDel(c, username)) {
-				throw new BizError(t('usernameExists'));
-			}
-			email = buildLegacyAuthEmail(username);
-			if (await this.selectByEmailIncludeDel(c, email)) {
-				throw new BizError(t('usernameExists'));
-			}
-		} else {
-			if (!verifyUtils.isEmail(email) || !configuredDomains(c.env.domain).includes(emailUtils.getDomain(email).toLowerCase())) {
-				throw new BizError(t('notEmailDomain'));
-			}
-
-			const accountRow = await accountService.selectByEmailIncludeDel(c, email);
-			if (accountRow && accountRow.isDel === isDel.DELETE) {
-				throw new BizError(t('isDelUser'));
-			}
-			if (accountRow) {
-				throw new BizError(t('isRegAccount'));
-			}
-			username = await this.findAvailableUsername(c, emailUtils.getName(email));
+		username = normalizeUsername(username);
+		if (!isValidUsername(username)) {
+			throw new BizError(t('invalidUsername'));
+		}
+		if (await this.selectByUsernameIncludeDel(c, username)) {
+			throw new BizError(t('usernameExists'));
 		}
 
 		const role = await roleService.selectById(c, type);
 
-		if (!role) {
+		if (!role || isAdminRole(role)) {
 			throw new BizError(t('roleNotExist'));
 		}
 
-		const { salt, hash } = await saltHashUtils.hashPassword(password);
+		const { hash } = await saltHashUtils.hashPassword(password);
 
 		const userId = await userService.insert(c, {
-			email,
 			username,
 			displayName: typeof displayName === 'string' ? displayName.trim() : username,
-			password: hash,
-			salt,
+			passwordHash: hash,
 			type
 		});
 
 		await userService.updateUserInfo(c, userId, true);
-
-		if (!useUsernameIdentity) {
-			await accountService.insert(c, { userId: userId, email, type, name: emailUtils.getName(email) });
-		}
 
 		return { userId, username };
 	},
@@ -430,9 +387,6 @@ const userService = {
 			.set({ isDel: isDel.NORMAL })
 			.where(eq(user.userId, userId))
 			.run();
-		const userRow = await this.selectById(c, userId);
-		await accountService.restoreByEmail(c, userRow.email);
-
 		if (type) {
 			await emailService.restoreByUserId(c, userId);
 			await accountService.restoreByUserId(c, userId);
@@ -442,7 +396,7 @@ const userService = {
 
 	listByRegKeyId(c, regKeyId) {
 		return orm(c)
-			.select({ email: user.email, username: user.username, displayName: user.displayName, createTime: user.createTime })
+			.select({ username: user.username, displayName: user.displayName, createTime: user.createTime })
 			.from(user)
 			.where(eq(user.regKeyId, regKeyId))
 			.orderBy(desc(user.userId))

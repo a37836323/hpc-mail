@@ -48,7 +48,7 @@
     --z-toast: 100;
     --z-tooltip: 110;
 
-    /* Element Plus remains for legacy management views and is mapped to the same system. */
+    /* Element Plus management views are mapped to the same design system. */
     --el-color-primary: var(--primary);
     --el-color-primary-dark-2: var(--primary-hover);
     --el-color-primary-light-3: oklch(70% 0.14 256);
@@ -219,7 +219,7 @@ img { max-width: 100%; height: auto; display: block; }
 .el-message-box { max-width: calc(100vw - 32px); border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface-raised); }
 .el-notification { max-width: calc(100vw - 32px); border-radius: var(--radius-card); border-color: var(--border); background: var(--surface-raised); }
 
-/* Shared structure for every legacy view. */
+/* Shared structure for management views. */
 .header-actions {
     min-height: 56px !important;
     padding-inline: clamp(12px, 2vw, 24px) !important;

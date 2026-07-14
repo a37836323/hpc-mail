@@ -24,13 +24,14 @@ const permService = {
 	},
 
 	async userPermKeys(c, userId) {
-		const userPerms = await orm(c).select({permKey: perm.permKey}).from(user)
+		const userPerms = await orm(c).select({permKey: perm.permKey, permType: perm.type, roleKey: role.key}).from(user)
 			.leftJoin(role, eq(role.roleId,user.type))
-			.rightJoin(rolePerm, eq(rolePerm.roleId,role.roleId))
+			.leftJoin(rolePerm, eq(rolePerm.roleId,role.roleId))
 			.leftJoin(perm, eq(rolePerm.permId,perm.permId))
-			.where(and(eq(user.userId,userId),eq(perm.type,permConst.type.BUTTON)))
+			.where(eq(user.userId,userId))
 			.all();
-		return userPerms.map(perm => perm.permKey);
+		if (userPerms.some(item => item.roleKey === 'admin')) return ['*'];
+		return userPerms.filter(item => item.permKey && item.permType === permConst.type.BUTTON).map(item => item.permKey);
 	}
 }
 

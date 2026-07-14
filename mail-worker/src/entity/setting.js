@@ -33,7 +33,7 @@ export const setting = sqliteTable('setting', {
 	noticeOffset: integer('notice_offset').default(0).notNull(),
 	noticeWidth: integer('notice_width').default(400).notNull(),
 	notice: integer('notice').default(0).notNull(),
-	noRecipient: integer('no_recipient').default(1).notNull(),
+	noRecipient: integer('no_recipient').default(0).notNull(),
 	loginDomain: integer('login_domain').default(0).notNull(),
 	bucket: text('bucket').default('').notNull(),
 	region: text('region').default('').notNull(),

@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
-	buildLegacyAuthEmail,
+	isAdminRole,
 	isValidUsername,
-	migratedUsernamePreference,
-	parseLoginIdentifier
+	normalizeUsername,
+	usernameBase
 } from '../../src/utils/auth-utils';
 
 describe('username identity helpers', () => {
@@ -17,19 +17,17 @@ describe('username identity helpers', () => {
 		expect(isValidUsername('admin@example.com')).toBe(false);
 	});
 
-	it('parses username login and both legacy email shapes', () => {
-		expect(parseLoginIdentifier({ username: ' Riba2534 ' })).toEqual({ identifier: 'Riba2534', type: 'username' });
-		expect(parseLoginIdentifier({ email: ' admin@hpc.email ' })).toEqual({ identifier: 'admin@hpc.email', type: 'email' });
-		expect(parseLoginIdentifier({ username: 'admin@hpc.email' })).toEqual({ identifier: 'admin@hpc.email', type: 'email' });
+	it('normalizes usernames without accepting email addresses', () => {
+		expect(normalizeUsername(' Riba2534 ')).toBe('Riba2534');
+		expect(isValidUsername('admin@hpc.email')).toBe(false);
 	});
 
-	it('uses a non-routable unique legacy placeholder for username-only users', () => {
-		expect(buildLegacyAuthEmail(' Riba2534 ')).toBe('riba2534@auth.invalid');
+	it('generates valid username suggestions', () => {
+		expect(usernameBase(' Riba 2534 ')).toBe('riba-2534');
 	});
 
-	it('prefers the matching mailbox account name during migration', () => {
-		expect(migratedUsernamePreference('', 'riba2534', 'admin', 1)).toBe('riba2534');
-		expect(migratedUsernamePreference('', '', 'admin', 1)).toBe('admin');
-		expect(migratedUsernamePreference('Existing_User', 'riba2534', 'admin', 1)).toBe('Existing_User');
+	it('recognizes only the dedicated admin role key', () => {
+		expect(isAdminRole({ key: 'admin' })).toBe(true);
+		expect(isAdminRole({ key: 'user', name: 'admin' })).toBe(false);
 	});
 });

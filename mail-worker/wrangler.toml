@@ -40,7 +40,6 @@ crons = ["0 16 * * *"]
 [vars]
 analysis_cache = false
 domain = ["hpc.email", "happyclaw.cc", "riba2534.cn", "tiktok-row.cn", "option.red", "claude-router.cc"]
-admin = "admin@hpc.email"
 project_link = false
 
 [build]

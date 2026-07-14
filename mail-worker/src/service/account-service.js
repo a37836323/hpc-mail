@@ -6,12 +6,13 @@ import emailService from './email-service';
 import orm from '../entity/orm';
 import account from '../entity/account';
 import { and, asc, eq, gt, inArray, count, sql, ne, or, lt, desc } from 'drizzle-orm';
-import {accountConst, isDel, settingConst} from '../const/entity-const';
+import {isDel, settingConst} from '../const/entity-const';
 import settingService from './setting-service';
 import turnstileService from './turnstile-service';
 import roleService from './role-service';
 import { t } from '../i18n/i18n';
 import verifyRecordService from './verify-record-service';
+import { isAdminRole } from '../utils/auth-utils';
 
 const accountService = {
 
@@ -60,7 +61,7 @@ const accountService = {
 		const userRow = await userService.selectById(c, userId);
 		const roleRow = await roleService.selectById(c, userRow.type);
 
-		if (userRow.email !== c.env.admin) {
+		if (!isAdminRole(roleRow)) {
 
 			if (roleRow.accountCount > 0) {
 				const userAccountCount = await accountService.countUserAccount(c, userId)
@@ -144,14 +145,9 @@ const accountService = {
 
 		let { accountId } = params;
 
-		const user = await userService.selectById(c, userId);
 		const accountRow = await this.selectById(c, accountId);
 
-		if (accountRow.email === user.email) {
-			throw new BizError(t('delMyAccount'));
-		}
-
-		if (accountRow.userId !== user.userId) {
+		if (!accountRow || accountRow.userId !== userId) {
 			throw new BizError(t('noUserAccount'));
 		}
 
@@ -168,18 +164,7 @@ const accountService = {
 			.get();
 	},
 
-	async selectDefaultByUserId(c, userId, legacyEmail = '') {
-		if (legacyEmail) {
-			const legacyAccount = await orm(c).select().from(account).where(
-				and(
-					eq(account.userId, userId),
-					eq(account.isDel, isDel.NORMAL),
-					sql`${account.email} COLLATE NOCASE = ${legacyEmail}`
-				)
-			).get();
-			if (legacyAccount) return legacyAccount;
-		}
-
+	async selectDefaultByUserId(c, userId) {
 		return orm(c).select().from(account).where(
 			and(eq(account.userId, userId), eq(account.isDel, isDel.NORMAL))
 		)
@@ -221,10 +206,6 @@ const accountService = {
 		return num;
 	},
 
-	async restoreByEmail(c, email) {
-		await orm(c).update(account).set({isDel: isDel.NORMAL}).where(eq(account.email, email)).run();
-	},
-
 	async restoreByUserId(c, userId) {
 		await orm(c).update(account).set({isDel: isDel.NORMAL}).where(eq(account.userId, userId)).run();
 	},
@@ -252,9 +233,7 @@ const accountService = {
 
 		num = (num - 1) * size;
 
-		const userRow = await userService.selectByIdIncludeDel(c, userId);
-
-		const list = await orm(c).select().from(account).where(and(eq(account.userId, userId),ne(account.email,userRow.email))).limit(size).offset(num);
+		const list = await orm(c).select().from(account).where(eq(account.userId, userId)).limit(size).offset(num);
 		const { total } = await orm(c).select({ total: count() }).from(account).where(eq(account.userId, userId)).get();
 
 		return { list, total }
@@ -264,17 +243,6 @@ const accountService = {
 		const { accountId } = params
 		await emailService.physicsDeleteByAccountId(c, accountId)
 		await orm(c).delete(account).where(eq(account.accountId, accountId)).run();
-	},
-
-	async setAllReceive(c, params, userId) {
-		let a = null
-		const { accountId } = params;
-		const accountRow = await this.selectById(c, accountId);
-		if (accountRow.userId !== userId) {
-			return;
-		}
-		await orm(c).update(account).set({ allReceive: accountConst.allReceive.CLOSE }).where(eq(account.userId, userId)).run();
-		await orm(c).update(account).set({ allReceive: accountRow.allReceive ? 0 : 1 }).where(eq(account.accountId, accountId)).run();
 	},
 
 	async setAsTop(c, params, userId) {

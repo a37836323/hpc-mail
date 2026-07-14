@@ -4,13 +4,7 @@ const constant = {
 	JWT_TOKEN: 'token:',
 	TOKEN_EXPIRE: 60 * 60 * 24 * 30,
 	ATTACHMENT_PREFIX: 'attachments/',
-	BACKGROUND_PREFIX: 'static/background/',
-	ADMIN_ROLE: {
-		name: 'admin',
-		sendCount: 0,
-		sendType: 'count',
-		accountCount: 0
-	}
+	BACKGROUND_PREFIX: 'static/background/'
 }
 
 export default constant

@@ -39,7 +39,7 @@ const saltHashUtils = {
 		const salt = this.generateSalt();
 		const derived = await this.derivePbkdf2(password, salt, iterations);
 		const hash = `${PBKDF2_VERSION}$${iterations}$${salt}$${bytesToBase64url(derived)}`;
-		return { salt, hash };
+		return { hash };
 	},
 
 	async derivePbkdf2(password, salt, iterations = PBKDF2_ITERATIONS) {
@@ -52,35 +52,19 @@ const saltHashUtils = {
 		return new Uint8Array(bits);
 	},
 
-	async genHashPassword(password, salt) {
-		const data = encoder.encode(salt + password);
-		const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-		return btoa(String.fromCharCode(...new Uint8Array(hashBuffer)));
-	},
-
-	async verifyPassword(inputPassword, salt, storedHash) {
+	async verifyPassword(inputPassword, storedHash) {
 		if (typeof storedHash !== 'string') return false;
-		if (storedHash.startsWith(`${PBKDF2_VERSION}$`)) {
-			try {
-				const [version, iterationValue, encodedSalt, encodedHash] = storedHash.split('$');
-				if (version !== PBKDF2_VERSION || !encodedSalt || !encodedHash) return false;
-				const iterations = Number(iterationValue);
-				if (!Number.isInteger(iterations) || iterations < 100000 || iterations > PBKDF2_MAX_ITERATIONS) return false;
-				const actual = await this.derivePbkdf2(inputPassword, encodedSalt, iterations);
-				return constantTimeEqual(actual, base64urlToBytes(encodedHash));
-			} catch (_) {
-				return false;
-			}
+		if (!storedHash.startsWith(`${PBKDF2_VERSION}$`)) return false;
+		try {
+			const [version, iterationValue, encodedSalt, encodedHash] = storedHash.split('$');
+			if (version !== PBKDF2_VERSION || !encodedSalt || !encodedHash) return false;
+			const iterations = Number(iterationValue);
+			if (!Number.isInteger(iterations) || iterations !== PBKDF2_ITERATIONS) return false;
+			const actual = await this.derivePbkdf2(inputPassword, encodedSalt, iterations);
+			return constantTimeEqual(actual, base64urlToBytes(encodedHash));
+		} catch (_) {
+			return false;
 		}
-
-		const legacyHash = await this.genHashPassword(inputPassword, salt);
-		return constantTimeEqual(encoder.encode(legacyHash), encoder.encode(storedHash));
-	},
-
-	needsRehash(storedHash) {
-		if (typeof storedHash !== 'string' || !storedHash.startsWith(`${PBKDF2_VERSION}$`)) return true;
-		const iterations = Number(storedHash.split('$')[1]);
-		return !Number.isInteger(iterations) || iterations !== PBKDF2_ITERATIONS;
 	},
 
 	genRandomPwd(length = 16) {

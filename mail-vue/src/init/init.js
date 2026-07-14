@@ -38,7 +38,7 @@ export async function init() {
         document.title = setting.title;
 
         if (user) {
-            const account = user.account || {};
+            const account = user.defaultAccount || {};
             accountStore.currentAccountId = account.accountId || 0;
             accountStore.currentAccount = account;
             accountStore.hasAccounts = Boolean(account.accountId);

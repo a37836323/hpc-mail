@@ -1,6 +1,7 @@
 import BizError from '../error/biz-error';
 import reqUtils from '../utils/req-utils';
 import { t } from '../i18n/i18n';
+import KvConst from '../const/kv-const';
 
 const WINDOW_SECONDS = 15 * 60;
 const BACKOFF_THRESHOLD = 5;
@@ -17,7 +18,7 @@ const loginRateLimitService = {
 		const rawIp = reqUtils.getIp(c).split(',')[0].trim().toLowerCase();
 		const normalizedIdentifier = String(identifier || '<missing>').trim().toLowerCase();
 		const [ipHash, identifierHash] = await Promise.all([digest(`ip:${rawIp}`), digest(`id:${normalizedIdentifier}`)]);
-		return [`login-fail:ip:${ipHash}`, `login-fail:id:${identifierHash}`];
+		return [`${KvConst.LOGIN_FAILURE}ip:${ipHash}`, `${KvConst.LOGIN_FAILURE}id:${identifierHash}`];
 	},
 
 	async assertAllowed(c, identifier, now = Date.now()) {

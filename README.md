@@ -20,7 +20,7 @@ HPC Mail 将 Cloudflare Email Routing、Workers、D1、KV 与 R2 组合成一套
 
 ## 核心特性
 
-- **多域名收件**：通过 Cloudflare Email Routing Catch-all 接收多个域名的邮件，并在同一界面集中管理。
+- **多域名收件**：通过 Cloudflare Email Routing Catch-all 接收多个域名的邮件；未预建地址的来信自动归入系统管理员的“全部邮箱”收件箱。
 - **独立账号体系**：使用用户名和密码登录，登录身份不再与单一邮箱地址绑定；一个用户可以管理多个邮箱账号。
 - **灵活发件地址**：发送邮件时可自由填写合法前缀，并从管理员配置且用户有权使用的域名中选择后缀。
 - **完整邮件体验**：支持收发邮件、附件、内嵌图片、草稿、已发送状态和响应式阅读界面。
@@ -28,7 +28,7 @@ HPC Mail 将 Cloudflare Email Routing、Workers、D1、KV 与 R2 组合成一套
 - **服务端无状态部署**：业务运行在 Cloudflare Workers，数据分别存储于 D1、KV 与 R2，无需维护传统邮件服务器。
 - **管理与权限控制**：提供用户、邮箱、域名、配额、注册方式和系统参数管理。
 - **安全默认值**：密码使用 PBKDF2-SHA256，登录与令牌接口具备限流，会话支持过期与撤销，邮件 HTML 在前后端均进行净化处理。
-- **自动化交付**：推送到 `main` 后，由 GitHub Actions 自动完成测试、依赖审计、构建、部署、数据库迁移和线上健康检查。
+- **自动化交付**：推送到 `main` 后，由 GitHub Actions 自动完成测试、依赖审计、构建、部署、版本化 Schema 初始化和线上登录检查。
 
 ## 系统架构
 
@@ -112,6 +112,8 @@ pnpm --dir mail-vue run build
 | --- | --- |
 | `CLOUDFLARE_API_TOKEN` | 具备 Workers、D1、KV、R2、路由和脚本部署权限的 Cloudflare API Token |
 | `JWT_SECRET` | URL 安全、至少 43 个字符的高强度随机值 |
+| `INIT_SECRET` | 用于保护 Schema 初始化接口的独立高强度密钥，至少 32 个字符 |
+| `ADMIN_PASSWORD` | 12–128 个字符的初始管理员密码；工作流也使用它完成部署后的登录检查 |
 
 ### 必需 Variables
 
@@ -120,7 +122,8 @@ pnpm --dir mail-vue run build
 | `NAME` | `hpc-mail` | Worker 名称 |
 | `CUSTOM_DOMAIN` | `mail.example.com` | Web 服务使用的自定义域名 |
 | `DOMAIN` | `["example.com","example.net"]` | 可收发邮件的域名，必须是 JSON 字符串数组 |
-| `ADMIN` | `admin@example.com` | 初始管理员邮箱 |
+| `ADMIN_USERNAME` | `admin` | 初始管理员用户名，只用于登录身份和全新数据库初始化 |
+| `ADMIN_MAILBOX` | `admin@example.com` | 初始化时归属于管理员的首个邮箱，域名必须包含在 `DOMAIN` 中 |
 | `CLOUDFLARE_ACCOUNT_ID` | `xxxxxxxx` | Cloudflare 账户 ID |
 | `D1_DATABASE_ID` | `xxxxxxxx` | D1 数据库 ID |
 | `KV_NAMESPACE_ID` | `xxxxxxxx` | KV 命名空间 ID |
@@ -134,10 +137,17 @@ pnpm --dir mail-vue run build
 | `AI_MODEL` | `@cf/meta/llama-3.1-8b-instruct` | Workers AI 模型 |
 | `ANALYSIS_CACHE` | `false` | 是否缓存邮件智能分析结果 |
 | `PROJECT_LINK` | `false` | 是否在站点展示项目链接 |
-| `LINUXDO_SWITCH` | `false` | 是否启用 LinuxDo OAuth 登录 |
-| `LINUXDO_CLIENT_ID` | 空 | LinuxDo OAuth Client ID |
-| `LINUXDO_CALLBACK_URL` | 空 | LinuxDo OAuth 回调地址 |
-| `LINUXDO_CLIENT_SECRET` | 空 | LinuxDo OAuth Client Secret；应配置为 Secret |
+| `REBUILD_DATABASE` | `false` | 一次性破坏性开关；设为 `true` 时允许清空 D1 并按当前 Schema 重建，成功后应立即恢复为 `false` |
+
+### 身份与 Schema 初始化
+
+用户身份与邮箱地址完全分离：`user` 只保存用户名、密码哈希和角色等身份数据，所有邮箱地址只保存在 `account` 中。登录接口只接受用户名和密码，管理员邮箱也不会作为登录标识。
+
+部署完成后，工作流会通过受 `INIT_SECRET` 保护的 `POST /api/init` 初始化当前版本的 Schema，并使用 `ADMIN_USERNAME`、`ADMIN_PASSWORD` 和 `ADMIN_MAILBOX` 创建全新数据库的初始管理员。相同版本的重复初始化是幂等操作，不会覆盖已经修改过的管理员密码。
+
+数据库中记录的 Schema 版本与当前应用不一致时，初始化默认拒绝继续并使部署失败，不会自动迁移或清除数据。确认不再需要现有数据后，可将 `REBUILD_DATABASE` 临时设为 `true` 并重新运行工作流；该操作会清空 D1、按最新 Schema 重建并重新创建管理员。重建成功后必须立即将它恢复为 `false`。
+
+线上健康检查会使用 `ADMIN_USERNAME` 和 `ADMIN_PASSWORD` 实际登录、读取当前用户信息并退出。通过后台修改管理员密码后，也要同步更新 GitHub Secret `ADMIN_PASSWORD`，否则下一次部署会在健康检查阶段失败。
 
 推送 `mail-worker/**`、`mail-vue/**` 或工作流文件到 `main` 后会自动部署，也可以在 GitHub Actions 页面手动触发。工作流依次执行：
 
@@ -146,9 +156,9 @@ pnpm --dir mail-vue run build
 3. 审计生产依赖并构建前端；
 4. 执行 Wrangler Dry Run；
 5. 部署 Worker 与静态资源；
-6. 同步 Worker Secrets；
-7. 执行幂等数据库迁移；
-8. 检查首页和公开配置接口的线上健康状态。
+6. 同步 `jwt_secret` 与 `init_secret` Worker Secrets；
+7. 初始化版本化数据库 Schema，或在明确开启开关后执行整库重建；
+8. 检查首页和公开配置接口，并完成一次真实的管理员登录与退出。
 
 ## Cloudflare 邮件路由
 
@@ -181,8 +191,9 @@ hpc-mail/
 
 ## 安全说明
 
-- 不要提交 API Token、JWT Secret、OAuth Secret、Resend Token 或其他生产凭据。
-- 首次部署后请立即修改默认管理员密码，并仅为可信用户开放注册。
+- 不要提交 API Token、JWT Secret、Init Secret、管理员密码、Resend Token 或其他生产凭据。
+- `INIT_SECRET` 必须与 `JWT_SECRET` 相互独立；仅为可信用户开放注册。
+- 若在后台修改管理员密码，请同时更新 GitHub Secret `ADMIN_PASSWORD`，但不要把密码写入仓库 Variables 或配置文件。
 - 建议为 Cloudflare 和 GitHub 账户启用双因素认证，并定期轮换部署凭据。
 - 邮件属于不受信任输入；若扩展邮件渲染逻辑，请继续保留 HTML 净化、远程资源限制与附件 MIME 校验。
 - 如发现安全问题，请不要公开披露凭据或用户数据，可通过仓库所有者的私密联系方式报告。

@@ -76,11 +76,9 @@ function getEmailList(emailId, size) {
   // Sent mail is a user-level timeline. accountId=0 includes dynamic sender
   // identities that are intentionally not stored as mailbox accounts.
   const accountId = 0;
-  const allReceive = 1;
-  return emailList(accountId, allReceive, emailId, params.timeSort, size, 1).then(data => {
+  return emailList(accountId, emailId, params.timeSort, size, 1).then(data => {
     if (data.latestEmail) {
       data.latestEmail.reqAccountId = accountId;
-      data.latestEmail.allReceive = allReceive;
     }
     return data;
   })
