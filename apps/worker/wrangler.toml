@@ -1,0 +1,53 @@
+name = "hpc-cloud-mail"
+main = "src/index.ts"
+compatibility_date = "2025-06-04"
+account_id = "040ebe2037a4dc5209ceb96980020515"
+workers_dev = false
+
+routes = [
+  { pattern = "hpc.email", custom_domain = true },
+]
+
+[observability]
+enabled = true
+
+[triggers]
+crons = ["0 16 * * *"]
+
+[vars]
+domain = [
+  "hpc.email",
+  "happyclaw.cc",
+  "riba2534.cn",
+  "tiktok-row.cn",
+  "option.red",
+  "claude-router.cc",
+]
+ai_model = "@cf/meta/llama-3.1-8b-instruct"
+
+[[d1_databases]]
+binding = "db"
+database_name = "hpc-cloud-mail-db"
+database_id = "4888de56-5d04-4ccf-b0ab-44d309306d23"
+migrations_dir = "migrations"
+
+[[kv_namespaces]]
+binding = "kv"
+id = "740790d8a32f4286833f17940358f1bb"
+
+[[r2_buckets]]
+binding = "r2"
+bucket_name = "hpc-cloud-mail-r2"
+
+[ai]
+binding = "ai"
+
+[assets]
+binding = "assets"
+directory = "./dist"
+not_found_handling = "single-page-application"
+run_worker_first = ["/api/*", "/v1/*"]
+
+# Secrets（wrangler secret put）：
+#   jwt_secret              JWT 签名密钥（必需）
+#   resend_webhook_secret   Resend webhook svix 签名密钥（可选，未配置时 webhook 拒绝）

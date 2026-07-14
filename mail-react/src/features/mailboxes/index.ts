@@ -1,6 +1,0 @@
-export { MailboxFilter } from './MailboxFilter'
-export type { MailboxFilterProps } from './MailboxFilter'
-export { useMailboxes } from './useMailboxes'
-export { MailboxManagerPage } from './MailboxManagerPage'
-export { mailboxApi, loadAllMailboxes } from './mailboxApi'
-export type { CreatedMailbox, MailboxRecord, MailboxUser, MailboxWebsiteConfig } from './mailboxTypes'

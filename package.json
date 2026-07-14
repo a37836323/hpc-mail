@@ -1,0 +1,20 @@
+{
+  "name": "hpc-mail",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.12",
+    "pnpm": ">=10"
+  },
+  "packageManager": "pnpm@10.28.1",
+  "scripts": {
+    "dev": "concurrently -n worker,web -c yellow,cyan \"pnpm --filter @hpc-mail/worker dev\" \"pnpm --filter @hpc-mail/web dev\"",
+    "build": "pnpm --filter @hpc-mail/web build && pnpm --filter @hpc-mail/worker build:assets",
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "typescript": "^5.9.3"
+  }
+}
