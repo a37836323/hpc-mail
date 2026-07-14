@@ -43,4 +43,4 @@ domain = ["hpc.email", "happyclaw.cc", "riba2534.cn", "tiktok-row.cn", "option.r
 project_link = false
 
 [build]
-command = "pnpm --prefix ../mail-vue install --frozen-lockfile && pnpm --prefix ../mail-vue run build"
+command = "pnpm --prefix ../mail-react install --frozen-lockfile && pnpm --prefix ../mail-react run build && rm -rf ./dist && cp -R ../mail-react/dist ./dist && ! find ./dist -type f -name '*.map' -print -quit | grep -q ."

@@ -101,56 +101,15 @@ describe('versioned clean database initialization', () => {
 		expect(database.prepare(`SELECT COUNT(*) AS total FROM user`).get().total).toBe(1);
 	});
 
-	it('upgrades the active version 4 schema without deleting users', async () => {
+	it.each(['4', '5'])('rejects schema version %s instead of running compatibility migrations', async (version) => {
 		const database = new DatabaseSync(':memory:');
 		const c = initContext(database);
 		vi.spyOn(settingService, 'refresh').mockResolvedValue();
 		await dbInit.init(c, initPayload());
-		database.exec(`
-			DROP TABLE api_rate_limit;
-			DROP TABLE api_call_log;
-			DROP TABLE api_key;
-			DROP TABLE api_config;
-			DELETE FROM perm WHERE perm_id >= 37;
-			ALTER TABLE setting DROP COLUMN feishu_bot_status;
-			ALTER TABLE setting DROP COLUMN feishu_webhook_url;
-			ALTER TABLE setting DROP COLUMN feishu_bot_secret;
-			UPDATE schema_meta SET schema_version = '4';
-		`);
+		database.prepare(`UPDATE schema_meta SET schema_version = ?`).run(version);
 
-		const migrated = await dbInit.init(c, {});
-		expect(migrated).toEqual({ schemaVersion: SCHEMA_VERSION, rebuilt: false, migratedFrom: '4' });
-		expect(database.prepare(`SELECT username FROM user WHERE user_id = 1`).get()).toEqual({ username: 'riba2534' });
-		expect(database.prepare(`SELECT enabled FROM api_config`).get()).toEqual({ enabled: 1 });
-		expect(database.prepare(`SELECT schema_version FROM schema_meta`).get()).toEqual({ schema_version: SCHEMA_VERSION });
-		expect(database.prepare(`SELECT feishu_bot_status, feishu_webhook_url, feishu_bot_secret FROM setting`).get()).toEqual({
-			feishu_bot_status: 1,
-			feishu_webhook_url: '',
-			feishu_bot_secret: ''
-		});
-	});
-
-	it('upgrades version 5 in place and preserves users, mailboxes, and API keys', async () => {
-		const database = new DatabaseSync(':memory:');
-		const c = initContext(database);
-		vi.spyOn(settingService, 'refresh').mockResolvedValue();
-		await dbInit.init(c, initPayload());
-		database.exec(`
-			INSERT INTO account (email, name, user_id) VALUES ('kept@hpc.email', 'kept', 1);
-			INSERT INTO api_key (name, key_prefix, key_suffix, key_hash, user_id, scopes, created_by)
-			VALUES ('kept', 'hpc_live_123456', 'abcdef', 'hash', 1, '["mail.read"]', 1);
-			ALTER TABLE setting DROP COLUMN feishu_bot_status;
-			ALTER TABLE setting DROP COLUMN feishu_webhook_url;
-			ALTER TABLE setting DROP COLUMN feishu_bot_secret;
-			UPDATE schema_meta SET schema_version = '5';
-		`);
-
-		const migrated = await dbInit.init(c, {});
-		expect(migrated).toEqual({ schemaVersion: SCHEMA_VERSION, rebuilt: false, migratedFrom: '5' });
-		expect(database.prepare(`SELECT username FROM user WHERE user_id = 1`).get()).toEqual({ username: 'riba2534' });
-		expect(database.prepare(`SELECT email FROM account WHERE account_id = 1`).get()).toEqual({ email: 'kept@hpc.email' });
-		expect(database.prepare(`SELECT name FROM api_key WHERE api_key_id = 1`).get()).toEqual({ name: 'kept' });
-		expect(database.prepare(`SELECT feishu_bot_status FROM setting`).get()).toEqual({ feishu_bot_status: 1 });
+		await expect(dbInit.init(c, {})).rejects.toMatchObject({ code: 409 });
+		expect(database.prepare(`SELECT schema_version FROM schema_meta`).get()).toEqual({ schema_version: version });
 	});
 
 	it('requires explicit rebuild permission for a legacy database', async () => {

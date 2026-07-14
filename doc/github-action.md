@@ -1,6 +1,6 @@
 # GitHub Actions 自动部署
 
-仓库内置 [`.github/workflows/deploy-cloudflare.yml`](../.github/workflows/deploy-cloudflare.yml)。推送 `mail-worker/**`、`mail-vue/**` 或工作流文件到 `main` 后，GitHub Actions 会自动完成测试、依赖审计、前端构建、Wrangler Dry Run、Cloudflare 部署、Schema 初始化和线上健康检查。
+仓库内置 [`.github/workflows/deploy-cloudflare.yml`](../.github/workflows/deploy-cloudflare.yml)。推送 `mail-worker/**`、`mail-react/**` 或工作流文件到 `main` 后，GitHub Actions 会自动完成测试、依赖审计、React 前端构建、Wrangler Dry Run、Cloudflare 部署、Schema 初始化和线上健康检查。
 
 ## 配置 Secrets
 

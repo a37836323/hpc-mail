@@ -6,12 +6,6 @@ import { isValidUsername, normalizeUsername } from '../utils/auth-utils';
 
 const SCHEMA_VERSION = '6';
 
-const FEISHU_SETTING_MIGRATION_SQL = [
-	`ALTER TABLE setting ADD COLUMN feishu_bot_status INTEGER NOT NULL DEFAULT 1`,
-	`ALTER TABLE setting ADD COLUMN feishu_webhook_url TEXT NOT NULL DEFAULT ''`,
-	`ALTER TABLE setting ADD COLUMN feishu_bot_secret TEXT NOT NULL DEFAULT ''`
-];
-
 const API_SCHEMA_SQL = [
 	`CREATE TABLE api_config (
 		config_id INTEGER PRIMARY KEY NOT NULL DEFAULT 1,
@@ -322,8 +316,6 @@ const PERMISSION_ROWS = [
 	[41, 'API 删除', 'api-key:delete', 37, 2, 3]
 ];
 
-const API_PERMISSION_ROWS = PERMISSION_ROWS.filter(row => row[0] >= 37);
-
 const DEFAULT_ROLE_PERMISSIONS = [2, 3, 5, 22, 23, 24];
 
 function normalizeInitParams(params = {}) {
@@ -432,29 +424,6 @@ async function createSchema(c, initParams) {
 	return instanceEpoch;
 }
 
-async function migrateFromVersion4(c) {
-	const statements = [
-		...API_SCHEMA_SQL.map(sql => c.env.db.prepare(sql)),
-		...FEISHU_SETTING_MIGRATION_SQL.map(sql => c.env.db.prepare(sql))
-	];
-	statements.push(c.env.db.prepare(`INSERT INTO api_config (config_id, enabled) VALUES (1, 1)`));
-	for (const row of API_PERMISSION_ROWS) {
-		statements.push(
-			c.env.db.prepare(`INSERT INTO perm (perm_id, name, perm_key, pid, type, sort) VALUES (?, ?, ?, ?, ?, ?)`)
-				.bind(...row)
-		);
-	}
-	statements.push(c.env.db.prepare(`UPDATE schema_meta SET schema_version = ?`).bind(SCHEMA_VERSION));
-	await c.env.db.batch(statements);
-}
-
-async function migrateFromVersion5(c) {
-	await c.env.db.batch([
-		...FEISHU_SETTING_MIGRATION_SQL.map(sql => c.env.db.prepare(sql)),
-		c.env.db.prepare(`UPDATE schema_meta SET schema_version = ?`).bind(SCHEMA_VERSION)
-	]);
-}
-
 const dbInit = {
 	async init(c, params = {}) {
 		const currentVersion = await schemaVersion(c);
@@ -463,16 +432,6 @@ const dbInit = {
 		if (currentVersion === SCHEMA_VERSION && !rebuildRequested) {
 			await settingService.refresh(c);
 			return { schemaVersion: SCHEMA_VERSION, rebuilt: false };
-		}
-		if (currentVersion === '4' && !rebuildRequested) {
-			await migrateFromVersion4(c);
-			await settingService.refresh(c);
-			return { schemaVersion: SCHEMA_VERSION, rebuilt: false, migratedFrom: currentVersion };
-		}
-		if (currentVersion === '5' && !rebuildRequested) {
-			await migrateFromVersion5(c);
-			await settingService.refresh(c);
-			return { schemaVersion: SCHEMA_VERSION, rebuilt: false, migratedFrom: currentVersion };
 		}
 		const hasTables = await hasApplicationTables(c);
 		if (hasTables && !rebuildRequested) {

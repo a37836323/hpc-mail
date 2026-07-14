@@ -42,3 +42,6 @@ orm_log = false
 domain = ["example.com", "example2.com", "example3.com", "example4.com"]
 jwt_secret = "b7f29a1d-18e2-4d3b-941f-f6b2c97c02fd"
 init_secret = "local-development-init-secret"
+
+[build]
+command = "pnpm --prefix ../mail-react install --frozen-lockfile && pnpm --prefix ../mail-react run build && rm -rf ./dist && cp -R ../mail-react/dist ./dist && ! find ./dist -type f -name '*.map' -print -quit | grep -q ."

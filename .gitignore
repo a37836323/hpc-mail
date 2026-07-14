@@ -21,7 +21,8 @@ dist
 *.sln
 *.sw?
 
-mail-vue/node_modules
-mail-vue/dist
+mail-react/node_modules
+mail-react/dist
+.playwright-cli
 .wrangler
 .venv

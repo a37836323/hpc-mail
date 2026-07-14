@@ -6,7 +6,7 @@ on:
     paths:
       - ".github/workflows/deploy-cloudflare.yml"
       - "mail-worker/**"
-      - "mail-vue/**"
+      - "mail-react/**"
   workflow_dispatch:
 
 permissions:
@@ -56,7 +56,7 @@ jobs:
           cache: pnpm
           cache-dependency-path: |
             mail-worker/pnpm-lock.yaml
-            mail-vue/pnpm-lock.yaml
+            mail-react/pnpm-lock.yaml
 
       - name: Validate deployment configuration
         shell: bash
@@ -102,7 +102,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Install frontend dependencies
-        working-directory: mail-vue
+        working-directory: mail-react
         run: pnpm install --frozen-lockfile
 
       - name: Run Worker tests
@@ -110,19 +110,31 @@ jobs:
         run: pnpm run test:unit
 
       - name: Run frontend tests
-        working-directory: mail-vue
+        working-directory: mail-react
         run: pnpm test
+
+      - name: Type-check frontend
+        working-directory: mail-react
+        run: pnpm run typecheck
 
       - name: Audit production dependencies
         shell: bash
         run: |
           set -euo pipefail
           pnpm --dir mail-worker audit --prod
-          pnpm --dir mail-vue audit --prod
+          pnpm --dir mail-react audit --prod
 
       - name: Build frontend
-        working-directory: mail-vue
-        run: pnpm run build
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm --dir mail-react run build
+          rm -rf mail-worker/dist
+          cp -R mail-react/dist mail-worker/dist
+          if find mail-worker/dist -type f -name '*.map' -print -quit | grep -q .; then
+            echo "::error::Production frontend must not contain source maps"
+            exit 1
+          fi
 
       - name: Render production Wrangler configuration
         working-directory: mail-worker

@@ -25,7 +25,7 @@ binding = "ai"
 
 [assets]
 binding = "assets"		#静态资源绑定名默认不可修改
-directory = "./dist"	#前端vue项目打包的静态资源存放位置,默认dist
+directory = "./dist"	# React 前端构建产物目录
 not_found_handling = "single-page-application"
 run_worker_first = true
 
@@ -42,4 +42,4 @@ jwt_secret = "b7f29a1d-18e2-4d3b-941f-f6b2c97c02fd"			#jwt令牌的密钥,随便
 init_secret = "local-test-init-secret"
 
 [build]
-command = "pnpm --prefix ../mail-vue install && pnpm --prefix ../mail-vue run build"
+command = "pnpm --prefix ../mail-react install --frozen-lockfile && pnpm --prefix ../mail-react run build && rm -rf ./dist && cp -R ../mail-react/dist ./dist && ! find ./dist -type f -name '*.map' -print -quit | grep -q ."

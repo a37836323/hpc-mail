@@ -41,4 +41,4 @@ domain = "${DOMAIN}"
 project_link = "${PROJECT_LINK}"
 
 [build]
-command = "pnpm --prefix ../mail-vue install --frozen-lockfile && pnpm --prefix ../mail-vue run build"
+command = "pnpm --prefix ../mail-react install --frozen-lockfile && pnpm --prefix ../mail-react run build && rm -rf ./dist && cp -R ../mail-react/dist ./dist && ! find ./dist -type f -name '*.map' -print -quit | grep -q ."

@@ -37,7 +37,7 @@ HPC Mail 将 Cloudflare Email Routing、Workers、D1、KV 与 R2 组合成一套
 flowchart LR
     Sender["外部发件人"] --> Routing["Cloudflare Email Routing"]
     Routing --> Worker["HPC Mail Worker"]
-    Browser["Web / PWA"] <--> Worker
+    Browser["React Web"] <--> Worker
     Worker <--> D1["D1 · 业务数据"]
     Worker <--> KV["KV · 会话与缓存"]
     Worker <--> R2["R2 · 邮件附件"]
@@ -51,7 +51,7 @@ flowchart LR
 
 | 层级 | 技术 |
 | --- | --- |
-| 前端 | Vue 3、Vite、Element Plus、Pinia、Vue Router、PWA |
+| 前端 | React 19、TypeScript、Vite 7、React Router 7、Tailwind CSS 4、Radix UI、TanStack Query、Zustand |
 | 后端 | Cloudflare Workers、Hono、Drizzle ORM |
 | 数据 | Cloudflare D1、KV、R2 |
 | 邮件 | Cloudflare Email Routing、Email Workers、Send Email Binding、Resend |
@@ -79,11 +79,12 @@ cd hpc-mail
 
 ```bash
 pnpm --dir mail-worker install --frozen-lockfile
-pnpm --dir mail-vue install --frozen-lockfile
+pnpm --dir mail-react install --frozen-lockfile
 
 pnpm --dir mail-worker run test:unit
-pnpm --dir mail-vue test
-pnpm --dir mail-vue run build
+pnpm --dir mail-react run typecheck
+pnpm --dir mail-react test
+pnpm --dir mail-react run build
 ```
 
 ### 本地开发
@@ -98,10 +99,10 @@ pnpm --dir mail-vue run build
 3. 在另一个终端启动前端：
 
    ```bash
-   pnpm --dir mail-vue dev
+   pnpm --dir mail-react dev
    ```
 
-4. 访问 [http://localhost:3001](http://localhost:3001)。前端开发环境默认请求 `http://127.0.0.1:8787/api`。
+4. 访问 [http://127.0.0.1:3002](http://127.0.0.1:3002)。React 开发服务器会将同源 `/api` 请求代理到 `http://127.0.0.1:8787`。
 
 ## GitHub Actions 自动部署
 
@@ -145,11 +146,11 @@ pnpm --dir mail-vue run build
 
 部署完成后，工作流会通过受 `INIT_SECRET` 保护的 `POST /api/init` 初始化当前版本的 Schema，并使用 `ADMIN_USERNAME` 和 `ADMIN_PASSWORD` 创建全新数据库的平台管理员。初始化不会自动创建或绑定邮箱；管理员登录后可在邮箱管理中按需添加任意已配置域名的邮箱。相同版本的重复初始化是幂等操作，不会覆盖已经修改过的管理员密码。
 
-数据库升级只执行仓库中明确声明并经过测试的版本迁移，例如 Schema v5 到 v6 会保留现有用户、邮箱和 API 密钥，并增加飞书机器人配置。没有已声明迁移路径的未知或旧版 Schema 会拒绝继续，不会擅自清除数据。确认不再需要现有数据后，可将 `REBUILD_DATABASE` 临时设为 `true` 并重新运行工作流；该操作会清空 D1、按最新 Schema 重建并重新创建管理员。重建成功后必须立即将它恢复为 `false`。
+项目只支持仓库当前声明的最新 Schema，不包含旧版数据库兼容或就地迁移逻辑。检测到旧版或未知 Schema 时初始化会直接拒绝继续；将 `REBUILD_DATABASE` 临时设为 `true` 后重新运行工作流，会清空 D1、按最新架构重建并重新创建管理员。重建成功后应立即将该变量恢复为 `false`。
 
 线上健康检查会使用 `ADMIN_USERNAME` 和 `ADMIN_PASSWORD` 实际登录、读取当前用户信息并退出。通过后台修改管理员密码后，也要同步更新 GitHub Secret `ADMIN_PASSWORD`，否则下一次部署会在健康检查阶段失败。
 
-推送 `mail-worker/**`、`mail-vue/**` 或工作流文件到 `main` 后会自动部署，也可以在 GitHub Actions 页面手动触发。工作流依次执行：
+推送 `mail-worker/**`、`mail-react/**` 或工作流文件到 `main` 后会自动部署，也可以在 GitHub Actions 页面手动触发。工作流依次执行：
 
 1. 校验部署参数；
 2. 安装依赖并运行前后端测试；
@@ -236,10 +237,11 @@ hpc-mail/
 ├── .github/workflows/        # GitHub Actions 自动部署
 ├── design-system/            # 视觉规范与设计令牌
 ├── doc/                      # 项目文档与资源
-├── mail-vue/                 # Vue 3 前端应用
-│   ├── public/               # 公共静态资源
-│   ├── src/                  # 页面、组件、状态与请求层
-│   └── test/                 # 前端测试
+├── mail-react/               # React 19 前端应用
+│   ├── src/app/              # 应用外壳、路由、鉴权与权限边界
+│   ├── src/features/         # 邮件、写信、设置和管理功能
+│   ├── src/components/ui/    # 项目自有基础组件
+│   └── test/                 # 前端安全与业务测试
 ├── mail-worker/              # Cloudflare Worker 后端
 │   ├── src/                  # API、服务、存储与邮件处理
 │   ├── test/                 # Worker 单元测试
