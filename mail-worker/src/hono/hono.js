@@ -7,10 +7,23 @@ import { cors } from 'hono/cors';
 app.use('*', cors());
 
 app.onError((err, c) => {
-	if (err.name === 'BizError') {
+	if (err.name === 'BizError' && c.req.path.startsWith('/v1') && Number(err.code) < 500) {
+		// Expected public API client errors are returned below and do not need server-side noise.
+	} else if (err.name === 'BizError') {
 		console.log(err.message);
 	} else {
 		console.error(err);
+	}
+
+	if (c.req.path.startsWith('/v1')) {
+		const status = Number(err.code) >= 400 && Number(err.code) <= 599 ? Number(err.code) : 500;
+		return c.json({
+			error: {
+				code: status,
+				message: status === 500 ? 'Internal server error' : err.message
+			},
+			requestId: c.get('requestId') || null
+		}, status);
 	}
 
 	if (err.message === `Cannot read properties of undefined (reading 'get')`) {
@@ -29,5 +42,3 @@ app.onError((err, c) => {
 });
 
 export default app;
-
-

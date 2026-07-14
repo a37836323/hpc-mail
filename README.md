@@ -27,6 +27,7 @@ HPC Mail 将 Cloudflare Email Routing、Workers、D1、KV 与 R2 组合成一套
 - **自动转发与通知**：可按配置将来信转发至外部邮箱或 Telegram。
 - **服务端无状态部署**：业务运行在 Cloudflare Workers，数据分别存储于 D1、KV 与 R2，无需维护传统邮件服务器。
 - **管理与权限控制**：提供用户、邮箱、域名、配额、注册方式和系统参数管理。
+- **外部 API 控制**：提供一次性展示的独立 API 密钥、细粒度作用域、绑定用户、全局开关、到期时间、IP 白名单、每分钟限流和 90 天调用审计。
 - **安全默认值**：密码使用 PBKDF2-SHA256，登录与令牌接口具备限流，会话支持过期与撤销，邮件 HTML 在前后端均进行净化处理。
 - **自动化交付**：推送到 `main` 后，由 GitHub Actions 自动完成测试、依赖审计、构建、部署、版本化 Schema 初始化和线上登录检查。
 
@@ -145,7 +146,7 @@ pnpm --dir mail-vue run build
 
 部署完成后，工作流会通过受 `INIT_SECRET` 保护的 `POST /api/init` 初始化当前版本的 Schema，并使用 `ADMIN_USERNAME`、`ADMIN_PASSWORD` 和 `ADMIN_MAILBOX` 创建全新数据库的初始管理员。相同版本的重复初始化是幂等操作，不会覆盖已经修改过的管理员密码。
 
-数据库中记录的 Schema 版本与当前应用不一致时，初始化默认拒绝继续并使部署失败，不会自动迁移或清除数据。确认不再需要现有数据后，可将 `REBUILD_DATABASE` 临时设为 `true` 并重新运行工作流；该操作会清空 D1、按最新 Schema 重建并重新创建管理员。重建成功后必须立即将它恢复为 `false`。
+数据库升级只执行仓库中明确声明并经过测试的版本迁移，例如 Schema v4 到 v5 会保留现有用户和邮件并增加 API 控制表。没有已声明迁移路径的未知或旧版 Schema 会拒绝继续，不会擅自清除数据。确认不再需要现有数据后，可将 `REBUILD_DATABASE` 临时设为 `true` 并重新运行工作流；该操作会清空 D1、按最新 Schema 重建并重新创建管理员。重建成功后必须立即将它恢复为 `false`。
 
 线上健康检查会使用 `ADMIN_USERNAME` 和 `ADMIN_PASSWORD` 实际登录、读取当前用户信息并退出。通过后台修改管理员密码后，也要同步更新 GitHub Secret `ADMIN_PASSWORD`，否则下一次部署会在健康检查阶段失败。
 
@@ -169,6 +170,44 @@ pnpm --dir mail-vue run build
 3. 选择当前部署的 HPC Mail Worker；
 4. 如使用 Cloudflare Send Email Binding，按 Cloudflare 要求验证允许使用的发件域名和目标地址；
 5. 如使用 Resend，在管理后台为对应域名保存 Resend Token 并完成域名验证。
+
+## 外部 API
+
+管理员可以在后台的“API 控制”页面创建、停用或永久吊销 API 密钥。密钥使用 SHA-256 摘要保存，完整明文只在创建成功时展示一次；每个密钥必须绑定一个系统用户，调用仍受该用户角色、可用域名和发信额度约束。
+
+API 基础地址为 `https://你的域名/api/v1`，使用标准 Bearer 认证：
+
+```bash
+curl https://mail.example.com/api/v1/status \
+  -H "Authorization: Bearer hpc_live_your_api_key"
+```
+
+当前稳定接口：
+
+| 方法 | 路径 | 所需作用域 | 说明 |
+| --- | --- | --- | --- |
+| `GET` | `/status` | 任意 | 验证密钥和 API 状态 |
+| `GET` | `/mailboxes` | `mailbox.read` | 查询绑定用户的邮箱地址 |
+| `GET` | `/messages` | `mail.read` | 分页查询收件或发件记录 |
+| `GET` | `/messages/:id` | `mail.read` | 查询单封邮件 |
+| `POST` | `/messages` | `mail.send` | 使用任意合法前缀和已授权域名发信 |
+
+发送示例：
+
+```bash
+curl https://mail.example.com/api/v1/messages \
+  -X POST \
+  -H "Authorization: Bearer hpc_live_your_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "from": {"localPart": "notice", "domain": "example.com", "name": "通知服务"},
+    "to": ["user@example.net"],
+    "subject": "测试邮件",
+    "text": "这是一封通过 HPC Mail API 发送的邮件。"
+  }'
+```
+
+生产环境建议为每个调用方单独创建密钥，只授予必要作用域，配置固定出口 IP 和合理限流，并根据调用审计定期轮换或吊销密钥。不要在浏览器前端代码、URL、日志或公开仓库中保存 API 密钥。
 
 ## 目录结构
 

@@ -794,6 +794,16 @@ const emailService = {
 			.get();
 	},
 
+	selectByIdForUser(c, emailId, userId) {
+		return orm(c).select().from(email).where(
+			and(
+				eq(email.emailId, emailId),
+				eq(email.userId, userId),
+				eq(email.isDel, isDel.NORMAL)
+			)
+		).get();
+	},
+
 	async latest(c, params, userId) {
 		let { emailId, accountId, type = emailConst.type.RECEIVE } = params;
 		accountId = Number(accountId);

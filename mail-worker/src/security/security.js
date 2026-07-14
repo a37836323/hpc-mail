@@ -19,7 +19,8 @@ const exclude = [
 	'/init',
 	'/public/genToken',
 	'/telegram',
-	'/test'
+	'/test',
+	'/v1'
 ];
 
 const requirePerms = [
@@ -59,7 +60,15 @@ const requirePerms = [
 	'/regKey/list',
 	'/regKey/delete',
 	'/regKey/clearNotUse',
-	'/regKey/history'
+	'/regKey/history',
+	'/apiKey/config',
+	'/apiKey/setConfig',
+	'/apiKey/users',
+	'/apiKey/list',
+	'/apiKey/create',
+	'/apiKey/status',
+	'/apiKey/delete',
+	'/apiKey/audit'
 ];
 
 const premKey = {
@@ -88,6 +97,10 @@ const premKey = {
 	'reg-key:add': ['/regKey/add'],
 	'reg-key:query': ['/regKey/list','/regKey/history'],
 	'reg-key:delete': ['/regKey/delete','/regKey/clearNotUse'],
+	'api-key:query': ['/apiKey/config', '/apiKey/users', '/apiKey/list', '/apiKey/audit'],
+	'api-key:add': ['/apiKey/create'],
+	'api-key:set': ['/apiKey/setConfig', '/apiKey/status'],
+	'api-key:delete': ['/apiKey/delete'],
 };
 
 app.use('*', async (c, next) => {

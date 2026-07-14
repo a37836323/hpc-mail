@@ -77,7 +77,7 @@ onBeforeUnmount(() => window.removeEventListener('resize', handleResize))
 
 <style scoped>
 .app-shell { position: fixed; inset: 0; height: 100dvh; display: grid; grid-template-columns: 0 minmax(0, 1fr); overflow: hidden; background: var(--background); }
-.app-workspace { min-width: 0; height: 100%; display: grid; grid-template-rows: 64px minmax(0, 1fr); }
+.app-workspace { min-width: 0; min-height: 0; height: 100%; display: grid; grid-template-rows: 64px minmax(0, 1fr); }
 .app-main { min-width: 0; min-height: 0; overflow: hidden; background: var(--background); }
 .app-sidebar { width: 240px; height: 100%; border-inline-end: 1px solid var(--border); background: var(--surface); transform: translateX(-100%); transition: transform var(--motion-base) var(--ease-out); z-index: var(--z-overlay); }
 .app-shell--nav-open { grid-template-columns: 240px minmax(0, 1fr); }

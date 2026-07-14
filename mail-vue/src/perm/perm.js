@@ -99,6 +99,16 @@ const routers = {
             menu: true
         }
     }],
+    'api-key:query': [{
+        path: '/api-control',
+        name: 'api-control',
+        component: () => import('@/views/api-control/index.vue'),
+        meta: {
+            title: 'apiControl',
+            name: 'api-control',
+            menu: true
+        }
+    }],
     'all-email:query': [{
         path: '/all-mail',
         name: 'all-email',

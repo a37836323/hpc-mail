@@ -12,7 +12,7 @@
     </DialogRoot>
 
     <router-view class="main-view" v-slot="{ Component, route }">
-      <keep-alive :include="['email','all-email','send','sys-setting','star','user','role','analysis','reg-key','draft']">
+      <keep-alive :include="['email','all-email','send','sys-setting','star','user','role','analysis','reg-key','api-control','draft']">
         <component :is="Component" :key="route.name" />
       </keep-alive>
     </router-view>

@@ -7,9 +7,61 @@ import verifyUtils from '../utils/verify-utils';
 import { configuredDomains } from '../utils/sender-utils';
 import { isValidUsername, normalizeUsername } from '../utils/auth-utils';
 
-const SCHEMA_VERSION = '4';
+const SCHEMA_VERSION = '5';
+
+const API_SCHEMA_SQL = [
+	`CREATE TABLE api_config (
+		config_id INTEGER PRIMARY KEY NOT NULL DEFAULT 1,
+		enabled INTEGER NOT NULL DEFAULT 1,
+		updated_by INTEGER,
+		updated_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		CHECK (config_id = 1)
+	)`,
+	`CREATE TABLE api_key (
+		api_key_id INTEGER PRIMARY KEY AUTOINCREMENT,
+		name TEXT NOT NULL,
+		key_prefix TEXT NOT NULL,
+		key_suffix TEXT NOT NULL,
+		key_hash TEXT NOT NULL,
+		user_id INTEGER NOT NULL,
+		scopes TEXT NOT NULL DEFAULT '[]',
+		allowed_ips TEXT NOT NULL DEFAULT '[]',
+		rate_limit INTEGER NOT NULL DEFAULT 60,
+		status INTEGER NOT NULL DEFAULT 1,
+		expires_at DATETIME,
+		last_used_at DATETIME,
+		last_used_ip TEXT,
+		created_by INTEGER NOT NULL,
+		create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+	)`,
+	`CREATE UNIQUE INDEX idx_api_key_hash ON api_key (key_hash)`,
+	`CREATE INDEX idx_api_key_user_status ON api_key (user_id, status)`,
+	`CREATE TABLE api_call_log (
+		log_id INTEGER PRIMARY KEY AUTOINCREMENT,
+		api_key_id INTEGER NOT NULL,
+		request_id TEXT NOT NULL,
+		method TEXT NOT NULL,
+		path TEXT NOT NULL,
+		status_code INTEGER NOT NULL,
+		ip TEXT NOT NULL DEFAULT '',
+		duration_ms INTEGER NOT NULL DEFAULT 0,
+		create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+	)`,
+	`CREATE INDEX idx_api_call_log_key_time ON api_call_log (api_key_id, create_time DESC)`,
+	`CREATE INDEX idx_api_call_log_time ON api_call_log (create_time DESC)`,
+	`CREATE TABLE api_rate_limit (
+		api_key_id INTEGER NOT NULL,
+		window_start INTEGER NOT NULL,
+		request_count INTEGER NOT NULL DEFAULT 0,
+		PRIMARY KEY (api_key_id, window_start)
+	)`
+];
 
 const DROP_TABLES = [
+	'api_rate_limit',
+	'api_call_log',
+	'api_key',
+	'api_config',
 	'role_perm',
 	'star',
 	'attachments',
@@ -165,6 +217,7 @@ const SCHEMA_SQL = [
 		type INTEGER NOT NULL DEFAULT 0,
 		update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 	)`,
+	...API_SCHEMA_SQL,
 	`CREATE TABLE setting (
 		register INTEGER NOT NULL DEFAULT 0,
 		receive INTEGER NOT NULL DEFAULT 0,
@@ -255,8 +308,15 @@ const PERMISSION_ROWS = [
 	[33, '注册密钥', null, 0, 1, 5.1],
 	[34, '密钥查看', 'reg-key:query', 33, 2, 0],
 	[35, '密钥添加', 'reg-key:add', 33, 2, 1],
-	[36, '密钥删除', 'reg-key:delete', 33, 2, 2]
+	[36, '密钥删除', 'reg-key:delete', 33, 2, 2],
+	[37, 'API 控制', null, 0, 1, 5.2],
+	[38, 'API 查看', 'api-key:query', 37, 2, 0],
+	[39, 'API 创建', 'api-key:add', 37, 2, 1],
+	[40, 'API 修改', 'api-key:set', 37, 2, 2],
+	[41, 'API 删除', 'api-key:delete', 37, 2, 3]
 ];
+
+const API_PERMISSION_ROWS = PERMISSION_ROWS.filter(row => row[0] >= 37);
 
 const DEFAULT_ROLE_PERMISSIONS = [2, 3, 5, 22, 23, 24];
 
@@ -357,6 +417,7 @@ async function createSchema(c, initParams) {
 	}
 
 	await c.env.db.prepare(`INSERT INTO setting DEFAULT VALUES`).run();
+	await c.env.db.prepare(`INSERT INTO api_config (config_id, enabled) VALUES (1, 1)`).run();
 	const instanceEpoch = crypto.randomUUID();
 	await c.env.db.prepare(`INSERT INTO schema_meta (schema_version, instance_epoch) VALUES (?, ?)`)
 		.bind(SCHEMA_VERSION, instanceEpoch)
@@ -379,6 +440,19 @@ async function createSchema(c, initParams) {
 	return instanceEpoch;
 }
 
+async function migrateFromVersion4(c) {
+	const statements = API_SCHEMA_SQL.map(sql => c.env.db.prepare(sql));
+	statements.push(c.env.db.prepare(`INSERT INTO api_config (config_id, enabled) VALUES (1, 1)`));
+	for (const row of API_PERMISSION_ROWS) {
+		statements.push(
+			c.env.db.prepare(`INSERT INTO perm (perm_id, name, perm_key, pid, type, sort) VALUES (?, ?, ?, ?, ?, ?)`)
+				.bind(...row)
+		);
+	}
+	statements.push(c.env.db.prepare(`UPDATE schema_meta SET schema_version = ?`).bind(SCHEMA_VERSION));
+	await c.env.db.batch(statements);
+}
+
 const dbInit = {
 	async init(c, params = {}) {
 		const currentVersion = await schemaVersion(c);
@@ -387,6 +461,11 @@ const dbInit = {
 		if (currentVersion === SCHEMA_VERSION && !rebuildRequested) {
 			await settingService.refresh(c);
 			return { schemaVersion: SCHEMA_VERSION, rebuilt: false };
+		}
+		if (currentVersion === '4' && !rebuildRequested) {
+			await migrateFromVersion4(c);
+			await settingService.refresh(c);
+			return { schemaVersion: SCHEMA_VERSION, rebuilt: false, migratedFrom: currentVersion };
 		}
 		const hasTables = await hasApplicationTables(c);
 		if (hasTables && !rebuildRequested) {

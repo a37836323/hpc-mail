@@ -90,10 +90,34 @@ describe('versioned clean database initialization', () => {
 		expect(database.prepare(`SELECT key, is_system FROM role WHERE role_id = 2`).get()).toEqual({ key: 'user', is_system: 1 });
 		expect(database.prepare(`PRAGMA table_info('verify_record')`).all().find(row => row.name === 'ip').type).toBe('TEXT');
 		expect(database.prepare(`SELECT no_recipient FROM setting`).get().no_recipient).toBe(settingConst.noRecipient.OPEN);
+		expect(database.prepare(`SELECT enabled FROM api_config WHERE config_id = 1`).get()).toEqual({ enabled: 1 });
+		expect(database.prepare(`SELECT perm_key FROM perm WHERE perm_id = 38`).get()).toEqual({ perm_key: 'api-key:query' });
+		expect(database.prepare(`PRAGMA table_info('api_key')`).all().map(row => row.name)).toContain('key_hash');
 
 		const second = await dbInit.init(c, {});
 		expect(second).toEqual({ schemaVersion: SCHEMA_VERSION, rebuilt: false });
 		expect(database.prepare(`SELECT COUNT(*) AS total FROM user`).get().total).toBe(1);
+	});
+
+	it('upgrades the active version 4 schema without deleting users', async () => {
+		const database = new DatabaseSync(':memory:');
+		const c = initContext(database);
+		vi.spyOn(settingService, 'refresh').mockResolvedValue();
+		await dbInit.init(c, initPayload());
+		database.exec(`
+			DROP TABLE api_rate_limit;
+			DROP TABLE api_call_log;
+			DROP TABLE api_key;
+			DROP TABLE api_config;
+			DELETE FROM perm WHERE perm_id >= 37;
+			UPDATE schema_meta SET schema_version = '4';
+		`);
+
+		const migrated = await dbInit.init(c, {});
+		expect(migrated).toEqual({ schemaVersion: SCHEMA_VERSION, rebuilt: false, migratedFrom: '4' });
+		expect(database.prepare(`SELECT username FROM user WHERE user_id = 1`).get()).toEqual({ username: 'riba2534' });
+		expect(database.prepare(`SELECT enabled FROM api_config`).get()).toEqual({ enabled: 1 });
+		expect(database.prepare(`SELECT schema_version FROM schema_meta`).get()).toEqual({ schema_version: SCHEMA_VERSION });
 	});
 
 	it('requires explicit rebuild permission for a legacy database', async () => {

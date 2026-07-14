@@ -19,4 +19,5 @@ import '../api/analysis-api'
 import '../api/reg-key-api'
 import '../api/public-api'
 import '../api/telegram-api'
+import '../api/api-control-api'
 export default app;

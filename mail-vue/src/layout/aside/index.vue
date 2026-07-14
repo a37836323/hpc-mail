@@ -31,7 +31,7 @@
 
 <script setup>
 import { computed } from 'vue'
-import { ChartNoAxesCombined, FileText, Inbox, KeyRound, Mail, Mails, Send, Settings, ShieldCheck, SlidersHorizontal, Star, Users } from '@lucide/vue'
+import { Braces, ChartNoAxesCombined, FileText, Inbox, KeyRound, Mail, Mails, Send, Settings, ShieldCheck, SlidersHorizontal, Star, Users } from '@lucide/vue'
 import { useSettingStore } from '@/store/setting.js'
 import { hasPerm } from '@/perm/perm.js'
 
@@ -49,6 +49,7 @@ const manageItems = [
   { name: 'all-email', label: 'allMail', icon: Mails, permission: 'all-email:query' },
   { name: 'role', label: 'permissions', icon: ShieldCheck, permission: 'role:query' },
   { name: 'reg-key', label: 'inviteCode', icon: KeyRound, permission: 'reg-key:query' },
+  { name: 'api-control', label: 'apiControl', icon: Braces, permission: 'api-key:query' },
   { name: 'sys-setting', label: 'SystemSettings', icon: SlidersHorizontal, permission: 'setting:query' },
 ]
 const visiblePrimaryItems = computed(() => primaryItems.filter(item => !item.permission || hasPerm(item.permission)))
