@@ -156,11 +156,25 @@ jobs:
           ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
         run: node apps/worker/scripts/seed-admin.mjs
 
+      - name: 等待新版本全球生效
+        env:
+          BASE_URL: https://${{ vars.CUSTOM_DOMAIN }}
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 24); do
+            if curl -sS "$BASE_URL/api/config" | jq -e '.data.registrationMode' >/dev/null 2>&1; then
+              echo "新版本已生效（第 $i 次探测）"
+              exit 0
+            fi
+            echo "等待部署传播…（$i/24）"
+            sleep 10
+          done
+          echo '::error::240s 内新版本未生效'
+          exit 1
+
       - name: 线上冒烟
         env:
           BASE_URL: https://${{ vars.CUSTOM_DOMAIN }}
           ADMIN_USERNAME: ${{ vars.ADMIN_USERNAME }}
           ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
-        run: |
-          sleep 10
-          bash scripts/smoke.sh
+        run: bash scripts/smoke.sh
