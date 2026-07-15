@@ -36,11 +36,6 @@ export const notifyWebhookSettingSchema = z.object({
   secret: z.string().max(128).default(''),
 });
 
-export const resendSettingSchema = z.object({
-  /** 域名 -> Resend API token */
-  tokens: z.record(z.string(), z.string().max(256)),
-});
-
 export const siteSettingSchema = z.object({
   title: z.string().trim().min(1).max(64),
 });
@@ -90,7 +85,6 @@ export const SETTING_SCHEMAS = {
   feishu: feishuSettingSchema,
   code_extract: codeExtractSettingSchema,
   notify_webhook: notifyWebhookSettingSchema,
-  resend: resendSettingSchema,
   site: siteSettingSchema,
   api: apiSettingSchema,
   domains: domainsSettingSchema,
@@ -111,7 +105,6 @@ export const DEFAULT_SETTINGS: Settings = {
   feishu: { enabled: false, webhookUrl: '', secret: '', contentLevel: 'summary' },
   code_extract: { enabled: true, aiEnabled: true },
   notify_webhook: { enabled: false, url: '', secret: '' },
-  resend: { tokens: {} },
   site: { title: 'HPC Mail' },
   api: { enabled: true },
   domains: { list: [] },
@@ -133,7 +126,6 @@ export const updateSettingsRequestSchema = z
     feishu: feishuSettingSchema.optional(),
     code_extract: codeExtractSettingSchema.optional(),
     notify_webhook: notifyWebhookSettingSchema.optional(),
-    resend: resendSettingSchema.optional(),
     site: siteSettingSchema.optional(),
     api: apiSettingSchema.optional(),
     domains: domainsSettingSchema.optional(),

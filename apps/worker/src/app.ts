@@ -13,7 +13,6 @@ import config from './routes/config.js';
 import mailboxes from './routes/mailboxes.js';
 import messages from './routes/messages.js';
 import v1 from './routes/v1/index.js';
-import webhooks from './routes/webhooks.js';
 import type { AppContext } from './types.js';
 
 export function createApp() {
@@ -29,7 +28,6 @@ export function createApp() {
   api.route('/messages', messages);
   api.route('/attachments', attachments);
   api.route('/api-keys', apiKeys);
-  api.route('/webhooks', webhooks);
   api.route('/admin/users', adminUsers);
   api.route('/admin/settings', adminSettings);
   api.route('/admin/invites', adminInvites);

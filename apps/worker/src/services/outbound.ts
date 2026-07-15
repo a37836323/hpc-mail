@@ -246,45 +246,6 @@ async function sendViaCloudflare(
   await env.email.send(message);
 }
 
-async function sendViaResend(
-  token: string,
-  from: string,
-  recipients: { to: string[]; cc: string[]; bcc: string[] },
-  req: SendMailRequest,
-  atts: DecodedAttachment[],
-  reply: ReplyContext | null,
-): Promise<{ id: string }> {
-  const payload: Record<string, unknown> = {
-    from,
-    to: recipients.to,
-    subject: req.subject,
-  };
-  if (recipients.cc.length) payload.cc = recipients.cc;
-  if (recipients.bcc.length) payload.bcc = recipients.bcc;
-  if (req.text) payload.text = req.text;
-  if (req.html) payload.html = req.html;
-  if (reply) {
-    payload.headers = { 'In-Reply-To': reply.inReplyTo, References: reply.references };
-  }
-  if (atts.length) {
-    payload.attachments = atts.map((a) => ({
-      filename: a.filename,
-      content: a.base64,
-      content_type: a.mimeType,
-    }));
-  }
-  const resp = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-  const data = (await resp.json().catch(() => ({}))) as { id?: string; message?: string };
-  if (!resp.ok || !data.id) {
-    throw new AppError('internal', `Resend 发送失败: ${data.message ?? resp.status}`);
-  }
-  return { id: data.id };
-}
-
 function summarize(
   row: typeof messages.$inferSelect,
   hasAttachments: boolean,
@@ -333,7 +294,7 @@ async function resolveReply(
   return { reply: { inReplyTo: orig.messageId, references }, inReplyTo: orig.messageId };
 }
 
-/** 发件链路：身份校验 → 站外 Resend / 站内落库 → outbound 行落库 */
+/** 发件链路：身份校验 → 站外 Cloudflare send_email / 站内落库 → outbound 行落库 */
 export async function sendMail(
   env: Env,
   ctx: ExecCtx,
@@ -385,44 +346,22 @@ export async function sendMail(
   const size = new TextEncoder().encode(text + html).length;
   const code = settings.code_extract.enabled ? extractCodeByRegex(req.subject, text) : '';
 
-  // 站外发送：Cloudflare 原生优先（已验证 destination），失败回退 Resend（若配了该域 token）
-  let resendId: string | null = null;
+  // 站外发送：Cloudflare send_email binding（仅能发到 Email Routing 已验证的 destination）
   let status = hasExternal ? 'sent' : 'delivered';
   let errorDetail = '';
-  let sendChannel = hasExternal ? 'cloudflare' : 'internal';
+  const sendChannel = hasExternal ? 'cloudflare' : 'internal';
   if (hasExternal) {
     // 外发日配额（普通用户）：发送前校验，防被盗账号脚本化群发
     await assertOutboundQuota(env, settings.quota, sender, externalTargets.length);
-    const token = settings.resend.tokens[from.domain];
-    const channelsUsed = new Set<string>();
     const failures: string[] = [];
     for (const addr of externalTargets) {
       try {
         await sendViaCloudflare(env, from, addr, req, decoded, reply);
-        channelsUsed.add('cloudflare');
       } catch (cfErr) {
         const cfMsg = cfErr instanceof Error ? cfErr.message : String(cfErr);
-        if (token) {
-          try {
-            const result = await sendViaResend(
-              token,
-              `${from.displayName} <${from.address}>`,
-              { to: [addr], cc: [], bcc: [] },
-              req,
-              decoded,
-              reply,
-            );
-            resendId = result.id;
-            channelsUsed.add('resend');
-          } catch (rErr) {
-            failures.push(`${addr}: ${rErr instanceof Error ? rErr.message : String(rErr)}`);
-          }
-        } else {
-          failures.push(`${addr}: ${cfMsg}（Cloudflare 仅支持已验证地址，且该域未配 Resend token）`);
-        }
+        failures.push(`${addr}: ${cfMsg}（Cloudflare 仅能发到 Email Routing 已验证的目标地址）`);
       }
     }
-    sendChannel = [...channelsUsed].join('+') || 'cloudflare';
     if (failures.length === externalTargets.length) {
       status = 'failed';
       errorDetail = failures.join('; ');
@@ -455,7 +394,6 @@ export async function sendMail(
       inReplyTo,
       status,
       sendChannel,
-      resendId,
       errorDetail,
       isRead: true,
       size,

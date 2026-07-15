@@ -29,7 +29,6 @@ export const ERROR_CODES = [
   'registration_closed',
   'invite_invalid',
   'address_taken',
-  'send_channel_unconfigured',
   'payload_too_large',
   'internal',
 ] as const;
@@ -49,7 +48,6 @@ export const ERROR_STATUS: Record<ErrorCode, number> = {
   registration_closed: 403,
   invite_invalid: 400,
   address_taken: 409,
-  send_channel_unconfigured: 400,
   payload_too_large: 413,
   internal: 500,
 };

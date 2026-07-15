@@ -13,8 +13,6 @@ export interface Env {
   ai_model: string;
   /** secret：JWT 签名密钥 */
   jwt_secret: string;
-  /** secret：Resend webhook svix 密钥（可选） */
-  resend_webhook_secret?: string;
 }
 
 /** 内部 API 鉴权后的用户上下文 */

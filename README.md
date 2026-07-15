@@ -26,7 +26,7 @@
 - **多用户体系**——管理员看全站邮件与系统配置；普通用户认领地址后使用，地址全局唯一占用，认领即可见该地址全部历史邮件
 - **统一收件箱**——全域名邮件混排，按域名 / 邮箱地址 / 已读未读 / 星标 / 关键词（含正文）过滤，全部状态同步到 URL
 - **验证码自动提取**——正则同步提取 + Workers AI 兜底，列表角标与详情高亮一键复制，接码场景开箱即用
-- **完整收发**——回复（In-Reply-To/References 线程化）、转发、CC/BCC、附件；外发 Cloudflare 原生通道优先、Resend 按域名回退，站内互投即时送达
+- **完整收发**——回复（In-Reply-To/References 线程化）、转发、CC/BCC、附件；外发走 Cloudflare `send_email`（仅限 Email Routing 已验证目标地址），站内互投即时送达
 - **通知与转发**——收件推送飞书 Webhook 卡片（HMAC 签名 + 防 SSRF），可自动转发到 Gmail 等已验证邮箱
 - **开放 REST API**——`/v1` 全套接口（收件箱 / 详情 / 附件 / 发件 / 邮箱管理），API Key 支持 scope、每分钟限流、IP 白名单、过期时间与调用审计
 - **注册模式可配**——关闭（默认）/ 邀请码 / 开放注册，管理后台一键切换
@@ -54,7 +54,7 @@ flowchart LR
 
     B[浏览器 SPA] -->|同源 /api| W
     C[脚本 / 集成] -->|Bearer Key /v1| W
-    W -->|send_email / Resend| OUT[站外收件人]
+    W -->|send_email 已验证目标| OUT[站外收件人]
     W -->|Webhook 卡片| FS[飞书]
     W -->|message.forward| GM[Gmail 等已验证邮箱]
 ```
@@ -117,7 +117,6 @@ apps/worker/scripts/dev-send-mail.sh otp-plain hello@hpc.email
    | Secret | `CLOUDFLARE_API_TOKEN` | 具备 Workers/D1/KV 权限 |
    | Secret | `JWT_SECRET` | ≥43 位 URL-safe 随机串 |
    | Secret | `ADMIN_PASSWORD` | 管理员密码（12–128 位） |
-   | Secret | `RESEND_WEBHOOK_SECRET` | 可选，Resend 送达回执验签 |
    | Variable | `ADMIN_USERNAME` | 管理员用户名 |
    | Variable | `CUSTOM_DOMAIN` | 控制台域名（冒烟用） |
 
@@ -144,7 +143,7 @@ curl -s -X POST "$BASE/v1/messages" \
 
 ## ⚙️ 系统设置
 
-管理后台可在线调整（无需重新部署）：注册模式、收件域名列表、Gmail 转发目标、飞书 Webhook（地址 + 签名密钥 + 测试按钮）、各域名 Resend Token、验证码提取开关（正则 / AI）、站点标题、开放 API 总开关。
+管理后台可在线调整（无需重新部署）：注册模式、收件域名列表、Gmail 转发目标、飞书 Webhook（地址 + 签名密钥 + 内容分级 + 测试按钮）、通用 Webhook 通知、验证码提取开关（正则 / AI）、邮件保留策略、外发配额、认领策略、强制 2FA、站点标题、开放 API 总开关。
 
 ## 📄 License
 

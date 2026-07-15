@@ -13,7 +13,6 @@ export default defineConfig(async () => {
         miniflare: {
           bindings: {
             jwt_secret: 'test-jwt-secret-for-vitest-only-0000000000',
-            resend_webhook_secret: 'whsec_dGVzdHNlY3JldGtleWZvcnZpdGVzdA==',
             TEST_MIGRATIONS: migrations,
           },
         },

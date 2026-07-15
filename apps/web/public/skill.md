@@ -113,7 +113,7 @@ curl -s -X POST $BASE/api/messages/send \
 - `from` 二选一：`{"localPart":"bot","domain":"hpc.email"}` 或 `{"mailboxId":5}`（用你认领的地址）。
 - 正文 `text`（纯文本）和 `html` 至少给一个；可选 `cc` / `bcc` 数组、`attachments`。
 - **附件结构**：`attachments` 是数组，每项 `{"filename":"a.pdf","contentType":"application/pdf","content":"<base64>"}`，`content` 为不含 `data:` 前缀的 base64；单次 ≤10 个、合计 ≤25MB。
-- 收件人若也是本站域名，即时站内投递；站外地址需管理员配置了外发通道才能送达。
+- 收件人若也是本站域名，即时站内投递；站外地址只能发到 Cloudflare Email Routing 已验证的目标地址（未验证的外部邮箱发不出去，会在 `errorDetail` 里报错）。
 - **判断是否真的发出去了**：成功响应的 `data` 是一封 outbound 邮件，看它的 `status` 与 `errorDetail`——`status:"failed"` 表示全部失败（此时 HTTP 也是错误码）；`status:"sent"` 但 `errorDetail` 非空表示**部分收件人失败**（`errorDetail` 里列出失败地址与原因），别把它当作全部送达。
 
 ## 任务：回复邮件
@@ -192,7 +192,6 @@ curl -s -X POST $BASE/api/messages/delete -H "Authorization: Bearer $TOKEN" -H '
 | `registration_closed` | 403 | 当前未开放注册 |
 | `validation_failed` | 400 | 参数不合法（如域名不在系统列表）|
 | `invite_invalid` | 400 | 邀请码无效 / 已用尽 / 已过期 |
-| `send_channel_unconfigured` | 400 | 该域名外发通道未配置 |
 | `address_taken` | 409 | 认领的地址已被占用，换一个前缀 |
 | `conflict` | 409 | 资源冲突（如用户名已存在）|
 | `not_found` | 404 | 资源不存在 |

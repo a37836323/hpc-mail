@@ -53,23 +53,6 @@ async function setDomains(list: string[] = TEST_DOMAINS): Promise<void> {
 }
 
 describe('settings 脱敏与掩码写入', () => {
-  it('resend token 存明文、回显掩码、掩码提交保留旧值', async () => {
-    await updateSettings(env, { resend: { tokens: { 'hpc.email': 're_secret_abc' } } });
-    let settings = await getSettings(env);
-    expect(settings.resend.tokens['hpc.email']).toBe('re_secret_abc');
-    expect(maskSettings(settings).resend.tokens['hpc.email']).toBe(SECRET_MASK);
-
-    // 提交掩码 → 保留旧值
-    await updateSettings(env, { resend: { tokens: { 'hpc.email': SECRET_MASK } } });
-    settings = await getSettings(env);
-    expect(settings.resend.tokens['hpc.email']).toBe('re_secret_abc');
-
-    // 提交空串 → 删除
-    await updateSettings(env, { resend: { tokens: { 'hpc.email': '' } } });
-    settings = await getSettings(env);
-    expect(settings.resend.tokens['hpc.email']).toBeUndefined();
-  });
-
   it('feishu secret 掩码提交保留旧值', async () => {
     const webhookUrl = 'https://open.feishu.cn/open-apis/bot/v2/hook/abcdefghijklmnop';
     await updateSettings(env, { feishu: { enabled: true, webhookUrl, secret: 's3cr3t', contentLevel: 'summary' } });

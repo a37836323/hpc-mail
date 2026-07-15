@@ -134,9 +134,6 @@ export function SettingsPage() {
   }
 
   const dirty = JSON.stringify(draft) !== JSON.stringify(data);
-  // 域名完全由 settings.domains.list 驱动（后端 getDomains 已去部署配置 fallback）；
-  // 域名的增删在独立的 /admin/domains 页面管理。
-  const domains = draft.domains.list;
 
   return (
     <div className="mx-auto max-w-3xl pb-16">
@@ -365,27 +362,6 @@ export function SettingsPage() {
               }
             />
           </label>
-        </Section>
-
-        <Section title="Resend 外发" description="按发件域名配置 Resend API Token，用于站外投递。">
-          {domains.length === 0 ? (
-            <p className="text-sm text-ink-tertiary">请先在“域名”页添加收件域名。</p>
-          ) : (
-            domains.map((domain) => {
-              const current = draft.resend.tokens[domain] ?? '';
-              const configured = current === SECRET_MASK;
-              return (
-                <label key={domain} className="flex flex-col gap-1.5">
-                  <span className="text-sm font-medium text-ink">{domain}</span>
-                  <PasswordInput
-                    placeholder={configured ? '已配置（留空保持不变）' : 're_...'}
-                    value={configured ? '' : current}
-                    onChange={(event) => patch((s) => void (s.resend.tokens[domain] = event.target.value))}
-                  />
-                </label>
-              );
-            })
-          )}
         </Section>
       </div>
 

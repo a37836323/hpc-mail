@@ -75,7 +75,6 @@ export const messages = sqliteTable(
     inReplyTo: text('in_reply_to'),
     status: text('status').notNull(),
     sendChannel: text('send_channel').notNull().default(''),
-    resendId: text('resend_id'),
     errorDetail: text('error_detail').notNull().default(''),
     isRead: integer('is_read', { mode: 'boolean' }).notNull().default(false),
     size: integer('size').notNull().default(0),
@@ -85,7 +84,6 @@ export const messages = sqliteTable(
     index('idx_messages_address').on(t.address, t.id),
     index('idx_messages_domain').on(t.domain, t.id),
     index('idx_messages_direction').on(t.direction, t.id),
-    index('idx_messages_resend').on(t.resendId),
     index('idx_messages_deleted').on(t.deletedAt),
   ],
 );

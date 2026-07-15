@@ -47,4 +47,3 @@ run_worker_first = ["/api/*", "/v1/*", "/skill.md", "/assets/*"]
 
 # Secrets（wrangler secret put）：
 #   jwt_secret              JWT 签名密钥（必需）
-#   resend_webhook_secret   Resend webhook svix 签名密钥（可选，未配置时 webhook 拒绝）

@@ -10,7 +10,7 @@ import type { AppContext } from '../../types.js';
 const app = new Hono<AppContext>();
 app.use('*', requireAuth, requireAdmin);
 
-/** 回显脱敏（resend token / feishu secret 掩码） */
+/** 回显脱敏（feishu / webhook secret 掩码） */
 app.get('/', async (c) => {
   const settings = await getSettings(c.env);
   return ok(c, maskSettings(settings));

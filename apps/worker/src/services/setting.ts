@@ -72,23 +72,7 @@ export async function updateSettings(env: Env, patch: UpdateSettingsRequest): Pr
     if (incoming === undefined) continue;
     let next: unknown = incoming;
 
-    if (key === 'resend') {
-      const existingTokens = current.resend.tokens;
-      const incomingTokens = (incoming as Settings['resend']).tokens;
-      const tokens: Record<string, string> = { ...existingTokens };
-      for (const [domain, token] of Object.entries(incomingTokens)) {
-        if (token === SECRET_MASK) {
-          // 保留旧值；旧值不存在则忽略
-          continue;
-        }
-        if (token === '') {
-          delete tokens[domain];
-        } else {
-          tokens[domain] = token;
-        }
-      }
-      next = { tokens };
-    } else if (key === 'feishu') {
+    if (key === 'feishu') {
       const incomingFeishu = incoming as Settings['feishu'];
       next = {
         ...incomingFeishu,
@@ -116,15 +100,10 @@ export async function updateSettings(env: Env, patch: UpdateSettingsRequest): Pr
   await invalidateSettingsCache(env);
 }
 
-/** 管理端回显脱敏：resend token / feishu secret 用 SECRET_MASK（保留 configured 状态） */
+/** 管理端回显脱敏：feishu / notify_webhook secret 用 SECRET_MASK（保留 configured 状态） */
 export function maskSettings(settings: Settings): Settings {
-  const maskedTokens: Record<string, string> = {};
-  for (const domain of Object.keys(settings.resend.tokens)) {
-    maskedTokens[domain] = SECRET_MASK;
-  }
   return {
     ...settings,
-    resend: { tokens: maskedTokens },
     feishu: {
       ...settings.feishu,
       secret: settings.feishu.secret ? SECRET_MASK : '',
