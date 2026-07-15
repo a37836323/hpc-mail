@@ -14,6 +14,21 @@ import { toast } from '@/components/ui/toast';
 import { RecipientInput } from '@/features/compose/recipient-input';
 import { useCurrentUser } from '@/lib/use-session';
 
+/** 通用 webhook 回调请求体示例（与 worker webhook-notify.ts 的 WebhookMailPayload 一致） */
+const WEBHOOK_SAMPLE = `{
+  "event": "mail.received",
+  "message": {
+    "id": 123,
+    "address": "you@happyclaw.cc",
+    "fromAddress": "sender@example.com",
+    "fromName": "发件人名称",
+    "subject": "邮件主题",
+    "verificationCode": "123456",
+    "preview": "邮件正文摘要…",
+    "createdAt": "2026-07-16T01:23:45.000Z"
+  }
+}`;
+
 function ToggleRow({
   label,
   checked,
@@ -173,7 +188,7 @@ export function ForwardingSection() {
             value={draft.webhook.url}
             onChange={(e) => patch((d) => void (d.webhook.url = e.target.value))}
           />
-          <span className="text-xs text-ink-tertiary">仅支持 HTTPS，且不能指向内网地址。新邮件会 POST JSON。</span>
+          <span className="text-xs text-ink-tertiary">仅支持 HTTPS，且不能指向内网地址。</span>
         </label>
         <label className="flex flex-col gap-1.5">
           <span className="text-sm text-ink-secondary">签名密钥</span>
@@ -185,6 +200,42 @@ export function ForwardingSection() {
             onChange={(e) => patch((d) => void (d.webhook.secret = e.target.value))}
           />
         </label>
+
+        {/* 回调请求格式说明 */}
+        <details className="rounded-md border border-line bg-canvas text-[13px]">
+          <summary className="cursor-pointer select-none px-3 py-2 font-medium text-ink-secondary">
+            查看回调请求格式
+          </summary>
+          <div className="flex flex-col gap-2.5 border-t border-line px-3 py-3 text-ink-secondary">
+            <p>你认领的地址每收到一封新邮件，系统就向你的 URL 发起一次请求：</p>
+            <ul className="flex list-disc flex-col gap-1 pl-4">
+              <li>
+                方法 <code className="rounded-sm bg-surface-active px-1 font-mono text-xs text-ink">POST</code>，请求头{' '}
+                <code className="rounded-sm bg-surface-active px-1 font-mono text-xs text-ink">
+                  Content-Type: application/json
+                </code>
+              </li>
+              <li>超时 10 秒；失败静默、不重试（通知尽力而为，不阻断收件）</li>
+            </ul>
+            <p className="font-medium text-ink">请求体（JSON）：</p>
+            <pre className="overflow-x-auto rounded-md bg-surface-active p-3 font-mono text-xs leading-relaxed text-ink">
+              {WEBHOOK_SAMPLE}
+            </pre>
+            <p>
+              字段说明：<code className="font-mono text-xs">address</code> 你的收件地址、
+              <code className="font-mono text-xs">verificationCode</code> 自动提取的验证码（无则空串）、
+              <code className="font-mono text-xs">preview</code> 正文摘要、
+              <code className="font-mono text-xs">createdAt</code> ISO-8601 UTC 时间。
+            </p>
+            <p className="font-medium text-ink">验签（填了签名密钥时）：</p>
+            <p>
+              请求头会带{' '}
+              <code className="rounded-sm bg-surface-active px-1 font-mono text-xs text-ink">X-HPC-Signature</code>，其值为{' '}
+              <code className="font-mono text-xs">Base64( HMAC-SHA256( 密钥, 原始请求体字节 ) )</code>
+              。用同一密钥对收到的 raw body 重算并比对，一致才可信——可防伪造与篡改。
+            </p>
+          </div>
+        </details>
       </div>
 
       <div className="flex items-center justify-end gap-3 border-t border-line pt-4">
