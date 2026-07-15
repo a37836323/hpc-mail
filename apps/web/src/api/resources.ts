@@ -77,6 +77,10 @@ export const messageApi = {
     api.post<void, { ids: number[]; starred: boolean }>('/messages/star', { ids, starred }, { query: { scope } }),
   remove: (ids: number[], scope?: 'mine' | 'all') =>
     api.post<void, { ids: number[] }>('/messages/delete', { ids }, { query: { scope } }),
+  restore: (ids: number[], scope?: 'mine' | 'all') =>
+    api.post<void, { ids: number[] }>('/messages/restore', { ids }, { query: { scope } }),
+  purge: (ids: number[], scope?: 'mine' | 'all') =>
+    api.post<void, { ids: number[] }>('/messages/purge', { ids }, { query: { scope } }),
 };
 
 // ---- API Keys（自助） ----

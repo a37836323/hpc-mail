@@ -6,7 +6,7 @@ import type {
   Page,
   Role,
 } from '@hpc-mail/shared';
-import { and, count, desc, eq, gt, inArray, lt, or, sql, type SQL } from 'drizzle-orm';
+import { and, count, desc, eq, gt, inArray, isNotNull, isNull, lt, or, sql, type SQL } from 'drizzle-orm';
 import { createDb, type Db } from '../db/client.js';
 import { attachments as attachmentsTable, messages, stars } from '../db/schema.js';
 import { signAttachment } from '../lib/crypto.js';
@@ -97,6 +97,8 @@ export async function listMessages(
   const scope = await resolveScope(env, viewer);
 
   const conds: (SQL | undefined)[] = [scopeCondition(scope)];
+  // 回收站视图看软删除的，普通视图排除软删除的
+  conds.push(query.trash ? isNotNull(messages.deletedAt) : isNull(messages.deletedAt));
   if (query.direction) conds.push(eq(messages.direction, query.direction));
   if (query.domain) conds.push(eq(messages.domain, query.domain));
   if (query.address) conds.push(eq(messages.address, query.address));
@@ -163,7 +165,12 @@ export async function countUnread(env: Env, userId: number, role: Role): Promise
     .select({ value: count() })
     .from(messages)
     .where(
-      and(scopeCondition(scope), eq(messages.direction, 'inbound'), eq(messages.isRead, false)),
+      and(
+        scopeCondition(scope),
+        eq(messages.direction, 'inbound'),
+        eq(messages.isRead, false),
+        isNull(messages.deletedAt),
+      ),
     )
     .get();
   return row?.value ?? 0;
@@ -242,7 +249,19 @@ export async function getMessageDetail(
     bodyText,
     bodyHtml,
     attachments: attachmentMetas,
+    hasRaw: !!row.rawR2Key,
   };
+}
+
+/** 取原始 .eml R2 对象（校验可见性）；无存档返回 null */
+export async function getRawMessageObject(
+  env: Env,
+  viewer: Viewer,
+  id: number,
+): Promise<R2ObjectBody | null> {
+  const row = await loadVisible(env, viewer, id);
+  if (!row.rawR2Key) return null;
+  return env.r2.get(row.rawR2Key);
 }
 
 /** 加载单条附件（校验可见性由调用方决定：签名 URL 或 JWT） */
@@ -316,18 +335,38 @@ export async function starMessages(
   return visibleIds.length;
 }
 
-/** 批量删除（可见范围内）：D1 行删 + R2 清理 */
+function scopedIdsCondition(scope: 'all' | string[], ids: number[]): SQL {
+  return scope === 'all'
+    ? inArray(messages.id, ids)
+    : (and(inArray(messages.id, ids), scopeCondition(scope)) as SQL);
+}
+
+/** 批量软删除（移入回收站）：仅置 deletedAt，7 天后由 scheduled 硬删 */
 export async function deleteMessages(env: Env, viewer: Viewer, ids: number[]): Promise<number> {
   const db = createDb(env);
   const scope = await resolveMutationScope(env, viewer);
-  const cond =
-    scope === 'all'
-      ? inArray(messages.id, ids)
-      : and(inArray(messages.id, ids), scopeCondition(scope));
+  const cond = and(scopedIdsCondition(scope, ids), isNull(messages.deletedAt)) as SQL;
+  const result = await db.update(messages).set({ deletedAt: new Date() }).where(cond).run();
+  return result.meta.changes ?? 0;
+}
+
+/** 从回收站恢复：清空 deletedAt */
+export async function restoreMessages(env: Env, viewer: Viewer, ids: number[]): Promise<number> {
+  const db = createDb(env);
+  const scope = await resolveMutationScope(env, viewer);
+  const cond = and(scopedIdsCondition(scope, ids), isNotNull(messages.deletedAt)) as SQL;
+  const result = await db.update(messages).set({ deletedAt: null }).where(cond).run();
+  return result.meta.changes ?? 0;
+}
+
+/** 永久删除（可见范围内）：D1 行删 + R2 清理（正文/附件/原始 .eml） */
+export async function purgeMessages(env: Env, viewer: Viewer, ids: number[]): Promise<number> {
+  const db = createDb(env);
+  const scope = await resolveMutationScope(env, viewer);
   const targets = await db
-    .select({ id: messages.id, bodyR2Key: messages.bodyR2Key })
+    .select({ id: messages.id, bodyR2Key: messages.bodyR2Key, rawR2Key: messages.rawR2Key })
     .from(messages)
-    .where(cond)
+    .where(scopedIdsCondition(scope, ids))
     .all();
   if (targets.length === 0) return 0;
   const targetIds = targets.map((t) => t.id);
@@ -336,6 +375,13 @@ export async function deleteMessages(env: Env, viewer: Viewer, ids: number[]): P
   await db.delete(messages).where(inArray(messages.id, targetIds));
   for (const t of targets) {
     await deleteMessageObjects(env, t.id, t.bodyR2Key);
+    if (t.rawR2Key) {
+      try {
+        await env.r2.delete(t.rawR2Key);
+      } catch (e) {
+        console.error('删除原始邮件对象失败:', e);
+      }
+    }
   }
   return targetIds.length;
 }

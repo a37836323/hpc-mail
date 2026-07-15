@@ -98,7 +98,7 @@ export async function claimMailbox(
 async function purgeAddressMessages(env: Env, address: string): Promise<number> {
   const db = createDb(env);
   const targets = await db
-    .select({ id: messages.id, bodyR2Key: messages.bodyR2Key })
+    .select({ id: messages.id, bodyR2Key: messages.bodyR2Key, rawR2Key: messages.rawR2Key })
     .from(messages)
     .where(eq(messages.address, address))
     .all();
@@ -109,6 +109,13 @@ async function purgeAddressMessages(env: Env, address: string): Promise<number> 
   await db.delete(messages).where(inArray(messages.id, ids));
   for (const t of targets) {
     await deleteMessageObjects(env, t.id, t.bodyR2Key);
+    if (t.rawR2Key) {
+      try {
+        await env.r2.delete(t.rawR2Key);
+      } catch (e) {
+        console.error('删除原始邮件对象失败:', e);
+      }
+    }
   }
   return ids.length;
 }

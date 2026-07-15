@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Download, Forward, ImageOff, MailOpen, Paperclip, Reply, ReplyAll, Star, Trash2 } from 'lucide-react';
+import { ArrowLeft, Download, FileDown, Forward, ImageOff, MailOpen, Paperclip, Reply, ReplyAll, Star, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import type { MessageDetail } from '@hpc-mail/shared';
@@ -18,6 +18,7 @@ import { useCurrentUser } from '@/lib/use-session';
 import { countRemoteImages } from './count-remote-images';
 import { EmailHtml } from '@/lib/email-html';
 import { formatBytes, formatDateTime } from '@/lib/format';
+import { getAuthToken } from '@/lib/auth-token';
 import { extractOtp } from '@/lib/otp';
 import { isTrustedSender, trustSender } from '@/lib/trusted-senders';
 import { OtpBanner } from './otp-banner';
@@ -85,6 +86,28 @@ export function MessagePage() {
   const handleMarkUnread = () => {
     markRead.mutate(false);
     goBack();
+  };
+
+  // 下载原始 .eml：带鉴权头 fetch → blob → 触发下载
+  const downloadEml = async () => {
+    try {
+      const res = await fetch(`/api/messages/${messageId}/raw`, {
+        headers: { Authorization: `Bearer ${getAuthToken() ?? ''}` },
+      });
+      if (!res.ok) {
+        toast({ title: '下载失败', variant: 'error' });
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `message-${messageId}.eml`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast({ title: '下载失败', variant: 'error' });
+    }
   };
 
   if (isLoading) {
@@ -158,6 +181,11 @@ export function MessagePage() {
           <IconButton aria-label="标为未读" onClick={handleMarkUnread}>
             <MailOpen className="size-4" />
           </IconButton>
+          {message.hasRaw && (
+            <IconButton aria-label="下载原始邮件 (.eml)" onClick={downloadEml}>
+              <FileDown className="size-4" />
+            </IconButton>
+          )}
           <IconButton aria-label="删除邮件" onClick={() => setConfirmDelete(true)}>
             <Trash2 className="size-4 text-critical" />
           </IconButton>

@@ -39,7 +39,17 @@ export async function handleInbound(
 ): Promise<void> {
   const settings = await getSettings(env);
 
-  const email = await PostalMime.parse(message.raw);
+  // 先缓冲原始 .eml（stream 只能读一次），解析用缓冲区；同时存档到 R2 供下载/排查 DKIM
+  const rawBytes = new Uint8Array(await new Response(message.raw).arrayBuffer());
+  const email = await PostalMime.parse(rawBytes);
+  let rawR2Key: string | null = null;
+  try {
+    const key = `raw/${crypto.randomUUID().replace(/-/g, '')}.eml`;
+    await env.r2.put(key, rawBytes, { httpMetadata: { contentType: 'message/rfc822' } });
+    rawR2Key = key;
+  } catch (e) {
+    console.error('原始邮件存档失败:', e);
+  }
 
   const toAddress = normalizeEmail(message.to);
   const domain = getEmailDomain(toAddress);
@@ -116,6 +126,7 @@ export async function handleInbound(
       bodyText,
       bodyHtml,
       bodyR2Key,
+      rawR2Key,
       verificationCode: code,
       messageId: email.messageId ?? null,
       inReplyTo: email.inReplyTo ?? null,

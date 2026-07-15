@@ -14,6 +14,9 @@ const SentPage = lazy(() => import('@/features/sent/sent-page').then((m) => ({ d
 const StarredPage = lazy(() =>
   import('@/features/starred/starred-page').then((m) => ({ default: m.StarredPage })),
 );
+const TrashPage = lazy(() =>
+  import('@/features/trash/trash-page').then((m) => ({ default: m.TrashPage })),
+);
 const MailboxesPage = lazy(() =>
   import('@/features/mailboxes/mailboxes-page').then((m) => ({ default: m.MailboxesPage })),
 );
@@ -60,6 +63,7 @@ export const router = createBrowserRouter([
       { path: 'compose', element: <ComposePage /> },
       { path: 'sent', element: <SentPage /> },
       { path: 'starred', element: <StarredPage /> },
+      { path: 'trash', element: <TrashPage /> },
       { path: 'mailboxes', element: <MailboxesPage /> },
       { path: 'api-keys', element: <ApiKeysPage /> },
       { path: 'profile', element: <ProfilePage /> },

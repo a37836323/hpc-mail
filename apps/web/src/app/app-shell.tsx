@@ -13,6 +13,7 @@ import {
   Send,
   ScrollText,
   Settings,
+  Trash2,
   Star,
   Ticket,
   User,
@@ -51,6 +52,7 @@ const PRIMARY_NAV: NavEntry[] = [
   { to: '/starred', label: '星标', icon: Star },
   { to: '/sent', label: '已发送', icon: Send },
   { to: '/mailboxes', label: '我的邮箱', icon: AtSign },
+  { to: '/trash', label: '回收站', icon: Trash2 },
   { to: '/api-keys', label: 'API Keys', icon: KeyRound },
 ];
 

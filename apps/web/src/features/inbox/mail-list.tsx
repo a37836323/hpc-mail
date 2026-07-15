@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useWindowVirtualizer } from '@tanstack/react-virtual';
-import { AlertCircle, Inbox as InboxIcon, MailOpen, SearchX, Star, Trash2, X } from 'lucide-react';
+import { AlertCircle, Inbox as InboxIcon, MailOpen, RotateCcw, SearchX, Star, Trash2, X } from 'lucide-react';
 import { type MouseEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ListMessagesQuery } from '@hpc-mail/shared';
 import { queryKeys } from '@/api/query-keys';
@@ -21,6 +21,8 @@ export interface MailListProps {
   onClearFilters?: () => void;
   emptyTitle: string;
   emptyDescription?: string;
+  /** trash 模式：批量工具栏改为恢复/永久删除 */
+  variant?: 'inbox' | 'trash';
 }
 
 function ListSkeleton() {
@@ -45,6 +47,7 @@ export function MailList({
   onClearFilters,
   emptyTitle,
   emptyDescription,
+  variant = 'inbox',
 }: MailListProps) {
   const queryClient = useQueryClient();
   const { data, isLoading, isError, error, fetchNextPage, hasNextPage, isFetchingNextPage, refetch } =
@@ -135,9 +138,34 @@ export function MailList({
     onError: () => toast({ title: '删除失败，请重试', variant: 'error' }),
   });
 
+  const batchRestore = useMutation({
+    mutationFn: (ids: number[]) => messageApi.restore(ids, mutationScope),
+    onSuccess: (_d, ids) => {
+      toast({ title: `已恢复 ${ids.length} 封`, variant: 'success' });
+      clearSelection();
+      invalidateMessages();
+    },
+    onError: () => toast({ title: '恢复失败，请重试', variant: 'error' }),
+  });
+
+  const batchPurge = useMutation({
+    mutationFn: (ids: number[]) => messageApi.purge(ids, mutationScope),
+    onSuccess: (_d, ids) => {
+      toast({ title: `已永久删除 ${ids.length} 封`, variant: 'success' });
+      clearSelection();
+      invalidateMessages();
+    },
+    onError: () => toast({ title: '删除失败，请重试', variant: 'error' }),
+  });
+
   const selectionActive = selection.size > 0;
   const selectedIds = useMemo(() => [...selection], [selection]);
-  const batchPending = batchRead.isPending || batchStar.isPending || batchDelete.isPending;
+  const batchPending =
+    batchRead.isPending ||
+    batchStar.isPending ||
+    batchDelete.isPending ||
+    batchRestore.isPending ||
+    batchPurge.isPending;
 
   const listRef = useRef<HTMLDivElement>(null);
   const [scrollMargin, setScrollMargin] = useState(0);
@@ -225,33 +253,58 @@ export function MailList({
           </button>
           <span className="text-sm text-ink-secondary">已选 {selection.size} 封</span>
           <div className="ml-auto flex items-center gap-1">
-            <Button
-              size="sm"
-              variant="ghost"
-              disabled={batchPending}
-              onClick={() => batchRead.mutate({ ids: selectedIds, isRead: true })}
-            >
-              <MailOpen className="size-4" />
-              已读
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              disabled={batchPending}
-              onClick={() => batchStar.mutate(selectedIds)}
-            >
-              <Star className="size-4" />
-              星标
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              disabled={batchPending}
-              onClick={() => batchDelete.mutate(selectedIds)}
-            >
-              <Trash2 className="size-4 text-critical" />
-              删除
-            </Button>
+            {variant === 'trash' ? (
+              <>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={batchPending}
+                  onClick={() => batchRestore.mutate(selectedIds)}
+                >
+                  <RotateCcw className="size-4" />
+                  恢复
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={batchPending}
+                  onClick={() => batchPurge.mutate(selectedIds)}
+                >
+                  <Trash2 className="size-4 text-critical" />
+                  永久删除
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={batchPending}
+                  onClick={() => batchRead.mutate({ ids: selectedIds, isRead: true })}
+                >
+                  <MailOpen className="size-4" />
+                  已读
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={batchPending}
+                  onClick={() => batchStar.mutate(selectedIds)}
+                >
+                  <Star className="size-4" />
+                  星标
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={batchPending}
+                  onClick={() => batchDelete.mutate(selectedIds)}
+                >
+                  <Trash2 className="size-4 text-critical" />
+                  删除
+                </Button>
+              </>
+            )}
             <Button size="sm" variant="ghost" onClick={clearSelection} aria-label="取消选择">
               <X className="size-4" />
             </Button>

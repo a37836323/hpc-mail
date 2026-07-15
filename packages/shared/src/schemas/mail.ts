@@ -30,6 +30,11 @@ export const listMessagesQuerySchema = z.object({
     .union([z.literal('1'), z.literal('true'), z.literal('0'), z.literal('false')])
     .transform((v) => v === '1' || v === 'true')
     .optional(),
+  /** 回收站视图：只看软删除的邮件 */
+  trash: z
+    .union([z.literal('1'), z.literal('true'), z.literal('0'), z.literal('false')])
+    .transform((v) => v === '1' || v === 'true')
+    .optional(),
   /** 搜索主题 / 发件人 / 正文 */
   q: z.string().trim().max(256).optional(),
   /** admin 专用：'mine' 只看自己认领地址（默认全站） */
@@ -105,6 +110,10 @@ export const deleteMessagesRequestSchema = z.object({
 });
 export type DeleteMessagesRequest = z.infer<typeof deleteMessagesRequestSchema>;
 
+/** 回收站：恢复 / 永久删除（复用 ids 形态） */
+export const messageIdsRequestSchema = deleteMessagesRequestSchema;
+export type MessageIdsRequest = DeleteMessagesRequest;
+
 export const starMessagesRequestSchema = z.object({
   ids: z.array(z.number().int().positive()).min(1).max(500),
   starred: z.boolean().default(true),
@@ -155,4 +164,6 @@ export interface MessageDetail extends MessageSummary {
   bodyText: string;
   bodyHtml: string;
   attachments: AttachmentMeta[];
+  /** 是否存有原始 .eml，可经 /api/messages/:id/raw 下载 */
+  hasRaw: boolean;
 }

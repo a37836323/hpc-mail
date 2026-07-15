@@ -21,6 +21,12 @@ export const users = sqliteTable('users', {
   inviteId: integer('invite_id'),
   /** 头像 R2 key（null 表示无头像）；随每次上传变化，用于 URL 版本号防缓存 */
   avatarKey: text('avatar_key'),
+  /** TOTP 密钥（base32，启用 2FA 后有值）；未启用为 null */
+  totpSecret: text('totp_secret'),
+  /** 2FA 启用时间；null 表示未启用（有 totpSecret 但未启用=登记中） */
+  totpEnabledAt: integer('totp_enabled_at', { mode: 'timestamp_ms' }),
+  /** 恢复码哈希列表（JSON，SHA-256）；每个用一次即移除 */
+  totpRecoveryCodes: text('totp_recovery_codes', { mode: 'json' }).$type<string[]>(),
   createdAt: createdAtColumn(),
   lastLoginAt: integer('last_login_at', { mode: 'timestamp_ms' }),
   lastLoginIp: text('last_login_ip'),
@@ -60,6 +66,10 @@ export const messages = sqliteTable(
     bodyHtml: text('body_html').notNull().default(''),
     /** 正文超限时完整 JSON 落 R2 的 key */
     bodyR2Key: text('body_r2_key'),
+    /** 原始 .eml 落 R2 的 key（inbound 收件时存档，供下载/排查 DKIM）；null 表示未存档 */
+    rawR2Key: text('raw_r2_key'),
+    /** 软删除时间；null=正常，有值=在回收站（scheduled 到期后硬删） */
+    deletedAt: integer('deleted_at', { mode: 'timestamp_ms' }),
     verificationCode: text('verification_code').notNull().default(''),
     messageId: text('message_id'),
     inReplyTo: text('in_reply_to'),
@@ -76,6 +86,7 @@ export const messages = sqliteTable(
     index('idx_messages_domain').on(t.domain, t.id),
     index('idx_messages_direction').on(t.direction, t.id),
     index('idx_messages_resend').on(t.resendId),
+    index('idx_messages_deleted').on(t.deletedAt),
   ],
 );
 

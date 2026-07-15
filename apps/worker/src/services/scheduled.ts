@@ -1,4 +1,4 @@
-import { and, eq, inArray, lt, notInArray, type SQL } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, lt, notInArray, type SQL } from 'drizzle-orm';
 import { createDb } from '../db/client.js';
 import {
   apiRateLimits,
@@ -14,14 +14,16 @@ import { deleteMessageObjects } from './storage.js';
 
 const NINETY_DAYS_MS = 90 * 24 * 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
+/** 回收站保留天数：软删除超过此天数由 scheduled 硬删 */
+const TRASH_RETENTION_DAYS = 7;
 /** 单次清理批量上限，防止单次 cron 运行过久（下一次继续清剩余） */
 const RETENTION_BATCH = 1000;
 
-/** 按 where 条件删除邮件（D1 行 + R2 对象），返回删除条数；限批量 */
+/** 按 where 条件删除邮件（D1 行 + R2 对象：正文/附件/原始 .eml），返回删除条数；限批量 */
 async function purgeMessagesWhere(env: Env, cond: SQL): Promise<number> {
   const db = createDb(env);
   const targets = await db
-    .select({ id: messages.id, bodyR2Key: messages.bodyR2Key })
+    .select({ id: messages.id, bodyR2Key: messages.bodyR2Key, rawR2Key: messages.rawR2Key })
     .from(messages)
     .where(cond)
     .limit(RETENTION_BATCH)
@@ -33,6 +35,13 @@ async function purgeMessagesWhere(env: Env, cond: SQL): Promise<number> {
   await db.delete(messages).where(inArray(messages.id, ids));
   for (const t of targets) {
     await deleteMessageObjects(env, t.id, t.bodyR2Key);
+    if (t.rawR2Key) {
+      try {
+        await env.r2.delete(t.rawR2Key);
+      } catch (e) {
+        console.error('删除原始邮件对象失败:', e);
+      }
+    }
   }
   return ids.length;
 }
@@ -93,5 +102,16 @@ export async function runScheduled(env: Env): Promise<void> {
     await runRetention(env);
   } catch (e) {
     console.error('邮件保留清理失败:', e);
+  }
+  // 回收站：软删除超过 7 天硬删
+  try {
+    const trashCutoff = new Date(Date.now() - TRASH_RETENTION_DAYS * DAY_MS);
+    const n = await purgeMessagesWhere(
+      env,
+      and(isNotNull(messages.deletedAt), lt(messages.deletedAt, trashCutoff))!,
+    );
+    if (n > 0) console.log(`回收站清理：硬删 ${n} 封`);
+  } catch (e) {
+    console.error('回收站清理失败:', e);
   }
 }

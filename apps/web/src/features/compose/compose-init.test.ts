@@ -24,6 +24,7 @@ function makeDetail(overrides: Partial<MessageDetail> = {}): MessageDetail {
     bodyHtml: '',
     errorDetail: '',
     attachments: [],
+    hasRaw: false,
     ...overrides,
   };
 }
