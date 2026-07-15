@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { MoreHorizontal } from 'lucide-react';
-import { useState } from 'react';
+import { MoreHorizontal, Search } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import type { AdminUser } from '@hpc-mail/shared';
 import { queryKeys } from '@/api/query-keys';
 import { adminApi } from '@/api/resources';
@@ -8,6 +8,7 @@ import { PageHeader } from '@/components/page-header';
 import { Avatar } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { CopyButton } from '@/components/ui/copy-button';
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader } from '@/components/ui/dialog';
@@ -98,11 +99,26 @@ export function UsersPage() {
     onError: () => toast({ title: '删除失败，请重试', variant: 'error' }),
   });
 
-  const users = data ?? [];
+  const [search, setSearch] = useState('');
+  const users = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    const list = data ?? [];
+    return term ? list.filter((u) => u.username.toLowerCase().includes(term)) : list;
+  }, [data, search]);
 
   return (
     <div className="mx-auto max-w-5xl">
       <PageHeader title="用户管理" description="管理平台账户的角色、状态与密码。" />
+
+      <div className="relative mb-4 max-w-xs">
+        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-tertiary" />
+        <Input
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder="搜索用户名"
+          className="pl-9"
+        />
+      </div>
 
       {isLoading ? (
         <Skeleton className="h-48 w-full rounded-lg" />

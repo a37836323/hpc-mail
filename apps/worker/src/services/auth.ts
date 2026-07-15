@@ -12,8 +12,9 @@ import { sha256Hex } from '../lib/crypto.js';
 import { AppError } from '../lib/errors.js';
 import { signToken } from '../lib/jwt.js';
 import { hashPassword, verifyPassword } from '../lib/password.js';
-import type { AuthUser, Env } from '../types.js';
+import type { AuthUser, Env, ExecCtx } from '../types.js';
 import { avatarUrl } from './avatar.js';
+import { sendFeishuNotification } from './feishu.js';
 import { consumeInvite } from './invite.js';
 import { getInstanceEpoch, getUserEpoch, bumpUserEpoch, createSession, destroySession } from './session.js';
 import { getSettings } from './setting.js';
@@ -103,7 +104,12 @@ async function issueToken(env: Env, userId: number): Promise<string> {
   return signToken(env.jwt_secret, { sub: userId, sid, epoch, uepoch });
 }
 
-export async function login(env: Env, req: LoginRequest, ip: string): Promise<LoginResponse> {
+export async function login(
+  env: Env,
+  req: LoginRequest,
+  ip: string,
+  ctx?: ExecCtx,
+): Promise<LoginResponse> {
   await assertLoginAllowed(env, req.username, ip);
   const db = createDb(env);
   const user = await db.select().from(users).where(eq(users.username, req.username)).get();
@@ -115,10 +121,33 @@ export async function login(env: Env, req: LoginRequest, ip: string): Promise<Lo
   if (user.status !== 'active') throw new AppError('user_disabled', '账号已被禁用');
 
   await resetLoginFailures(env, req.username, ip);
+  const previousIp = user.lastLoginIp;
   await db
     .update(users)
     .set({ lastLoginAt: new Date(), lastLoginIp: ip })
     .where(eq(users.id, user.id));
+
+  // 新 IP 登录飞书告警：与上次登录 IP 不同则异步推送（不阻塞登录）
+  if (ctx && previousIp && previousIp !== ip) {
+    ctx.waitUntil(
+      (async () => {
+        try {
+          const settings = await getSettings(env);
+          if (!settings.feishu.enabled) return;
+          await sendFeishuNotification(env, settings, {
+            subject: `⚠ 账号 ${user.username} 新 IP 登录`,
+            fromAddress: 'system@hpc.email',
+            fromName: 'HPC Mail',
+            toAddress: user.username,
+            code: '',
+            body: `本次登录 IP：${ip}\n上次登录 IP：${previousIp}\n若非本人操作，请立即修改密码。`,
+          });
+        } catch (e) {
+          console.error('新 IP 登录告警失败:', e);
+        }
+      })(),
+    );
+  }
 
   const token = await issueToken(env, user.id);
   return { token, user: toSessionUser(user) };

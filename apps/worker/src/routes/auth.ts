@@ -28,7 +28,7 @@ function sessionUserOf(user: AuthUser, overrideAvatarUrl?: string | null): Sessi
 
 app.post('/login', async (c) => {
   const req = await parseBody(c, loginRequestSchema);
-  const result = await login(c.env, req, clientIp(c));
+  const result = await login(c.env, req, clientIp(c), c.executionCtx);
   return ok(c, result);
 });
 
