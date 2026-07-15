@@ -2,14 +2,14 @@ import { useMemo } from 'react';
 import { PageHeader } from '@/components/page-header';
 import type { ComboboxOption } from '@/components/ui/combobox';
 import { useMailboxesQuery } from '@/features/mailboxes/use-mailboxes';
-import { usePublicConfig } from '@/lib/use-config';
+import { useDomains } from '@/lib/use-config';
 import { FilterBar } from './filter-bar';
 import { MailList } from './mail-list';
 import { useInboxFilters } from './use-inbox-filters';
 
 export function InboxPage() {
   const { filters, setDomain, setAddress, setUnread, setQuery, reset } = useInboxFilters();
-  const { data: config } = usePublicConfig();
+  const { data: visibleDomains } = useDomains();
   const { data: mailboxes } = useMailboxesQuery(false);
 
   const addressOptions = useMemo<ComboboxOption[]>(
@@ -39,7 +39,7 @@ export function InboxPage() {
       <div className="flex flex-col gap-4">
         <FilterBar
           filters={filters}
-          domains={config?.domains ?? []}
+          domains={visibleDomains ?? []}
           addressOptions={addressOptions}
           onDomainChange={setDomain}
           onAddressChange={setAddress}

@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { createDb } from '../src/db/client.js';
 import { messages, users } from '../src/db/schema.js';
 import { AppError } from '../src/lib/errors.js';
-import { getDomains } from '../src/services/domain.js';
+import { getDomains, getPublicDomains, getVisibleDomains } from '../src/services/domain.js';
 import { claimMailbox } from '../src/services/mailbox.js';
 import { countUnread, listMessages, markMessages, starMessages } from '../src/services/message.js';
 import { sendMail } from '../src/services/outbound.js';
@@ -48,8 +48,12 @@ const TEST_DOMAINS = [
   'option.red',
   'claude-router.cc',
 ];
+// 测试默认把域名标记为 public（普通用户可认领），以复用大量「user 认领」用例；
+// 可见性/按域名上限的专项行为在独立 describe 里显式构造 entry。
 async function setDomains(list: string[] = TEST_DOMAINS): Promise<void> {
-  await updateSettings(env, { domains: { list } });
+  await updateSettings(env, {
+    domains: { list: list.map((domain) => ({ domain, public: true, perUserLimit: 0 })) },
+  });
 }
 
 describe('settings 脱敏与掩码写入', () => {
@@ -210,7 +214,14 @@ describe('动态域名 getDomains（纯 settings 驱动，无 fallback）', () =
   });
 
   it('settings.domains.list 决定可用域名：表内可认领、表外被拒', async () => {
-    await updateSettings(env, { domains: { list: ['custom-domain.io', 'hpc.email'] } });
+    await updateSettings(env, {
+      domains: {
+        list: [
+          { domain: 'custom-domain.io', public: true, perUserLimit: 0 },
+          { domain: 'hpc.email', public: true, perUserLimit: 0 },
+        ],
+      },
+    });
     expect(await getDomains(env)).toEqual(['custom-domain.io', 'hpc.email']);
 
     const uid = await seedUser('dom-user', 'user');
@@ -221,6 +232,62 @@ describe('动态域名 getDomains（纯 settings 驱动，无 fallback）', () =
     await expect(
       claimMailbox(env, uid, 'user', { localPart: 'x', domain: 'riba2534.cn' }),
     ).rejects.toMatchObject({ code: 'validation_failed' });
+  });
+});
+
+describe('域名可见性与按域名认领上限', () => {
+  it('普通用户不能认领「仅管理员」域名（public:false）', async () => {
+    await updateSettings(env, {
+      domains: { list: [{ domain: 'hpc.email', public: false, perUserLimit: 0 }] },
+    });
+    const uid = await seedUser('vis-user-1', 'user');
+    await expect(
+      claimMailbox(env, uid, 'user', { localPart: 'visa', domain: 'hpc.email' }),
+    ).rejects.toMatchObject({ code: 'forbidden' });
+  });
+
+  it('管理员豁免可见性：可认领「仅管理员」域名', async () => {
+    await updateSettings(env, {
+      domains: { list: [{ domain: 'hpc.email', public: false, perUserLimit: 0 }] },
+    });
+    const aid = await seedUser('vis-admin', 'admin');
+    const box = await claimMailbox(env, aid, 'admin', { localPart: 'visroot', domain: 'hpc.email' });
+    expect(box.address).toBe('visroot@hpc.email');
+  });
+
+  it('getPublicDomains/getVisibleDomains 按角色返回；公开域名普通用户可认领', async () => {
+    await updateSettings(env, {
+      domains: {
+        list: [
+          { domain: 'happyclaw.cc', public: true, perUserLimit: 0 },
+          { domain: 'hpc.email', public: false, perUserLimit: 0 },
+        ],
+      },
+    });
+    expect(await getPublicDomains(env)).toEqual(['happyclaw.cc']);
+    expect(await getVisibleDomains(env, false)).toEqual(['happyclaw.cc']);
+    expect(await getVisibleDomains(env, true)).toEqual(['happyclaw.cc', 'hpc.email']);
+
+    const uid = await seedUser('vis-user-2', 'user');
+    const box = await claimMailbox(env, uid, 'user', { localPart: 'visme', domain: 'happyclaw.cc' });
+    expect(box.address).toBe('visme@happyclaw.cc');
+  });
+
+  it('按域名上限 perUserLimit=1：同域第二个被拒，管理员豁免', async () => {
+    await updateSettings(env, {
+      domains: { list: [{ domain: 'happyclaw.cc', public: true, perUserLimit: 1 }] },
+    });
+    const uid = await seedUser('limit-user', 'user');
+    await claimMailbox(env, uid, 'user', { localPart: 'limone', domain: 'happyclaw.cc' });
+    await expect(
+      claimMailbox(env, uid, 'user', { localPart: 'limtwo', domain: 'happyclaw.cc' }),
+    ).rejects.toMatchObject({ code: 'forbidden' });
+
+    // 管理员不受按域名上限约束
+    const aid = await seedUser('limit-admin', 'admin');
+    await claimMailbox(env, aid, 'admin', { localPart: 'lima1', domain: 'happyclaw.cc' });
+    const box = await claimMailbox(env, aid, 'admin', { localPart: 'lima2', domain: 'happyclaw.cc' });
+    expect(box.address).toBe('lima2@happyclaw.cc');
   });
 });
 

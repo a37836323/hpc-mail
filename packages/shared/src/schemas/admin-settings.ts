@@ -50,9 +50,26 @@ export const securitySettingSchema = z.object({
   require2fa: z.boolean(),
 });
 
+/**
+ * 单个系统域名条目。
+ * - `public`：是否对普通用户开放（可见 + 可认领）。默认 false = 仅管理员可用。
+ * - `perUserLimit`：普通用户在**该域名**下最多可认领的地址数（0=不限，仅受全局 mailbox_policy.perUserLimit 约束）；管理员豁免。
+ * preprocess：兼容历史存储的纯字符串形态（`"example.com"` → `{ domain: "example.com" }`），
+ * 老数据升级后自动落到 public=false（默认仅管理员），不影响存量已认领地址。
+ */
+export const domainEntrySchema = z.preprocess(
+  (v) => (typeof v === 'string' ? { domain: v } : v),
+  z.object({
+    domain: domainSchema,
+    public: z.boolean().default(false),
+    perUserLimit: z.number().int().min(0).max(10000).default(0),
+  }),
+);
+export type DomainEntry = z.infer<typeof domainEntrySchema>;
+
 /** 系统域名列表：管理端维护，空数组表示未配置任何域名（认领/发件将被拒） */
 export const domainsSettingSchema = z.object({
-  list: z.array(domainSchema).max(64),
+  list: z.array(domainEntrySchema).max(64),
 });
 
 /** 邮件保留策略：catch-all 全量落库，需定期清理防止无限膨胀撑爆 D1（0=不清理） */

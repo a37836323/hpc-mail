@@ -31,11 +31,19 @@ async function seedAdmin(): Promise<void> {
 
 describe('信封与鉴权链路', () => {
   it('GET /api/config 返回公开配置信封（域名来自 settings）', async () => {
-    await updateSettings(env, { domains: { list: ['hpc.email', 'claude-router.cc'] } });
+    await updateSettings(env, {
+      domains: {
+        list: [
+          { domain: 'hpc.email', public: true, perUserLimit: 0 },
+          { domain: 'claude-router.cc', public: true, perUserLimit: 0 },
+        ],
+      },
+    });
     const res = await request('/api/config');
     expect(res.status).toBe(200);
     const body = (await res.json()) as { data: { registrationMode: string; domains: string[] } };
     expect(body.data.registrationMode).toBe('closed');
+    // config 只暴露公开域名
     expect(body.data.domains).toContain('hpc.email');
   });
 

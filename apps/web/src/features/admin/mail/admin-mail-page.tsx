@@ -5,11 +5,11 @@ import { FilterBar } from '@/features/inbox/filter-bar';
 import { MailList } from '@/features/inbox/mail-list';
 import { useInboxFilters } from '@/features/inbox/use-inbox-filters';
 import { useMailboxesQuery } from '@/features/mailboxes/use-mailboxes';
-import { usePublicConfig } from '@/lib/use-config';
+import { useDomains } from '@/lib/use-config';
 
 export function AdminMailPage() {
   const { filters, setDomain, setAddress, setUnread, setQuery, reset } = useInboxFilters();
-  const { data: config } = usePublicConfig();
+  const { data: visibleDomains } = useDomains();
   const { data: mailboxes } = useMailboxesQuery(true);
 
   const addressOptions = useMemo<ComboboxOption[]>(
@@ -39,7 +39,7 @@ export function AdminMailPage() {
       <div className="flex flex-col gap-4">
         <FilterBar
           filters={filters}
-          domains={config?.domains ?? []}
+          domains={visibleDomains ?? []}
           addressOptions={addressOptions}
           addressLabel="全站邮箱地址"
           onDomainChange={setDomain}

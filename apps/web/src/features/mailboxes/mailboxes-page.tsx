@@ -15,7 +15,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { toast } from '@/components/ui/toast';
 import { formatDateTime } from '@/lib/format';
-import { usePublicConfig } from '@/lib/use-config';
+import { useDomains } from '@/lib/use-config';
 import { ClaimDialog } from './claim-dialog';
 import { useMailboxesQuery } from './use-mailboxes';
 
@@ -157,7 +157,7 @@ function ReleaseDialog({
 
 export function MailboxesPage() {
   const queryClient = useQueryClient();
-  const { data: config } = usePublicConfig();
+  const { data: visibleDomains } = useDomains();
   const { data: mailboxes, isLoading } = useMailboxesQuery(false);
   const [claimOpen, setClaimOpen] = useState(false);
   const [releasing, setReleasing] = useState<Mailbox | null>(null);
@@ -225,7 +225,7 @@ export function MailboxesPage() {
         </Table>
       )}
 
-      <ClaimDialog open={claimOpen} onOpenChange={setClaimOpen} domains={config?.domains ?? []} />
+      <ClaimDialog open={claimOpen} onOpenChange={setClaimOpen} domains={visibleDomains ?? []} />
       <EditMailboxDialog mailbox={editing} onClose={() => setEditing(null)} />
       <ReleaseDialog
         mailbox={releasing}

@@ -4,7 +4,7 @@ import { createDb } from '../db/client.js';
 import { attachments as attachmentsTable, mailboxes, messages, stars, users } from '../db/schema.js';
 import { AppError } from '../lib/errors.js';
 import type { Env } from '../types.js';
-import { getDomains } from './domain.js';
+import { domainPerUserLimit, getDomains, isDomainPublic } from './domain.js';
 import { getSettings } from './setting.js';
 import { deleteMessageObjects } from './storage.js';
 
@@ -62,12 +62,18 @@ export async function claimMailbox(
   }
   const db = createDb(env);
 
-  // 普通用户：保留前缀禁止认领（防冒充官方身份）+ 每用户认领上限（防囤积）
+  // 普通用户：域名可见性 + 保留前缀 + 全局上限 + 按域名上限（管理员全部豁免）
   if (role !== 'admin') {
+    // 可见性：只能认领对普通用户公开的域名（未公开的域名对普通用户等同不存在）
+    if (!isDomainPublic(settings, req.domain)) {
+      throw new AppError('forbidden', '该域名未对普通用户开放');
+    }
     const policy = settings.mailbox_policy;
+    // 保留前缀禁止认领（防冒充官方身份）
     if (policy.reservedLocalParts.includes(req.localPart)) {
       throw new AppError('forbidden', `前缀 ${req.localPart} 为系统保留，无法认领`);
     }
+    // 全局每用户认领上限（跨域名合计，防囤积）
     if (policy.perUserLimit > 0) {
       const owned = await db
         .select({ value: sql<number>`COUNT(*)` })
@@ -76,6 +82,18 @@ export async function claimMailbox(
         .get();
       if ((owned?.value ?? 0) >= policy.perUserLimit) {
         throw new AppError('forbidden', `认领地址数已达上限（${policy.perUserLimit}）`);
+      }
+    }
+    // 按域名上限：统计该用户在此域名下已认领数
+    const domainLimit = domainPerUserLimit(settings, req.domain);
+    if (domainLimit > 0) {
+      const ownedInDomain = await db
+        .select({ value: sql<number>`COUNT(*)` })
+        .from(mailboxes)
+        .where(and(eq(mailboxes.userId, userId), eq(mailboxes.domain, req.domain)))
+        .get();
+      if ((ownedInDomain?.value ?? 0) >= domainLimit) {
+        throw new AppError('forbidden', `在该域名下最多认领 ${domainLimit} 个地址`);
       }
     }
   }

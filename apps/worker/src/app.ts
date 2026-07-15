@@ -10,6 +10,7 @@ import attachments from './routes/attachments.js';
 import auth from './routes/auth.js';
 import avatar from './routes/avatar.js';
 import config from './routes/config.js';
+import domains from './routes/domains.js';
 import mailboxes from './routes/mailboxes.js';
 import messages from './routes/messages.js';
 import v1 from './routes/v1/index.js';
@@ -24,6 +25,7 @@ export function createApp() {
   api.route('/auth', auth);
   api.route('/avatar', avatar);
   api.route('/config', config);
+  api.route('/domains', domains);
   api.route('/mailboxes', mailboxes);
   api.route('/messages', messages);
   api.route('/attachments', attachments);

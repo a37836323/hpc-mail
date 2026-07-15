@@ -32,7 +32,8 @@ app.get('/domain-status', async (c) => {
   const parsed = domainSchema.safeParse((c.req.query('domain') ?? '').trim().toLowerCase());
   if (!parsed.success) throw new AppError('validation_failed', '域名格式非法');
   const settings = await getSettings(c.env);
-  const status = await checkDomainOnboarding(parsed.data, settings.domains.list.includes(parsed.data));
+  const inList = settings.domains.list.some((e) => e.domain === parsed.data);
+  const status = await checkDomainOnboarding(parsed.data, inList);
   return ok(c, status);
 });
 

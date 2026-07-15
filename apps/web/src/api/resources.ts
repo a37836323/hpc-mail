@@ -58,6 +58,11 @@ export const configApi = {
   getPublic: () => api.get<PublicConfig>('/config', { token: null }),
 };
 
+// ---- 可见域名（需登录，按角色：管理员=全部，普通用户=公开子集）----
+export const domainApi = {
+  visible: () => api.get<string[]>('/domains'),
+};
+
 // ---- 邮箱 ----
 export const mailboxApi = {
   list: (all = false) => api.get<Mailbox[]>('/mailboxes', { query: { all: all ? 1 : undefined } }),

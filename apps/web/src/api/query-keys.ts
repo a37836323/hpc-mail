@@ -3,6 +3,7 @@ import type { ListMessagesQuery } from '@hpc-mail/shared';
 /** 集中式 query key 注册表：前缀分层，失效时按前缀 invalidate。 */
 export const queryKeys = {
   config: ['config', 'public'] as const,
+  domains: ['domains', 'visible'] as const,
   session: ['session'] as const,
 
   mailboxes: {

@@ -19,7 +19,7 @@ import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/components/ui/toast';
 import { formatBytes } from '@/lib/format';
-import { usePublicConfig } from '@/lib/use-config';
+import { useDomains } from '@/lib/use-config';
 import { useCurrentUser } from '@/lib/use-session';
 import { useMailboxesQuery } from '@/features/mailboxes/use-mailboxes';
 import type { ComposeInitial } from './compose-init';
@@ -87,7 +87,7 @@ export function ComposePage() {
   const location = useLocation();
   const queryClient = useQueryClient();
   const isAdmin = user.role === 'admin';
-  const { data: config } = usePublicConfig();
+  const { data: visibleDomains } = useDomains();
   const { data: mailboxes } = useMailboxesQuery(false);
   const { data: contactsData } = useQuery({
     queryKey: ['messages', 'contacts'],
@@ -235,7 +235,7 @@ export function ComposePage() {
         <IdentityPicker
           isAdmin={isAdmin}
           mailboxes={mailboxes ?? []}
-          domains={config?.domains ?? []}
+          domains={visibleDomains ?? []}
           mailboxId={mailboxId}
           onMailboxId={setMailboxId}
           localPart={localPart}

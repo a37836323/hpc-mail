@@ -10,7 +10,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { type FormEvent, type ReactNode, useState } from 'react';
-import { type DomainOnboardingStatus, domainSchema } from '@hpc-mail/shared';
+import { type DomainEntry, type DomainOnboardingStatus, domainSchema } from '@hpc-mail/shared';
 import { ApiError } from '@/api/errors';
 import { queryKeys } from '@/api/query-keys';
 import { adminApi } from '@/api/resources';
@@ -24,6 +24,7 @@ import { IconButton } from '@/components/ui/icon-button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Spinner } from '@/components/ui/spinner';
+import { Switch } from '@/components/ui/switch';
 import { toast } from '@/components/ui/toast';
 import { useMailboxesQuery } from '@/features/mailboxes/use-mailboxes';
 
@@ -61,9 +62,7 @@ function StatusBadge({
       </Badge>
     );
   }
-  if (!status) {
-    return <Badge tone="neutral">未检测</Badge>;
-  }
+  if (!status) return <Badge tone="neutral">未检测</Badge>;
   if (!status.resolved) {
     return (
       <Badge tone="critical">
@@ -88,6 +87,91 @@ function StatusBadge({
   );
 }
 
+interface DomainRowProps {
+  entry: DomainEntry;
+  status: DomainOnboardingStatus | undefined;
+  isFetching: boolean;
+  busy: boolean;
+  onTogglePublic: (domain: string, next: boolean) => void;
+  onSetLimit: (domain: string, next: number) => void;
+  onRefetch: () => void;
+  onRemove: (domain: string) => void;
+}
+
+/** 单个域名行：接入状态 + 公开开关 + 按域名认领上限。上限输入本地暂存，失焦提交。 */
+function DomainRow({
+  entry,
+  status,
+  isFetching,
+  busy,
+  onTogglePublic,
+  onSetLimit,
+  onRefetch,
+  onRemove,
+}: DomainRowProps) {
+  const [limitDraft, setLimitDraft] = useState(String(entry.perUserLimit));
+
+  const commitLimit = () => {
+    const parsed = Number.parseInt(limitDraft, 10);
+    const next = Number.isNaN(parsed) ? entry.perUserLimit : Math.min(Math.max(parsed, 0), 10000);
+    setLimitDraft(String(next));
+    if (next !== entry.perUserLimit) onSetLimit(entry.domain, next);
+  };
+
+  const detail =
+    status && status.resolved && !status.mxReady
+      ? '未检测到 Cloudflare Email Routing 的 MX 记录，请先完成步骤 ①。'
+      : status && !status.resolved
+        ? 'DNS 查询失败，请稍后重新检测。'
+        : null;
+
+  return (
+    <li className="flex flex-col gap-2.5 rounded-md border border-line px-3 py-2.5">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <span className="truncate font-mono text-sm text-ink">{entry.domain}</span>
+          <StatusBadge isFetching={isFetching} status={status} />
+          {entry.public && <Badge tone="accent">公开</Badge>}
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
+          <IconButton size="sm" aria-label={`重新检测 ${entry.domain}`} disabled={isFetching} onClick={onRefetch}>
+            <RefreshCw className={`size-4 text-ink-tertiary ${isFetching ? 'animate-spin' : ''}`} />
+          </IconButton>
+          <IconButton size="sm" aria-label={`移除 ${entry.domain}`} onClick={() => onRemove(entry.domain)}>
+            <Trash2 className="size-4 text-critical" />
+          </IconButton>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[13px]">
+        <label className="flex cursor-pointer items-center gap-2 text-ink-secondary">
+          <Switch checked={entry.public} disabled={busy} onCheckedChange={(v) => onTogglePublic(entry.domain, v)} />
+          <span>{entry.public ? '公开给普通用户' : '仅管理员可用'}</span>
+        </label>
+        {entry.public && (
+          <div className="flex items-center gap-1.5 text-ink-secondary">
+            <span>每人可认领</span>
+            <Input
+              type="number"
+              min={0}
+              max={10000}
+              value={limitDraft}
+              disabled={busy}
+              onChange={(e) => setLimitDraft(e.target.value)}
+              onBlur={commitLimit}
+              className="h-8 w-16 px-2 text-center"
+              aria-label={`${entry.domain} 每人可认领数`}
+            />
+            <span className="text-ink-tertiary">个（0=不限）</span>
+          </div>
+        )}
+      </div>
+
+      {detail && <p className="text-xs text-ink-tertiary">{detail}</p>}
+    </li>
+  );
+}
+
 export function DomainsPage() {
   const queryClient = useQueryClient();
   const { data: settings, isLoading } = useQuery({
@@ -105,23 +189,30 @@ export function DomainsPage() {
 
   // 每个域名一条接入自检 query，进页面自动探测 MX；支持单独「重新检测」
   const statusQueries = useQueries({
-    queries: list.map((domain) => ({
-      queryKey: queryKeys.admin.domainStatus(domain),
-      queryFn: () => adminApi.domainStatus(domain),
+    queries: list.map((entry) => ({
+      queryKey: queryKeys.admin.domainStatus(entry.domain),
+      queryFn: () => adminApi.domainStatus(entry.domain),
       staleTime: 60_000,
       retry: false,
     })),
   });
 
   const persist = useMutation({
-    mutationFn: (nextList: string[]) => adminApi.updateSettings({ domains: { list: nextList } }),
+    mutationFn: (nextList: DomainEntry[]) => adminApi.updateSettings({ domains: { list: nextList } }),
     onSuccess: (saved) => {
       queryClient.setQueryData(queryKeys.admin.settings, saved);
+      // 可见性/公开域名变化会影响公开配置与「可见域名」两处
       void queryClient.invalidateQueries({ queryKey: queryKeys.config });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.domains });
     },
     onError: (err) =>
       toast({ title: err instanceof ApiError ? err.message : '保存失败，请重试', variant: 'error' }),
   });
+
+  /** 局部更新某域名条目并落库 */
+  const updateEntry = (domain: string, patch: Partial<DomainEntry>) => {
+    persist.mutate(list.map((e) => (e.domain === domain ? { ...e, ...patch } : e)));
+  };
 
   const addDomain = (event: FormEvent) => {
     event.preventDefault();
@@ -131,13 +222,14 @@ export function DomainsPage() {
       setError(parsed.error.issues[0]?.message ?? '域名格式非法');
       return;
     }
-    if (list.includes(parsed.data)) {
+    if (list.some((e) => e.domain === parsed.data)) {
       setError('该域名已在列表中');
       return;
     }
-    persist.mutate([...list, parsed.data], {
+    // 新域名默认「仅管理员」，需管理员显式打开公开开关
+    persist.mutate([...list, { domain: parsed.data, public: false, perUserLimit: 0 }], {
       onSuccess: () => {
-        toast({ title: '域名已添加', variant: 'success' });
+        toast({ title: '域名已添加（默认仅管理员可用）', variant: 'success' });
         setNewDomain('');
         setError(null);
       },
@@ -147,7 +239,7 @@ export function DomainsPage() {
   const confirmRemove = () => {
     if (!removing) return;
     persist.mutate(
-      list.filter((domain) => domain !== removing),
+      list.filter((e) => e.domain !== removing),
       {
         onSuccess: () => {
           toast({ title: '域名已移除', variant: 'success' });
@@ -161,7 +253,7 @@ export function DomainsPage() {
     <div className="mx-auto flex max-w-2xl flex-col gap-5">
       <PageHeader
         title="收件域名"
-        description="接入一个新域名分两侧：Cloudflare 侧开启收件能力，本站侧把域名加入系统。按下方向导逐步操作即可。"
+        description="接入一个新域名分两侧：Cloudflare 侧开启收件能力，本站侧把域名加入系统。新域名默认仅管理员可用，需手动公开给普通用户。"
       />
 
       {/* 接入向导 */}
@@ -205,9 +297,9 @@ export function DomainsPage() {
             </p>
           </GuideStep>
 
-          <GuideStep n={3} title="在本页下方把域名添加进系统">
-            <p className="flex items-center gap-1.5">
-              添加后该域名即可用于地址认领、发件白名单与前端展示，增删即时生效、无需重新部署。
+          <GuideStep n={3} title="在本页下方把域名添加进系统并按需公开">
+            <p className="flex flex-wrap items-center gap-1.5">
+              添加后默认<b>仅管理员可用</b>；打开该域名的「公开」开关后普通用户才可见、可认领，并可设每人认领上限。
               <ArrowDown className="size-3.5 text-ink-tertiary" />
             </p>
           </GuideStep>
@@ -229,7 +321,8 @@ export function DomainsPage() {
         <div>
           <h2 className="text-sm font-semibold text-ink">本站域名</h2>
           <p className="mt-0.5 text-[13px] text-ink-secondary">
-            系统会自动检测每个域名的 MX 是否已指向 Cloudflare Email Routing，据此判断收件链路是否打通。
+            系统会自动检测每个域名的收件链路（MX 是否已指向 Cloudflare）。
+            <b>公开</b>开关决定普通用户是否可见并认领该域名；<b>每人可认领</b>限制普通用户在该域名下的地址数（管理员不受限）。
           </p>
         </div>
 
@@ -256,44 +349,20 @@ export function DomainsPage() {
           <Skeleton className="h-24 w-full rounded-md" />
         ) : list.length > 0 ? (
           <ul className="flex flex-col gap-2">
-            {list.map((domain, i) => {
+            {list.map((entry, i) => {
               const q = statusQueries[i];
-              const status = q?.data;
-              const isFetching = q?.isFetching ?? false;
-              const detail =
-                status && status.resolved && !status.mxReady
-                  ? '未检测到 Cloudflare Email Routing 的 MX 记录，请先完成步骤 ①。'
-                  : status && !status.resolved
-                    ? 'DNS 查询失败，请稍后重新检测。'
-                    : status?.mxReady && !status.spfReady
-                      ? 'MX 已生效；SPF 记录未检测到，通常几分钟内由 Cloudflare 自动补全。'
-                      : null;
               return (
-                <li
-                  key={domain}
-                  className="flex flex-col gap-1.5 rounded-md border border-line px-3 py-2.5"
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex min-w-0 items-center gap-2">
-                      <span className="truncate font-mono text-sm text-ink">{domain}</span>
-                      <StatusBadge isFetching={isFetching} status={status} />
-                    </div>
-                    <div className="flex shrink-0 items-center gap-1">
-                      <IconButton
-                        size="sm"
-                        aria-label={`重新检测 ${domain}`}
-                        disabled={isFetching}
-                        onClick={() => q?.refetch()}
-                      >
-                        <RefreshCw className={`size-4 text-ink-tertiary ${isFetching ? 'animate-spin' : ''}`} />
-                      </IconButton>
-                      <IconButton size="sm" aria-label={`移除 ${domain}`} onClick={() => setRemoving(domain)}>
-                        <Trash2 className="size-4 text-critical" />
-                      </IconButton>
-                    </div>
-                  </div>
-                  {detail && <p className="text-xs text-ink-tertiary">{detail}</p>}
-                </li>
+                <DomainRow
+                  key={entry.domain}
+                  entry={entry}
+                  status={q?.data}
+                  isFetching={q?.isFetching ?? false}
+                  busy={persist.isPending}
+                  onTogglePublic={(domain, next) => updateEntry(domain, { public: next })}
+                  onSetLimit={(domain, next) => updateEntry(domain, { perUserLimit: next })}
+                  onRefetch={() => q?.refetch()}
+                  onRemove={setRemoving}
+                />
               );
             })}
           </ul>
