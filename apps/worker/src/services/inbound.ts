@@ -188,7 +188,7 @@ export async function handleInbound(
           fromName,
           toAddress,
           code: finalCode,
-          preview,
+          body: text || htmlToText(html),
         });
       } catch (e) {
         console.error('飞书通知失败:', e);

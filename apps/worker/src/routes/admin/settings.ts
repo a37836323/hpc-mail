@@ -34,7 +34,7 @@ app.post('/feishu-test', async (c) => {
       fromName: 'HPC Mail',
       toAddress: 'configured-mailbox',
       code: '',
-      preview: '配置有效。今后符合规则的新邮件会推送到此机器人。',
+      body: '配置有效。今后符合规则的新邮件会把完整正文推送到此机器人。',
     },
     { force: true, throwOnError: true, test: true },
   );

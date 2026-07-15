@@ -384,7 +384,7 @@ export async function sendMail(
               fromName: from.displayName,
               toAddress: target,
               code,
-              preview,
+              body: text || html,
             });
           } catch (e) {
             console.error('站内互投飞书通知失败:', e);

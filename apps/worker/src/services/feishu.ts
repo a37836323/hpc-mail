@@ -9,7 +9,8 @@ const FEISHU_WEBHOOK_HOSTS = new Set([
   'open.larkoffice.com',
 ]);
 const FEISHU_WEBHOOK_PATH = /^\/open-apis\/bot\/v2\/hook\/[A-Za-z0-9_-]{16,200}$/;
-const SUMMARY_LIMIT = 800;
+// 飞书交互卡片整体有大小上限（约 30KB），正文取原文但仍需截断到安全长度
+const BODY_LIMIT = 4000;
 
 /** 白名单校验飞书 webhook URL（防 SSRF），非法抛错 */
 export function validateFeishuWebhookUrl(value: string): string {
@@ -56,7 +57,23 @@ export interface FeishuMailInfo {
   fromName: string;
   toAddress: string;
   code: string;
-  preview: string;
+  /** 邮件正文原文（纯文本） */
+  body: string;
+}
+
+/** 正文清理：保留换行（原文排版），去除危险控制字符；超限截断并标注 */
+function cleanBody(value: string | undefined | null, limit: number): string {
+  const normalized = String(value || '')
+    .replace(/\r\n?/g, '\n')
+    // 去控制字符但保留 \t(09) 与 \n(0a)
+    .split('')
+    .filter((ch) => {
+      const c = ch.charCodeAt(0);
+      return c === 9 || c === 10 || (c >= 32 && c !== 127);
+    })
+    .join('')
+    .trim();
+  return normalized.length > limit ? `${normalized.slice(0, limit)}\n…（正文过长，已截断）` : normalized;
 }
 
 export function buildFeishuEmailCard(info: FeishuMailInfo, test = false): unknown {
@@ -65,7 +82,7 @@ export function buildFeishuEmailCard(info: FeishuMailInfo, test = false): unknow
   const senderName = cleanText(info.fromName, 100);
   const recipient = cleanText(info.toAddress, 254) || '未知';
   const code = cleanText(info.code, 64);
-  const summary = cleanText(info.preview, SUMMARY_LIMIT) || '（无纯文本摘要）';
+  const body = cleanBody(info.body, BODY_LIMIT) || '（无纯文本正文）';
 
   const elements: unknown[] = [
     {
@@ -85,7 +102,7 @@ export function buildFeishuEmailCard(info: FeishuMailInfo, test = false): unknow
   }
   elements.push(
     { tag: 'hr' },
-    { tag: 'div', text: { tag: 'plain_text', content: `内容摘要：${summary}` } },
+    { tag: 'div', text: { tag: 'plain_text', content: body } },
   );
 
   return {
