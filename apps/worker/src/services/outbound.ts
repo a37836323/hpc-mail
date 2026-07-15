@@ -1,7 +1,5 @@
 import type { MessageSummary, Role, SendMailRequest } from '@hpc-mail/shared';
-import { EmailMessage } from 'cloudflare:email';
 import { and, eq } from 'drizzle-orm';
-import { createMimeMessage } from 'mimetext';
 import { createDb, type Db } from '../db/client.js';
 import { attachments as attachmentsTable, mailboxes, messages } from '../db/schema.js';
 import {
@@ -110,6 +108,12 @@ async function sendViaCloudflare(
   req: SendMailRequest,
   atts: DecodedAttachment[],
 ): Promise<void> {
+  // 动态 import：`cloudflare:email` 在 vitest workerd 里静态加载会崩，
+  // 且集成测试不发外部邮件，延迟到真实发送时才加载
+  const [{ EmailMessage }, { createMimeMessage }] = await Promise.all([
+    import('cloudflare:email'),
+    import('mimetext'),
+  ]);
   const msg = createMimeMessage();
   msg.setSender({ name: from.displayName, addr: from.address });
   msg.setRecipient(toAddr);
