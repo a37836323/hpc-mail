@@ -14,6 +14,7 @@ import { toast } from '@/components/ui/toast';
 import { buildForward, buildReply, buildReplyAll, buildResend } from '@/features/compose/compose-init';
 import { useStarMutation } from '@/features/inbox/use-star';
 import { cn } from '@/lib/cn';
+import { useCurrentUser } from '@/lib/use-session';
 import { countRemoteImages } from './count-remote-images';
 import { EmailHtml } from '@/lib/email-html';
 import { formatBytes, formatDateTime } from '@/lib/format';
@@ -25,6 +26,9 @@ export function MessagePage() {
   const messageId = Number(id);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const currentUser = useCurrentUser();
+  // admin 可打开全站邮件；对自己显式打开的这封邮件执行标记/删除时按全站生效
+  const opScope = currentUser.role === 'admin' ? ('all' as const) : undefined;
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [showRemoteImages, setShowRemoteImages] = useState(false);
   const markedRef = useRef(false);
@@ -38,7 +42,7 @@ export function MessagePage() {
   const star = useStarMutation();
 
   const markRead = useMutation({
-    mutationFn: (isRead: boolean) => messageApi.markRead([messageId], isRead),
+    mutationFn: (isRead: boolean) => messageApi.markRead([messageId], isRead, opScope),
     onSuccess: (_data, isRead) => {
       queryClient.setQueryData<MessageDetail>(queryKeys.messages.detail(messageId), (prev) =>
         prev ? { ...prev, isRead } : prev,
@@ -63,7 +67,7 @@ export function MessagePage() {
   };
 
   const deleteMutation = useMutation({
-    mutationFn: () => messageApi.remove([messageId]),
+    mutationFn: () => messageApi.remove([messageId], opScope),
     onSuccess: () => {
       toast({ title: '邮件已删除', variant: 'success' });
       void queryClient.invalidateQueries({ queryKey: queryKeys.messages.root });

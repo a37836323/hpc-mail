@@ -24,7 +24,8 @@ export interface JwtClaims {
   exp: number;
 }
 
-const DEFAULT_TTL_SECONDS = 60 * 60 * 24 * 30;
+// 7 天：本系统是「验证码聚合器」，账号价值高，缩短 token 生命周期降低泄露后暴露窗口
+const DEFAULT_TTL_SECONDS = 60 * 60 * 24 * 7;
 
 async function importKey(secret: string, usage: ('sign' | 'verify')[]): Promise<CryptoKey> {
   return crypto.subtle.importKey(

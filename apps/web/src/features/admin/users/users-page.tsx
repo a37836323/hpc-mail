@@ -194,7 +194,7 @@ export function UsersPage() {
         title="删除该用户？"
         description={
           deleting
-            ? `删除 ${deleting.username} 后，其认领的所有地址将被释放，可供他人重新认领。此操作不可撤销。`
+            ? `删除 ${deleting.username} 将释放其 ${deleting.mailboxCount} 个认领地址（可供他人重新认领）、吊销 ${deleting.apiKeyCount} 个 API Key，并清除其头像与星标。邮件本身保留（随地址回未认领态）。此操作不可撤销。`
             : undefined
         }
         confirmLabel="删除"

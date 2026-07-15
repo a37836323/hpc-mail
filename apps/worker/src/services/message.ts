@@ -30,6 +30,15 @@ async function resolveScope(env: Env, viewer: Viewer): Promise<'all' | string[]>
   return userAddresses(env, viewer.userId);
 }
 
+/**
+ * 变更类操作（标记/星标/删除）的可见范围：与只读相反，admin 必须**显式** scope='all'
+ * 才作用全站，否则默认只作用自己认领地址——防止 API 调用方漏传 scope 误删/误改他人邮件。
+ */
+async function resolveMutationScope(env: Env, viewer: Viewer): Promise<'all' | string[]> {
+  if (viewer.role === 'admin' && viewer.scope === 'all') return 'all';
+  return userAddresses(env, viewer.userId);
+}
+
 function scopeCondition(scope: 'all' | string[]): SQL | undefined {
   if (scope === 'all') return undefined;
   if (scope.length === 0) return eq(messages.id, -1); // 匹配空集
@@ -267,7 +276,7 @@ export async function markMessages(
   isRead: boolean,
 ): Promise<number> {
   const db = createDb(env);
-  const scope = await resolveScope(env, viewer);
+  const scope = await resolveMutationScope(env, viewer);
   const cond =
     scope === 'all'
       ? inArray(messages.id, ids)
@@ -284,6 +293,7 @@ export async function starMessages(
   starred: boolean,
 ): Promise<number> {
   const db = createDb(env);
+  // 星标是个人标记（独立 stars 表，不影响他人），用只读可见范围即可
   const scope = await resolveScope(env, viewer);
   const cond =
     scope === 'all'
@@ -309,7 +319,7 @@ export async function starMessages(
 /** 批量删除（可见范围内）：D1 行删 + R2 清理 */
 export async function deleteMessages(env: Env, viewer: Viewer, ids: number[]): Promise<number> {
   const db = createDb(env);
-  const scope = await resolveScope(env, viewer);
+  const scope = await resolveMutationScope(env, viewer);
   const cond =
     scope === 'all'
       ? inArray(messages.id, ids)

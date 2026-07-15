@@ -92,6 +92,8 @@ export interface AdminUser {
   role: Role;
   status: UserStatus;
   mailboxCount: number;
+  /** 名下 API Key 数（删除用户前确认后果用） */
+  apiKeyCount: number;
   createdAt: string;
   lastLoginAt: string | null;
   /** 头像访问 URL（带版本号防缓存）；无头像时为 null */

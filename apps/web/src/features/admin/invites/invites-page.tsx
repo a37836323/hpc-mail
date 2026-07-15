@@ -194,6 +194,7 @@ export function InvitesPage() {
               <TableHead>使用</TableHead>
               <TableHead>有效期</TableHead>
               <TableHead>备注</TableHead>
+              <TableHead>注册者</TableHead>
               <TableHead className="text-right">操作</TableHead>
             </TableRow>
           </TableHeader>
@@ -218,6 +219,16 @@ export function InvitesPage() {
                     {invite.expiresAt ? formatDateTime(invite.expiresAt) : '永久'}
                   </TableCell>
                   <TableCell className="text-ink-secondary">{invite.note || '—'}</TableCell>
+                  <TableCell className="text-ink-secondary">
+                    {invite.usedBy.length > 0 ? (
+                      <span className="text-sm" title={invite.usedBy.join('、')}>
+                        {invite.usedBy.slice(0, 3).join('、')}
+                        {invite.usedBy.length > 3 ? ` +${invite.usedBy.length - 3}` : ''}
+                      </span>
+                    ) : (
+                      '—'
+                    )}
+                  </TableCell>
                   <TableCell className="text-right">
                     <Button
                       variant="ghost"

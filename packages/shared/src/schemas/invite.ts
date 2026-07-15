@@ -19,4 +19,6 @@ export interface Invite {
   note: string;
   createdAt: string;
   status: 'usable' | 'exhausted' | 'expired' | 'revoked';
+  /** 经此码注册的用户名（溯源用） */
+  usedBy: string[];
 }

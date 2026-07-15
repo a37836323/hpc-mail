@@ -25,7 +25,8 @@ app.use('*', requireAuth);
 
 function viewerOf(c: Context<AppContext>): Viewer {
   const user = c.get('user')!;
-  const scope = c.req.query('scope') === 'mine' ? 'mine' : undefined;
+  const q = c.req.query('scope');
+  const scope = q === 'mine' ? 'mine' : q === 'all' ? 'all' : undefined;
   return { userId: user.id, role: user.role, scope };
 }
 

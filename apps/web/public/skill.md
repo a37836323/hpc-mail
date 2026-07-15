@@ -31,7 +31,7 @@ curl -s -X POST $BASE/api/auth/login \
 # → { "data": { "token": "eyJ...(JWT)", "user": { "id": 1, "username": "...", "role": "user" } } }
 ```
 
-记下 `data.token`（下文记作 `$TOKEN`）。之后每个请求都加请求头 `Authorization: Bearer $TOKEN`。令牌有效期 30 天。
+记下 `data.token`（下文记作 `$TOKEN`）。之后每个请求都加请求头 `Authorization: Bearer $TOKEN`。令牌有效期 7 天；长期无人值守请改用文末的 API Key + `/v1`。
 
 ## 响应格式约定
 

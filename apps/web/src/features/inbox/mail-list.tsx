@@ -101,8 +101,12 @@ export function MailList({
     void queryClient.invalidateQueries({ queryKey: queryKeys.messages.root });
   };
 
+  // admin 全站视图（scope=all）的批量操作需带上 scope 才作用全站；其余默认只作用自己
+  const mutationScope = query.scope === 'all' ? 'all' : undefined;
+
   const batchRead = useMutation({
-    mutationFn: ({ ids, isRead }: { ids: number[]; isRead: boolean }) => messageApi.markRead(ids, isRead),
+    mutationFn: ({ ids, isRead }: { ids: number[]; isRead: boolean }) =>
+      messageApi.markRead(ids, isRead, mutationScope),
     onSuccess: (_d, { isRead }) => {
       toast({ title: isRead ? '已标记为已读' : '已标记为未读', variant: 'success' });
       clearSelection();
@@ -112,7 +116,7 @@ export function MailList({
   });
 
   const batchStar = useMutation({
-    mutationFn: (ids: number[]) => messageApi.star(ids, true),
+    mutationFn: (ids: number[]) => messageApi.star(ids, true, mutationScope),
     onSuccess: () => {
       toast({ title: '已加星标', variant: 'success' });
       clearSelection();
@@ -122,7 +126,7 @@ export function MailList({
   });
 
   const batchDelete = useMutation({
-    mutationFn: (ids: number[]) => messageApi.remove(ids),
+    mutationFn: (ids: number[]) => messageApi.remove(ids, mutationScope),
     onSuccess: (_d, ids) => {
       toast({ title: `已删除 ${ids.length} 封`, variant: 'success' });
       clearSelection();

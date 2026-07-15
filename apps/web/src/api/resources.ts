@@ -70,11 +70,12 @@ export const messageApi = {
   detail: (id: number) => api.get<MessageDetail>(`/messages/${id}`),
   send: (body: SendMailRequest) => api.post<MessageSummary, SendMailRequest>('/messages/send', body),
   unreadCount: () => api.get<{ unread: number }>('/messages/unread-count'),
-  markRead: (ids: number[], isRead: boolean) =>
-    api.post<void, { ids: number[]; isRead: boolean }>('/messages/read', { ids, isRead }),
-  star: (ids: number[], starred: boolean) =>
-    api.post<void, { ids: number[]; starred: boolean }>('/messages/star', { ids, starred }),
-  remove: (ids: number[]) => api.post<void, { ids: number[] }>('/messages/delete', { ids }),
+  markRead: (ids: number[], isRead: boolean, scope?: 'mine' | 'all') =>
+    api.post<void, { ids: number[]; isRead: boolean }>('/messages/read', { ids, isRead }, { query: { scope } }),
+  star: (ids: number[], starred: boolean, scope?: 'mine' | 'all') =>
+    api.post<void, { ids: number[]; starred: boolean }>('/messages/star', { ids, starred }, { query: { scope } }),
+  remove: (ids: number[], scope?: 'mine' | 'all') =>
+    api.post<void, { ids: number[] }>('/messages/delete', { ids }, { query: { scope } }),
 };
 
 // ---- API Keys（自助） ----

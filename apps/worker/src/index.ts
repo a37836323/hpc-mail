@@ -5,6 +5,34 @@ import type { Env } from './types.js';
 
 const app = createApp();
 
+/**
+ * 给前端资产响应加安全头。邮件正文已在 Shadow DOM 内消毒并按用户意愿放行远程图片，
+ * 故 img-src 放开 https:；样式含 React 内联 style，需 'unsafe-inline'。
+ * frame-ancestors 'none' 防点击劫持；HSTS 强制 HTTPS。
+ */
+const CSP = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: https:",
+  "font-src 'self' data:",
+  "connect-src 'self'",
+  "frame-ancestors 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+].join('; ');
+
+function withSecurityHeaders(res: Response, extra?: Record<string, string>): Response {
+  const headers = new Headers(res.headers);
+  headers.set('Content-Security-Policy', CSP);
+  headers.set('X-Frame-Options', 'DENY');
+  headers.set('X-Content-Type-Options', 'nosniff');
+  headers.set('Referrer-Policy', 'no-referrer');
+  headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  if (extra) for (const [k, v] of Object.entries(extra)) headers.set(k, v);
+  return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
+}
+
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
@@ -15,11 +43,9 @@ export default {
     const res = await env.assets.fetch(request);
     // .md（如 /skill.md）assets 默认不带 charset，浏览器会按非 UTF-8 解析导致中文乱码，补上
     if (url.pathname.endsWith('.md')) {
-      const headers = new Headers(res.headers);
-      headers.set('Content-Type', 'text/markdown; charset=utf-8');
-      return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
+      return withSecurityHeaders(res, { 'Content-Type': 'text/markdown; charset=utf-8' });
     }
-    return res;
+    return withSecurityHeaders(res);
   },
 
   async email(message: ForwardableEmailMessage, env: Env, ctx: ExecutionContext): Promise<void> {

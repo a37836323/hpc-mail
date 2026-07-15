@@ -1,7 +1,7 @@
 import type { CreateInviteRequest, Invite } from '@hpc-mail/shared';
-import { and, desc, eq, gt, isNull, lt, or, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, isNotNull, isNull, lt, or, sql } from 'drizzle-orm';
 import { createDb } from '../db/client.js';
-import { invites } from '../db/schema.js';
+import { invites, users } from '../db/schema.js';
 import { AppError } from '../lib/errors.js';
 import type { Env } from '../types.js';
 
@@ -29,7 +29,7 @@ function computeStatus(row: InviteRow, now = Date.now()): Invite['status'] {
   return 'usable';
 }
 
-function serialize(row: InviteRow): Invite {
+function serialize(row: InviteRow, usedBy: string[] = []): Invite {
   return {
     id: row.id,
     code: row.code,
@@ -39,6 +39,7 @@ function serialize(row: InviteRow): Invite {
     note: row.note,
     createdAt: row.createdAt.toISOString(),
     status: computeStatus(row),
+    usedBy,
   };
 }
 
@@ -59,13 +60,27 @@ export async function createInvites(
     createdBy,
   }));
   const rows = await db.insert(invites).values(values).returning();
-  return rows.map(serialize);
+  return rows.map((row) => serialize(row));
 }
 
 export async function listInvites(env: Env): Promise<Invite[]> {
   const db = createDb(env);
-  const rows = await db.select().from(invites).orderBy(desc(invites.id)).all();
-  return rows.map(serialize);
+  const [rows, registrants] = await Promise.all([
+    db.select().from(invites).orderBy(desc(invites.id)).all(),
+    db
+      .select({ inviteId: users.inviteId, username: users.username })
+      .from(users)
+      .where(isNotNull(users.inviteId))
+      .all(),
+  ]);
+  const byInvite = new Map<number, string[]>();
+  for (const r of registrants) {
+    if (r.inviteId === null) continue;
+    const list = byInvite.get(r.inviteId) ?? [];
+    list.push(r.username);
+    byInvite.set(r.inviteId, list);
+  }
+  return rows.map((row) => serialize(row, byInvite.get(row.id) ?? []));
 }
 
 export async function revokeInvite(env: Env, id: number): Promise<void> {

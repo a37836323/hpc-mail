@@ -1,7 +1,7 @@
 import type { AdminUser, CreateUserRequest, UpdateUserRequest } from '@hpc-mail/shared';
 import { desc, eq, sql } from 'drizzle-orm';
 import { createDb } from '../db/client.js';
-import { mailboxes, users } from '../db/schema.js';
+import { apiKeys, mailboxes, stars, users } from '../db/schema.js';
 import { AppError } from '../lib/errors.js';
 import { hashPassword } from '../lib/password.js';
 import type { Env } from '../types.js';
@@ -11,14 +11,16 @@ import { bumpUserEpoch } from './session.js';
 type UserRow = typeof users.$inferSelect;
 
 const mailboxCountSql = sql<number>`(SELECT COUNT(*) FROM mailboxes WHERE mailboxes.user_id = users.id)`;
+const apiKeyCountSql = sql<number>`(SELECT COUNT(*) FROM api_keys WHERE api_keys.user_id = users.id)`;
 
-function serialize(row: UserRow, mailboxCount: number): AdminUser {
+function serialize(row: UserRow, mailboxCount: number, apiKeyCount: number): AdminUser {
   return {
     id: row.id,
     username: row.username,
     role: row.role,
     status: row.status,
     mailboxCount,
+    apiKeyCount,
     createdAt: row.createdAt.toISOString(),
     lastLoginAt: row.lastLoginAt ? row.lastLoginAt.toISOString() : null,
     avatarUrl: avatarUrl(row.id, row.avatarKey),
@@ -28,11 +30,11 @@ function serialize(row: UserRow, mailboxCount: number): AdminUser {
 export async function listUsers(env: Env): Promise<AdminUser[]> {
   const db = createDb(env);
   const rows = await db
-    .select({ user: users, mailboxCount: mailboxCountSql })
+    .select({ user: users, mailboxCount: mailboxCountSql, apiKeyCount: apiKeyCountSql })
     .from(users)
     .orderBy(desc(users.id))
     .all();
-  return rows.map((r) => serialize(r.user, Number(r.mailboxCount)));
+  return rows.map((r) => serialize(r.user, Number(r.mailboxCount), Number(r.apiKeyCount)));
 }
 
 export async function createUser(env: Env, req: CreateUserRequest): Promise<AdminUser> {
@@ -44,7 +46,7 @@ export async function createUser(env: Env, req: CreateUserRequest): Promise<Admi
     .insert(users)
     .values({ username: req.username, passwordHash, role: req.role, status: 'active' })
     .returning();
-  return serialize(row!, 0);
+  return serialize(row!, 0, 0);
 }
 
 export async function updateUser(
@@ -77,20 +79,37 @@ export async function updateUser(
   if (bumpEpoch) await bumpUserEpoch(env, id);
 
   const count = await db
-    .select({ c: mailboxCountSql })
+    .select({ mailboxCount: mailboxCountSql, apiKeyCount: apiKeyCountSql })
     .from(users)
     .where(eq(users.id, id))
     .get();
-  return serialize(row!, Number(count?.c ?? 0));
+  return serialize(row!, Number(count?.mailboxCount ?? 0), Number(count?.apiKeyCount ?? 0));
 }
 
-/** 删除用户：级联释放 mailboxes（直接删行，messages 不动） */
+/**
+ * 删除用户：级联清理 mailboxes / api_keys / stars / 头像 R2 对象，避免僵尸数据。
+ * messages 不动（仍按 address 归属，随地址回未认领态）。
+ */
 export async function deleteUser(env: Env, actingUserId: number, id: number): Promise<void> {
   if (id === actingUserId) throw new AppError('forbidden', '不能删除自己');
   const db = createDb(env);
-  const target = await db.select({ id: users.id }).from(users).where(eq(users.id, id)).get();
+  const target = await db
+    .select({ id: users.id, avatarKey: users.avatarKey })
+    .from(users)
+    .where(eq(users.id, id))
+    .get();
   if (!target) throw new AppError('not_found', '用户不存在');
+
   await db.delete(mailboxes).where(eq(mailboxes.userId, id));
+  await db.delete(apiKeys).where(eq(apiKeys.userId, id));
+  await db.delete(stars).where(eq(stars.userId, id));
   await db.delete(users).where(eq(users.id, id));
+  if (target.avatarKey) {
+    try {
+      await env.r2.delete(target.avatarKey);
+    } catch (e) {
+      console.error('删除用户头像对象失败:', e);
+    }
+  }
   await bumpUserEpoch(env, id);
 }
