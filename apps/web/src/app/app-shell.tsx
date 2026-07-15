@@ -55,6 +55,7 @@ const PRIMARY_NAV: NavEntry[] = [
   { to: '/mailboxes', label: '我的邮箱', icon: AtSign },
   { to: '/trash', label: '回收站', icon: Trash2 },
   { to: '/api-keys', label: 'API Keys', icon: KeyRound },
+  { to: '/profile', label: '个人设置', icon: User },
 ];
 
 const ADMIN_NAV: NavEntry[] = [
