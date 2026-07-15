@@ -187,6 +187,8 @@ describe('星标与正文搜索', () => {
 
 describe('动态域名 getDomains（纯 settings 驱动，无 fallback）', () => {
   it('未配置 domains 时返回空数组，任何域名都不能认领', async () => {
+    // 同文件测试共享存储，显式清空覆盖前面用例设过的域名
+    await updateSettings(env, { domains: { list: [] } });
     expect(await getDomains(env)).toEqual([]);
 
     const uid = await seedUser('empty-dom-user', 'user');

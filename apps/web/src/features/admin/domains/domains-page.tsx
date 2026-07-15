@@ -1,12 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Globe, Plus, Trash2 } from 'lucide-react';
-import { type FormEvent, useEffect, useState } from 'react';
+import { type FormEvent, useState } from 'react';
 import { domainSchema } from '@hpc-mail/shared';
 import { ApiError } from '@/api/errors';
 import { queryKeys } from '@/api/query-keys';
 import { adminApi } from '@/api/resources';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { EmptyState } from '@/components/ui/empty-state';
 import { IconButton } from '@/components/ui/icon-button';
 import { Input } from '@/components/ui/input';
@@ -19,36 +20,20 @@ export function DomainsPage() {
     queryKey: queryKeys.admin.settings,
     queryFn: () => adminApi.getSettings(),
   });
-  const [draft, setDraft] = useState<string[] | null>(null);
   const [newDomain, setNewDomain] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [removing, setRemoving] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (settings && draft === null) setDraft([...settings.domains.list]);
-  }, [settings, draft]);
+  const list = settings?.domains.list ?? [];
 
-  const save = useMutation({
-    mutationFn: (list: string[]) => adminApi.updateSettings({ domains: { list } }),
+  const persist = useMutation({
+    mutationFn: (nextList: string[]) => adminApi.updateSettings({ domains: { list: nextList } }),
     onSuccess: (saved) => {
       queryClient.setQueryData(queryKeys.admin.settings, saved);
-      setDraft([...saved.domains.list]);
       void queryClient.invalidateQueries({ queryKey: queryKeys.config });
-      toast({ title: '收件域名已保存', variant: 'success' });
     },
     onError: (err) => toast({ title: err instanceof ApiError ? err.message : '保存失败，请重试', variant: 'error' }),
   });
-
-  if (isLoading || draft === null) {
-    return (
-      <div className="mx-auto max-w-2xl space-y-4">
-        <Skeleton className="h-8 w-40" />
-        <Skeleton className="h-48 w-full rounded-lg" />
-      </div>
-    );
-  }
-
-  const savedList = settings?.domains.list ?? [];
-  const dirty = JSON.stringify(draft) !== JSON.stringify(savedList);
 
   const addDomain = (event: FormEvent) => {
     event.preventDefault();
@@ -58,28 +43,35 @@ export function DomainsPage() {
       setError(parsed.error.issues[0]?.message ?? '域名格式非法');
       return;
     }
-    if (draft.includes(parsed.data)) {
+    if (list.includes(parsed.data)) {
       setError('该域名已在列表中');
       return;
     }
-    setDraft([...draft, parsed.data]);
-    setNewDomain('');
-    setError(null);
+    persist.mutate([...list, parsed.data], {
+      onSuccess: () => {
+        toast({ title: '域名已添加', variant: 'success' });
+        setNewDomain('');
+        setError(null);
+      },
+    });
   };
 
-  const removeDomain = (domain: string) => setDraft(draft.filter((item) => item !== domain));
+  const confirmRemove = () => {
+    if (!removing) return;
+    persist.mutate(
+      list.filter((domain) => domain !== removing),
+      {
+        onSuccess: () => {
+          toast({ title: '域名已移除', variant: 'success' });
+          setRemoving(null);
+        },
+      },
+    );
+  };
 
   return (
     <div className="mx-auto max-w-2xl">
-      <PageHeader
-        title="收件域名"
-        description="控制系统的收件域名，用于前端展示、地址认领与发件白名单。"
-        actions={
-          <Button loading={save.isPending} disabled={!dirty} onClick={() => save.mutate(draft)}>
-            保存
-          </Button>
-        }
-      />
+      <PageHeader title="收件域名" description="控制系统的收件域名，用于前端展示、地址认领与发件白名单；增删即时生效。" />
 
       <div className="flex flex-col gap-4 rounded-lg border border-line bg-surface p-5">
         <form onSubmit={addDomain} className="flex items-start gap-2">
@@ -95,21 +87,23 @@ export function DomainsPage() {
             />
             {error && <p className="mt-1 text-xs text-critical">{error}</p>}
           </div>
-          <Button type="submit" variant="secondary">
+          <Button type="submit" variant="secondary" loading={persist.isPending}>
             <Plus className="size-4" />
             添加
           </Button>
         </form>
 
-        {draft.length > 0 ? (
+        {isLoading ? (
+          <Skeleton className="h-24 w-full rounded-md" />
+        ) : list.length > 0 ? (
           <ul className="flex flex-col gap-2">
-            {draft.map((domain) => (
+            {list.map((domain) => (
               <li
                 key={domain}
                 className="flex items-center justify-between gap-3 rounded-md border border-line px-3 py-2 text-sm"
               >
                 <span className="font-mono text-ink">{domain}</span>
-                <IconButton size="sm" aria-label={`移除 ${domain}`} onClick={() => removeDomain(domain)}>
+                <IconButton size="sm" aria-label={`移除 ${domain}`} onClick={() => setRemoving(domain)}>
                   <Trash2 className="size-4 text-critical" />
                 </IconButton>
               </li>
@@ -118,12 +112,27 @@ export function DomainsPage() {
         ) : (
           <EmptyState
             icon={Globe}
-            title="还没有配置任何收件域名"
-            description="添加域名前，需先在 Cloudflare 为该域开启 Email Routing 并把 catch-all 指向本 Worker。"
+            title="还没有配置收件域名"
+            description="请先在 Cloudflare 为目标域开启 Email Routing 并把 catch-all 指向本 Worker，然后在这里把该域名添加进来。"
             className="rounded-md border border-dashed border-line"
           />
         )}
       </div>
+
+      <ConfirmDialog
+        open={removing !== null}
+        onOpenChange={(next) => !next && setRemoving(null)}
+        title="移除这个域名？"
+        description={
+          removing
+            ? `移除 ${removing} 后，该域名将不再用于地址认领、发件白名单与前端展示（已收邮件不受影响）。`
+            : undefined
+        }
+        confirmLabel="移除"
+        tone="danger"
+        loading={persist.isPending}
+        onConfirm={confirmRemove}
+      />
     </div>
   );
 }
