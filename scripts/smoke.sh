@@ -45,9 +45,14 @@ echo "$me" | grep -qi 'password' && fail "me 响应疑似泄漏密码字段" || 
 step "邮件列表与域名过滤"
 list=$(curl -sS "$BASE_URL/api/messages?limit=5" -H "Authorization: Bearer $TOKEN")
 echo "$list" | jq -e '.data.items | type == "array"' >/dev/null || fail "items 非数组: $list"
-first_domain=$(echo "$config" | jq -r '.data.domains[0]')
-dlist=$(curl -sS "$BASE_URL/api/messages?limit=5&domain=$first_domain" -H "Authorization: Bearer $TOKEN")
-echo "$dlist" | jq -e '.data.items | type == "array"' >/dev/null || fail "域名过滤失败: $dlist"
+# 域名取自 /api/domains（按角色返回，管理员=全部系统域名）；config.domains 仅含公开子集，可能为空
+domains=$(curl -sS "$BASE_URL/api/domains" -H "Authorization: Bearer $TOKEN")
+echo "$domains" | jq -e '.data | type == "array"' >/dev/null || fail "域名列表非数组: $domains"
+first_domain=$(echo "$domains" | jq -r '.data[0] // empty')
+if [ -n "$first_domain" ]; then
+  dlist=$(curl -sS "$BASE_URL/api/messages?limit=5&domain=$first_domain" -H "Authorization: Bearer $TOKEN")
+  echo "$dlist" | jq -e '.data.items | type == "array"' >/dev/null || fail "域名过滤失败: $dlist"
+fi
 
 step "admin 设置可读且密文脱敏"
 settings=$(curl -sS "$BASE_URL/api/admin/settings" -H "Authorization: Bearer $TOKEN")
