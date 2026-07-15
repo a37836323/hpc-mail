@@ -149,7 +149,7 @@ export function SettingsPage() {
 
         <Section
           title="收件域名"
-          description="新域名需先在 Cloudflare 为该域开启 Email Routing catch-all 并指向本 Worker；此处列表控制前端展示、地址认领与发件白名单。留空则使用部署配置。"
+          description="新增域名需先在 Cloudflare 为该域开启 Email Routing 并把 catch-all 指向本 Worker；此列表控制前端展示、地址认领与发件白名单；留空则使用部署配置的默认域名。"
         >
           {draft.domains.list.length > 0 ? (
             <ul className="flex flex-col gap-2">

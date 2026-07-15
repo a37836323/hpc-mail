@@ -80,26 +80,28 @@ export const apiKeyAuth: MiddlewareHandler<AppContext> = async (c, next) => {
     .where(eq(apiKeys.keyHash, keyHash))
     .get();
 
+  // key 未定位（无 Bearer / hash 不匹配）不记审计，避免垃圾请求刷日志
   if (!row) throw new AppError('unauthorized', 'API Key 无效');
-  if (row.status !== 'active') throw new AppError('unauthorized', 'API Key 已禁用或吊销');
-  if (row.userStatus !== 'active') throw new AppError('user_disabled', 'API Key 所属用户已被禁用');
-  if (row.expiresAt && row.expiresAt.getTime() <= Date.now()) {
-    throw new AppError('unauthorized', 'API Key 已过期');
-  }
 
+  // key 已定位：从这里起所有拒绝（状态/过期/IP/限流）都进审计，安全监控最需要这些
   const ip = clientIp(c);
-  if (!ipInAllowList(ip, row.allowedIps)) throw new AppError('forbidden', '来源 IP 不在白名单内');
-
-  c.set('apiClientIp', ip);
-  c.set('apiKey', {
-    id: row.id,
-    userId: row.userId,
-    role: row.role ?? 'user',
-    scopes: row.scopes as ApiScope[],
-  });
-
   let statusCode = 200;
   try {
+    if (row.status !== 'active') throw new AppError('unauthorized', 'API Key 已禁用或吊销');
+    if (row.userStatus !== 'active') throw new AppError('user_disabled', 'API Key 所属用户已被禁用');
+    if (row.expiresAt && row.expiresAt.getTime() <= Date.now()) {
+      throw new AppError('unauthorized', 'API Key 已过期');
+    }
+    if (!ipInAllowList(ip, row.allowedIps)) throw new AppError('forbidden', '来源 IP 不在白名单内');
+
+    c.set('apiClientIp', ip);
+    c.set('apiKey', {
+      id: row.id,
+      userId: row.userId,
+      role: row.role ?? 'user',
+      scopes: row.scopes as ApiScope[],
+    });
+
     const windowStart = Math.floor(Date.now() / 60000);
     const rate = await db
       .insert(apiRateLimits)
