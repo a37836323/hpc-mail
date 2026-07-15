@@ -1,3 +1,4 @@
+export { Avatar, type AvatarProps } from './avatar';
 export { Badge, type BadgeTone } from './badge';
 export { Button, type ButtonProps, type ButtonVariant, type ButtonSize } from './button';
 export { Checkbox } from './checkbox';

@@ -26,6 +26,7 @@ import type {
   UpdateMailboxRequest,
   UpdateSettingsRequest,
   UpdateUserRequest,
+  UploadAvatarRequest,
 } from '@hpc-mail/shared';
 import { api, type QueryParams } from './client';
 
@@ -38,6 +39,9 @@ export const authApi = {
   me: () => api.get<SessionUser>('/auth/me'),
   changePassword: (body: ChangePasswordRequest) =>
     api.put<LoginResponse, ChangePasswordRequest>('/auth/password', body),
+  uploadAvatar: (body: UploadAvatarRequest) =>
+    api.post<SessionUser, UploadAvatarRequest>('/auth/avatar', body),
+  deleteAvatar: () => api.delete<SessionUser>('/auth/avatar'),
 };
 
 // ---- 公开配置 ----

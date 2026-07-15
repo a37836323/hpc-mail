@@ -19,6 +19,8 @@ export const users = sqliteTable('users', {
     .notNull()
     .default('active'),
   inviteId: integer('invite_id'),
+  /** 头像 R2 key（null 表示无头像）；随每次上传变化，用于 URL 版本号防缓存 */
+  avatarKey: text('avatar_key'),
   createdAt: createdAtColumn(),
   lastLoginAt: integer('last_login_at', { mode: 'timestamp_ms' }),
   lastLoginIp: text('last_login_ip'),

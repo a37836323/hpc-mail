@@ -13,6 +13,7 @@ import { AppError } from '../lib/errors.js';
 import { signToken } from '../lib/jwt.js';
 import { hashPassword, verifyPassword } from '../lib/password.js';
 import type { AuthUser, Env } from '../types.js';
+import { avatarUrl } from './avatar.js';
 import { consumeInvite } from './invite.js';
 import { getInstanceEpoch, getUserEpoch, bumpUserEpoch, createSession, destroySession } from './session.js';
 import { getSettings } from './setting.js';
@@ -71,6 +72,7 @@ function toSessionUser(row: typeof users.$inferSelect): SessionUser {
     username: row.username,
     role: row.role,
     createdAt: row.createdAt.toISOString(),
+    avatarUrl: avatarUrl(row.id, row.avatarKey),
   };
 }
 

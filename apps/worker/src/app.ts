@@ -7,6 +7,7 @@ import adminUsers from './routes/admin/users.js';
 import apiKeys from './routes/api-keys.js';
 import attachments from './routes/attachments.js';
 import auth from './routes/auth.js';
+import avatar from './routes/avatar.js';
 import config from './routes/config.js';
 import mailboxes from './routes/mailboxes.js';
 import messages from './routes/messages.js';
@@ -21,6 +22,7 @@ export function createApp() {
 
   const api = new Hono<AppContext>();
   api.route('/auth', auth);
+  api.route('/avatar', avatar);
   api.route('/config', config);
   api.route('/mailboxes', mailboxes);
   api.route('/messages', messages);

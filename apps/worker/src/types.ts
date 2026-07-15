@@ -24,6 +24,7 @@ export interface AuthUser {
   role: Role;
   status: UserStatus;
   createdAt: Date;
+  avatarKey: string | null;
 }
 
 /** /v1 API Key 鉴权后的上下文 */

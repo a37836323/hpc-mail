@@ -18,6 +18,7 @@ const MailboxesPage = lazy(() =>
   import('@/features/mailboxes/mailboxes-page').then((m) => ({ default: m.MailboxesPage })),
 );
 const ApiKeysPage = lazy(() => import('@/features/api-keys/api-keys-page').then((m) => ({ default: m.ApiKeysPage })));
+const ProfilePage = lazy(() => import('@/features/profile/profile-page').then((m) => ({ default: m.ProfilePage })));
 const UsersPage = lazy(() => import('@/features/admin/users/users-page').then((m) => ({ default: m.UsersPage })));
 const AdminMailPage = lazy(() =>
   import('@/features/admin/mail/admin-mail-page').then((m) => ({ default: m.AdminMailPage })),
@@ -55,6 +56,7 @@ export const router = createBrowserRouter([
       { path: 'starred', element: <StarredPage /> },
       { path: 'mailboxes', element: <MailboxesPage /> },
       { path: 'api-keys', element: <ApiKeysPage /> },
+      { path: 'profile', element: <ProfilePage /> },
       {
         path: 'admin',
         element: <AdminGuard />,

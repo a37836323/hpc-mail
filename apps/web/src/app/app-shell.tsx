@@ -14,6 +14,7 @@ import {
   Settings,
   Star,
   Ticket,
+  User,
   Users,
   type LucideIcon,
 } from 'lucide-react';
@@ -28,6 +29,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Avatar } from '@/components/ui/avatar';
 import { IconButton } from '@/components/ui/icon-button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { useUnreadCount } from '@/features/inbox/use-unread-count';
@@ -197,19 +199,24 @@ function UserMenu() {
             type="button"
             className="flex items-center gap-2 rounded-md py-1 pl-1 pr-2 text-sm text-ink transition-colors hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
           >
-            <span className="grid size-7 place-items-center rounded-full bg-accent-soft text-xs font-semibold uppercase text-accent">
-              {user.username.slice(0, 2)}
-            </span>
+            <Avatar avatarUrl={user.avatarUrl} name={user.username} className="size-7 text-xs" />
             <span className="hidden max-w-32 truncate font-medium sm:inline">{user.username}</span>
             <ChevronDown className="size-4 text-ink-tertiary" />
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent>
-          <div className="px-2.5 py-1.5">
-            <p className="truncate text-sm font-medium text-ink">{user.username}</p>
-            <p className="text-xs text-ink-tertiary">{user.role === 'admin' ? '管理员' : '普通用户'}</p>
+          <div className="flex items-center gap-2.5 px-2.5 py-1.5">
+            <Avatar avatarUrl={user.avatarUrl} name={user.username} className="size-8 text-xs" />
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium text-ink">{user.username}</p>
+              <p className="text-xs text-ink-tertiary">{user.role === 'admin' ? '管理员' : '普通用户'}</p>
+            </div>
           </div>
           <DropdownMenuSeparator />
+          <DropdownMenuItem onSelect={() => navigate('/profile')}>
+            <User className="size-4 text-ink-tertiary" />
+            个人设置
+          </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => setPasswordOpen(true)}>
             <Lock className="size-4 text-ink-tertiary" />
             修改密码
@@ -243,6 +250,21 @@ export function AppShell() {
         </div>
         <div className="flex-1 overflow-y-auto">
           <NavSections isAdmin={isAdmin} full={false} unreadCount={unreadCount} />
+        </div>
+        <div className="border-t border-line p-2">
+          <NavLink
+            to="/profile"
+            className={({ isActive }) =>
+              cn(
+                'flex h-10 items-center gap-3 rounded-full px-3 text-sm font-medium transition-colors',
+                'justify-center lg:justify-start',
+                isActive ? 'bg-accent-soft text-accent' : 'text-ink-secondary hover:bg-surface-hover hover:text-ink',
+              )
+            }
+          >
+            <Avatar avatarUrl={user.avatarUrl} name={user.username} className="size-7 text-xs" />
+            <span className="hidden truncate lg:inline">{user.username}</span>
+          </NavLink>
         </div>
       </aside>
 

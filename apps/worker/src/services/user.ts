@@ -5,6 +5,7 @@ import { mailboxes, users } from '../db/schema.js';
 import { AppError } from '../lib/errors.js';
 import { hashPassword } from '../lib/password.js';
 import type { Env } from '../types.js';
+import { avatarUrl } from './avatar.js';
 import { bumpUserEpoch } from './session.js';
 
 type UserRow = typeof users.$inferSelect;
@@ -20,6 +21,7 @@ function serialize(row: UserRow, mailboxCount: number): AdminUser {
     mailboxCount,
     createdAt: row.createdAt.toISOString(),
     lastLoginAt: row.lastLoginAt ? row.lastLoginAt.toISOString() : null,
+    avatarUrl: avatarUrl(row.id, row.avatarKey),
   };
 }
 

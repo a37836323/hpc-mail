@@ -48,6 +48,7 @@ export const requireAuth: MiddlewareHandler<AppContext> = async (c, next) => {
     role: row.role,
     status: row.status,
     createdAt: row.createdAt,
+    avatarKey: row.avatarKey,
   };
   c.set('user', authUser);
   c.set('sessionId', claims.sid);

@@ -44,7 +44,22 @@ export interface SessionUser {
   username: string;
   role: Role;
   createdAt: string;
+  /** 头像访问 URL（带版本号防缓存）；无头像时为 null，前端回退到用户名首字母 */
+  avatarUrl: string | null;
 }
+
+/** 头像上传：base64 图片 + MIME 类型 */
+export const AVATAR_MAX_BYTES = 2 * 1024 * 1024;
+export const uploadAvatarRequestSchema = z.object({
+  contentType: z.enum(['image/png', 'image/jpeg', 'image/webp']),
+  /** base64 编码的图片内容（不含 data: 前缀） */
+  image: z
+    .string()
+    .min(1)
+    .max(Math.ceil((AVATAR_MAX_BYTES * 4) / 3) + 4, '头像图片不能超过 2MB')
+    .regex(/^[A-Za-z0-9+/]+={0,2}$/, '头像需为合法 base64'),
+});
+export type UploadAvatarRequest = z.infer<typeof uploadAvatarRequestSchema>;
 
 export interface LoginResponse {
   token: string;
@@ -79,4 +94,6 @@ export interface AdminUser {
   mailboxCount: number;
   createdAt: string;
   lastLoginAt: string | null;
+  /** 头像访问 URL（带版本号防缓存）；无头像时为 null */
+  avatarUrl: string | null;
 }
