@@ -36,7 +36,9 @@ async function loadFromDb(env: Env): Promise<Settings> {
 export async function getSettings(env: Env): Promise<Settings> {
   try {
     const cached = await env.kv.get(CACHE_KEY, { type: 'json' });
-    if (cached) return cached as Settings;
+    // 与默认值浅合并：部署切换期缓存可能是旧代码写的、缺少新增的顶层键，
+    // 直接返回会让下游 settings.X.Y 解引用 undefined 报 500。合并保证每个顶层键都在。
+    if (cached) return { ...DEFAULT_SETTINGS, ...(cached as Partial<Settings>) };
   } catch {
     // 缓存读失败，继续直读 DB
   }
