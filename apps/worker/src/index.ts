@@ -41,6 +41,17 @@ export default {
     }
     // 其余路径交给静态资源（SPA fallback 由 assets 处理）
     const res = await env.assets.fetch(request);
+    // 缺失的哈希资源不能回退成 index.html：nosniff 下会拒绝把 HTML 当 JS 加载，
+    // 且会把 HTML 错误缓存到 .js URL 上。命中 SPA fallback（HTML）时对 /assets/ 直接 404。
+    if (
+      url.pathname.startsWith('/assets/') &&
+      (res.headers.get('content-type') || '').includes('text/html')
+    ) {
+      return new Response('Not Found', {
+        status: 404,
+        headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' },
+      });
+    }
     // .md（如 /skill.md）assets 默认不带 charset，浏览器会按非 UTF-8 解析导致中文乱码，补上
     if (url.pathname.endsWith('.md')) {
       return withSecurityHeaders(res, { 'Content-Type': 'text/markdown; charset=utf-8' });

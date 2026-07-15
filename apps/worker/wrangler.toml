@@ -43,7 +43,7 @@ binding = "ai"
 binding = "assets"
 directory = "./dist"
 not_found_handling = "single-page-application"
-run_worker_first = ["/api/*", "/v1/*", "/skill.md"]
+run_worker_first = ["/api/*", "/v1/*", "/skill.md", "/assets/*"]
 
 # Secrets（wrangler secret put）：
 #   jwt_secret              JWT 签名密钥（必需）
