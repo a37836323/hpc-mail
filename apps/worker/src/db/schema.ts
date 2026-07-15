@@ -92,6 +92,20 @@ export const attachments = sqliteTable(
   (t) => [index('idx_attachments_message').on(t.messageId)],
 );
 
+/** 星标：每用户对某封邮件的标记（messages 不含 user_id，星标独立表关联） */
+export const stars = sqliteTable(
+  'stars',
+  {
+    userId: integer('user_id').notNull(),
+    messageId: integer('message_id').notNull(),
+    createdAt: createdAtColumn(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.userId, t.messageId] }),
+    index('idx_stars_message').on(t.messageId),
+  ],
+);
+
 export const settings = sqliteTable('settings', {
   key: text('key').primaryKey(),
   value: text('value').notNull(),

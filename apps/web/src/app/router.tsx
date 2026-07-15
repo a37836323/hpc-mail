@@ -11,6 +11,9 @@ const InboxPage = lazy(() => import('@/features/inbox/inbox-page').then((m) => (
 const MessagePage = lazy(() => import('@/features/message/message-page').then((m) => ({ default: m.MessagePage })));
 const ComposePage = lazy(() => import('@/features/compose/compose-page').then((m) => ({ default: m.ComposePage })));
 const SentPage = lazy(() => import('@/features/sent/sent-page').then((m) => ({ default: m.SentPage })));
+const StarredPage = lazy(() =>
+  import('@/features/starred/starred-page').then((m) => ({ default: m.StarredPage })),
+);
 const MailboxesPage = lazy(() =>
   import('@/features/mailboxes/mailboxes-page').then((m) => ({ default: m.MailboxesPage })),
 );
@@ -46,6 +49,7 @@ export const router = createBrowserRouter([
       { path: 'mail/:id', element: <MessagePage /> },
       { path: 'compose', element: <ComposePage /> },
       { path: 'sent', element: <SentPage /> },
+      { path: 'starred', element: <StarredPage /> },
       { path: 'mailboxes', element: <MailboxesPage /> },
       { path: 'api-keys', element: <ApiKeysPage /> },
       {

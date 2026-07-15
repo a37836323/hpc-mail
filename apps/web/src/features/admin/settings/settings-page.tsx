@@ -1,11 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { type ReactNode, useEffect, useState } from 'react';
-import { SECRET_MASK, type Settings } from '@hpc-mail/shared';
+import { Plus, Trash2 } from 'lucide-react';
+import { type FormEvent, type ReactNode, useEffect, useState } from 'react';
+import { SECRET_MASK, type Settings, domainSchema } from '@hpc-mail/shared';
 import { ApiError } from '@/api/errors';
 import { queryKeys } from '@/api/query-keys';
 import { adminApi } from '@/api/resources';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
+import { IconButton } from '@/components/ui/icon-button';
 import { Input } from '@/components/ui/input';
 import { PasswordInput } from '@/components/ui/password-input';
 import { SegmentedControl } from '@/components/ui/segmented-control';
@@ -54,6 +56,8 @@ export function SettingsPage() {
   const { data, isLoading } = useQuery({ queryKey: queryKeys.admin.settings, queryFn: () => adminApi.getSettings() });
   const { data: config } = usePublicConfig();
   const [draft, setDraft] = useState<Settings | null>(null);
+  const [newDomain, setNewDomain] = useState('');
+  const [domainError, setDomainError] = useState<string | null>(null);
 
   useEffect(() => {
     if (data && draft === null) setDraft(structuredClone(data));
@@ -95,7 +99,31 @@ export function SettingsPage() {
   }
 
   const dirty = JSON.stringify(draft) !== JSON.stringify(data);
-  const domains = config?.domains ?? [];
+  const domains = draft.domains.list.length > 0 ? draft.domains.list : (config?.domains ?? []);
+
+  const addDomain = (event: FormEvent) => {
+    event.preventDefault();
+    const value = newDomain.trim().toLowerCase();
+    const parsed = domainSchema.safeParse(value);
+    if (!parsed.success) {
+      setDomainError(parsed.error.issues[0]?.message ?? '域名格式非法');
+      return;
+    }
+    if (draft.domains.list.includes(parsed.data)) {
+      setDomainError('该域名已在列表中');
+      return;
+    }
+    patch((settings) => {
+      settings.domains.list.push(parsed.data);
+    });
+    setNewDomain('');
+    setDomainError(null);
+  };
+
+  const removeDomain = (index: number) =>
+    patch((settings) => {
+      settings.domains.list.splice(index, 1);
+    });
 
   return (
     <div className="mx-auto max-w-3xl pb-16">
@@ -117,6 +145,47 @@ export function SettingsPage() {
             checked={draft.api.enabled}
             onChange={(value) => patch((s) => void (s.api.enabled = value))}
           />
+        </Section>
+
+        <Section
+          title="收件域名"
+          description="新域名需先在 Cloudflare 为该域开启 Email Routing catch-all 并指向本 Worker；此处列表控制前端展示、地址认领与发件白名单。留空则使用部署配置。"
+        >
+          {draft.domains.list.length > 0 ? (
+            <ul className="flex flex-col gap-2">
+              {draft.domains.list.map((domain, index) => (
+                <li
+                  key={domain}
+                  className="flex items-center justify-between gap-3 rounded-md border border-line px-3 py-2 text-sm"
+                >
+                  <span className="font-mono text-ink">{domain}</span>
+                  <IconButton size="sm" aria-label={`删除 ${domain}`} onClick={() => removeDomain(index)}>
+                    <Trash2 className="size-4 text-critical" />
+                  </IconButton>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-ink-tertiary">当前使用部署配置的域名：{(config?.domains ?? []).join('、') || '（无）'}</p>
+          )}
+          <form onSubmit={addDomain} className="flex items-start gap-2">
+            <div className="flex-1">
+              <Input
+                placeholder="example.com"
+                value={newDomain}
+                invalid={domainError !== null}
+                onChange={(event) => {
+                  setNewDomain(event.target.value);
+                  if (domainError) setDomainError(null);
+                }}
+              />
+              {domainError && <p className="mt-1 text-xs text-critical">{domainError}</p>}
+            </div>
+            <Button type="submit" variant="secondary">
+              <Plus className="size-4" />
+              添加
+            </Button>
+          </form>
         </Section>
 
         <Section title="注册模式" description="控制新用户如何注册平台账户。">

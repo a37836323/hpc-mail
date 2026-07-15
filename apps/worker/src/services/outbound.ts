@@ -11,6 +11,7 @@ import { AppError } from '../lib/errors.js';
 import { makePreview } from '../lib/text.js';
 import type { Env, ExecCtx } from '../types.js';
 import { extractCodeByRegex } from './code-extract.js';
+import { getDomains } from './domain.js';
 import { sendFeishuNotification } from './feishu.js';
 import { getSettings } from './setting.js';
 import { attachmentKey, getExt, sha256Hex16 } from './storage.js';
@@ -35,11 +36,22 @@ interface ResolvedFrom {
   displayName: string;
 }
 
+/** 回复线程头：In-Reply-To / References */
+interface ReplyContext {
+  inReplyTo: string;
+  references: string;
+}
+
 function decodeBase64(b64: string): Uint8Array {
   return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
 }
 
-async function resolveFrom(env: Env, sender: Sender, req: SendMailRequest): Promise<ResolvedFrom> {
+async function resolveFrom(
+  env: Env,
+  sender: Sender,
+  req: SendMailRequest,
+  domains: string[],
+): Promise<ResolvedFrom> {
   const db = createDb(env);
   if (req.from.mailboxId !== undefined) {
     const box = await db
@@ -58,7 +70,7 @@ async function resolveFrom(env: Env, sender: Sender, req: SendMailRequest): Prom
 
   const domain = req.from.domain!;
   const address = `${req.from.localPart!}@${domain}`;
-  if (!env.domain.includes(domain)) {
+  if (!domains.includes(domain)) {
     throw new AppError('validation_failed', '发件域名不在系统域名列表内');
   }
   if (sender.role !== 'admin') {
@@ -107,6 +119,7 @@ async function sendViaCloudflare(
   toAddr: string,
   req: SendMailRequest,
   atts: DecodedAttachment[],
+  reply: ReplyContext | null,
 ): Promise<void> {
   // 动态 import：`cloudflare:email` 在 vitest workerd 里静态加载会崩，
   // 且集成测试不发外部邮件，延迟到真实发送时才加载
@@ -118,6 +131,10 @@ async function sendViaCloudflare(
   msg.setSender({ name: from.displayName, addr: from.address });
   msg.setRecipient(toAddr);
   msg.setSubject(req.subject);
+  if (reply) {
+    msg.setHeader('In-Reply-To', reply.inReplyTo);
+    msg.setHeader('References', reply.references);
+  }
   if (req.text) msg.addMessage({ contentType: 'text/plain', data: req.text });
   if (req.html) msg.addMessage({ contentType: 'text/html', data: req.html });
   for (const a of atts) {
@@ -133,6 +150,7 @@ async function sendViaResend(
   recipients: { to: string[]; cc: string[]; bcc: string[] },
   req: SendMailRequest,
   atts: DecodedAttachment[],
+  reply: ReplyContext | null,
 ): Promise<{ id: string }> {
   const payload: Record<string, unknown> = {
     from,
@@ -143,6 +161,9 @@ async function sendViaResend(
   if (recipients.bcc.length) payload.bcc = recipients.bcc;
   if (req.text) payload.text = req.text;
   if (req.html) payload.html = req.html;
+  if (reply) {
+    payload.headers = { 'In-Reply-To': reply.inReplyTo, References: reply.references };
+  }
   if (atts.length) {
     payload.attachments = atts.map((a) => ({
       filename: a.filename,
@@ -162,7 +183,11 @@ async function sendViaResend(
   return { id: data.id };
 }
 
-function summarize(row: typeof messages.$inferSelect, hasAttachments: boolean): MessageSummary {
+function summarize(
+  row: typeof messages.$inferSelect,
+  hasAttachments: boolean,
+  isStarred: boolean,
+): MessageSummary {
   return {
     id: row.id,
     direction: row.direction,
@@ -175,10 +200,33 @@ function summarize(row: typeof messages.$inferSelect, hasAttachments: boolean): 
     verificationCode: row.verificationCode,
     status: row.status,
     isRead: row.isRead,
+    isStarred,
     hasAttachments,
     size: row.size,
     createdAt: row.createdAt.toISOString(),
   };
+}
+
+/** 校验并构造回复线程头（回复的原邮件须对发件人可见） */
+async function resolveReply(
+  db: Db,
+  sender: Sender,
+  replyToMessageId: number | undefined,
+): Promise<{ reply: ReplyContext | null; inReplyTo: string | null }> {
+  if (!replyToMessageId) return { reply: null, inReplyTo: null };
+  const orig = await db.select().from(messages).where(eq(messages.id, replyToMessageId)).get();
+  if (!orig) return { reply: null, inReplyTo: null };
+  if (sender.role !== 'admin') {
+    const owned = await db
+      .select({ id: mailboxes.id })
+      .from(mailboxes)
+      .where(and(eq(mailboxes.address, orig.address), eq(mailboxes.userId, sender.userId)))
+      .get();
+    if (!owned) throw new AppError('forbidden', '无权回复该邮件');
+  }
+  if (!orig.messageId) return { reply: null, inReplyTo: null };
+  const references = [orig.inReplyTo, orig.messageId].filter(Boolean).join(' ');
+  return { reply: { inReplyTo: orig.messageId, references }, inReplyTo: orig.messageId };
 }
 
 /** 发件链路：身份校验 → 站外 Resend / 站内落库 → outbound 行落库 */
@@ -191,7 +239,8 @@ export async function sendMail(
   assertNoHeaderInjection(req.subject);
   const settings = await getSettings(env);
   const db = createDb(env);
-  const from = await resolveFrom(env, sender, req);
+  const domains = await getDomains(env, settings);
+  const from = await resolveFrom(env, sender, req, domains);
 
   const decoded: DecodedAttachment[] = req.attachments.map((a) => ({
     filename: a.filename,
@@ -203,10 +252,12 @@ export async function sendMail(
   }));
 
   const allRecipients = [...req.to, ...req.cc, ...req.bcc].map(normalizeEmail);
-  const isInternal = (addr: string) => env.domain.includes(getEmailDomain(addr));
+  const isInternal = (addr: string) => domains.includes(getEmailDomain(addr));
   const externalTargets = [...new Set(allRecipients.filter((a) => !isInternal(a)))];
   const internalTargets = [...new Set(allRecipients.filter(isInternal))];
   const hasExternal = externalTargets.length > 0;
+
+  const { reply, inReplyTo } = await resolveReply(db, sender, req.replyToMessageId);
 
   const text = req.text ?? '';
   const html = req.html ?? '';
@@ -225,7 +276,7 @@ export async function sendMail(
     const failures: string[] = [];
     for (const addr of externalTargets) {
       try {
-        await sendViaCloudflare(env, from, addr, req, decoded);
+        await sendViaCloudflare(env, from, addr, req, decoded, reply);
         channelsUsed.add('cloudflare');
       } catch (cfErr) {
         const cfMsg = cfErr instanceof Error ? cfErr.message : String(cfErr);
@@ -237,6 +288,7 @@ export async function sendMail(
               { to: [addr], cc: [], bcc: [] },
               req,
               decoded,
+              reply,
             );
             resendId = result.id;
             channelsUsed.add('resend');
@@ -273,6 +325,7 @@ export async function sendMail(
       bodyText: text,
       bodyHtml: html,
       verificationCode: code,
+      inReplyTo,
       status,
       sendChannel,
       resendId,
@@ -306,6 +359,7 @@ export async function sendMail(
         bodyText: text,
         bodyHtml: html,
         verificationCode: code,
+        inReplyTo,
         status: 'received',
         sendChannel: 'internal',
         isRead: false,
@@ -340,5 +394,5 @@ export async function sendMail(
     );
   }
 
-  return summarize(outbound!, decoded.length > 0);
+  return summarize(outbound!, decoded.length > 0, false);
 }

@@ -4,6 +4,7 @@ import { type FormEvent, useState } from 'react';
 import {
   API_SCOPES,
   type ApiScope,
+  type CreateApiKeyRequest,
   type CreatedApiKey,
   DEFAULT_API_RATE_LIMIT,
   createApiKeyRequestSchema,
@@ -32,12 +33,14 @@ export function CreateApiKeyDialog({ open, onOpenChange }: { open: boolean; onOp
   const [name, setName] = useState('');
   const [scopes, setScopes] = useState<ApiScope[]>([]);
   const [rateLimit, setRateLimit] = useState(DEFAULT_API_RATE_LIMIT);
+  const [allowedIpsText, setAllowedIpsText] = useState('');
+  const [expiresAt, setExpiresAt] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState<CreatedApiKey | null>(null);
   const [confirmClose, setConfirmClose] = useState(false);
 
   const create = useMutation({
-    mutationFn: () => apiKeyApi.create({ name, scopes, rateLimit, allowedIps: [] }),
+    mutationFn: (payload: CreateApiKeyRequest) => apiKeyApi.create(payload),
     onSuccess: (data) => {
       setCreated(data);
       void queryClient.invalidateQueries({ queryKey: queryKeys.apiKeys.root });
@@ -49,6 +52,8 @@ export function CreateApiKeyDialog({ open, onOpenChange }: { open: boolean; onOp
     setName('');
     setScopes([]);
     setRateLimit(DEFAULT_API_RATE_LIMIT);
+    setAllowedIpsText('');
+    setExpiresAt('');
     setError(null);
     setCreated(null);
     setConfirmClose(false);
@@ -67,12 +72,19 @@ export function CreateApiKeyDialog({ open, onOpenChange }: { open: boolean; onOp
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
     setError(null);
-    const parsed = createApiKeyRequestSchema.safeParse({ name, scopes, rateLimit, allowedIps: [] });
+    const allowedIps = allowedIpsText.split(/[\s,]+/).map((item) => item.trim()).filter(Boolean);
+    const parsed = createApiKeyRequestSchema.safeParse({
+      name,
+      scopes,
+      rateLimit,
+      allowedIps,
+      expiresAt: expiresAt ? new Date(expiresAt).toISOString() : undefined,
+    });
     if (!parsed.success) {
       setError(parsed.error.issues[0]?.message ?? '请检查输入');
       return;
     }
-    create.mutate();
+    create.mutate(parsed.data);
   };
 
   return (
@@ -135,6 +147,26 @@ export function CreateApiKeyDialog({ open, onOpenChange }: { open: boolean; onOp
                         max={10000}
                         value={rateLimit}
                         onChange={(event) => setRateLimit(Number(event.target.value))}
+                      />
+                    )}
+                  </FormField>
+                  <FormField label="IP 白名单" description="逗号或换行分隔的 IP / CIDR，留空则不限制">
+                    {(field) => (
+                      <Input
+                        {...field}
+                        placeholder="203.0.113.5, 10.0.0.0/24"
+                        value={allowedIpsText}
+                        onChange={(event) => setAllowedIpsText(event.target.value)}
+                      />
+                    )}
+                  </FormField>
+                  <FormField label="过期时间" description="留空则永不过期">
+                    {(field) => (
+                      <Input
+                        {...field}
+                        type="datetime-local"
+                        value={expiresAt}
+                        onChange={(event) => setExpiresAt(event.target.value)}
                       />
                     )}
                   </FormField>

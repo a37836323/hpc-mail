@@ -7,7 +7,6 @@ export function SentPage() {
       <PageHeader title="已发送" description="你通过认领地址发出的邮件。" />
       <MailList
         query={{ direction: 'outbound', scope: 'mine' }}
-        variant="sent"
         emptyTitle="还没有发送记录"
         emptyDescription="在写邮件页发送后，记录会显示在这里。"
       />

@@ -4,6 +4,7 @@ import { createDb } from '../db/client.js';
 import { mailboxes, users } from '../db/schema.js';
 import { AppError } from '../lib/errors.js';
 import type { Env } from '../types.js';
+import { getDomains } from './domain.js';
 
 type MailboxRow = typeof mailboxes.$inferSelect;
 
@@ -51,7 +52,8 @@ export async function claimMailbox(
   userId: number,
   req: ClaimMailboxRequest,
 ): Promise<Mailbox> {
-  if (!env.domain.includes(req.domain)) {
+  const domains = await getDomains(env);
+  if (!domains.includes(req.domain)) {
     throw new AppError('validation_failed', '域名不在系统域名列表内');
   }
   const address = `${req.localPart}@${req.domain}`;
@@ -107,7 +109,8 @@ export async function checkAvailability(
   domain: string,
 ): Promise<MailboxAvailability> {
   const address = `${localPart}@${domain}`;
-  if (!env.domain.includes(domain)) return { address, available: false };
+  const domains = await getDomains(env);
+  if (!domains.includes(domain)) return { address, available: false };
   const db = createDb(env);
   const existing = await db.select().from(mailboxes).where(eq(mailboxes.address, address)).get();
   return { address, available: !existing };

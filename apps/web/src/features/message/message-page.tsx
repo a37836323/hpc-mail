@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Download, MailOpen, Paperclip, Trash2 } from 'lucide-react';
+import { ArrowLeft, Download, Forward, ImageOff, MailOpen, Paperclip, Reply, Star, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import type { MessageDetail } from '@hpc-mail/shared';
@@ -11,6 +11,10 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { IconButton } from '@/components/ui/icon-button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from '@/components/ui/toast';
+import { buildForward, buildReply } from '@/features/compose/compose-init';
+import { useStarMutation } from '@/features/inbox/use-star';
+import { cn } from '@/lib/cn';
+import { countRemoteImages } from './count-remote-images';
 import { EmailHtml } from '@/lib/email-html';
 import { formatBytes, formatDateTime } from '@/lib/format';
 import { extractOtp } from '@/lib/otp';
@@ -22,6 +26,7 @@ export function MessagePage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [showRemoteImages, setShowRemoteImages] = useState(false);
   const markedRef = useRef(false);
 
   const { data: message, isLoading, isError } = useQuery({
@@ -29,6 +34,8 @@ export function MessagePage() {
     queryFn: () => messageApi.detail(messageId),
     enabled: Number.isFinite(messageId),
   });
+
+  const star = useStarMutation();
 
   const markRead = useMutation({
     mutationFn: (isRead: boolean) => messageApi.markRead([messageId], isRead),
@@ -93,6 +100,7 @@ export function MessagePage() {
 
   const otpCode = message.verificationCode || extractOtp(message.subject, message.bodyText)?.code;
   const recipients = [...message.recipients.to, ...message.recipients.cc];
+  const remoteImageCount = message.bodyHtml ? countRemoteImages(message.bodyHtml) : 0;
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -100,11 +108,25 @@ export function MessagePage() {
         <IconButton aria-label="返回" onClick={() => navigate(-1)}>
           <ArrowLeft className="size-5" />
         </IconButton>
-        <div className="ml-auto flex items-center gap-2">
-          <Button variant="ghost" size="sm" onClick={handleMarkUnread}>
-            <MailOpen className="size-4" />
-            标为未读
+        <div className="ml-auto flex items-center gap-1.5">
+          <Button variant="secondary" size="sm" onClick={() => navigate('/compose', { state: buildReply(message) })}>
+            <Reply className="size-4" />
+            回复
           </Button>
+          <Button variant="ghost" size="sm" onClick={() => navigate('/compose', { state: buildForward(message) })}>
+            <Forward className="size-4" />
+            转发
+          </Button>
+          <IconButton
+            aria-label={message.isStarred ? '取消星标' : '加星标'}
+            aria-pressed={message.isStarred}
+            onClick={() => star.mutate({ id: message.id, starred: !message.isStarred })}
+          >
+            <Star className={cn('size-4', message.isStarred ? 'fill-caution text-caution' : 'text-ink-tertiary')} />
+          </IconButton>
+          <IconButton aria-label="标为未读" onClick={handleMarkUnread}>
+            <MailOpen className="size-4" />
+          </IconButton>
           <IconButton aria-label="删除邮件" onClick={() => setConfirmDelete(true)}>
             <Trash2 className="size-4 text-critical" />
           </IconButton>
@@ -131,8 +153,24 @@ export function MessagePage() {
         <div className="flex flex-col gap-4 px-5 py-5">
           {otpCode && <OtpBanner code={otpCode} />}
 
+          {remoteImageCount > 0 && !showRemoteImages && (
+            <div className="flex items-center justify-between gap-3 rounded-md border border-line bg-canvas px-3 py-2 text-sm">
+              <span className="flex items-center gap-2 text-ink-secondary">
+                <ImageOff className="size-4 shrink-0 text-ink-tertiary" />
+                已阻止 {remoteImageCount} 张远程图片以保护隐私
+              </span>
+              <Button variant="secondary" size="sm" onClick={() => setShowRemoteImages(true)}>
+                显示图片
+              </Button>
+            </div>
+          )}
+
           {message.bodyHtml ? (
-            <EmailHtml html={message.bodyHtml} trustedImageOrigins={[globalThis.location.origin]} />
+            <EmailHtml
+              html={message.bodyHtml}
+              allowRemoteImages={showRemoteImages}
+              trustedImageOrigins={[globalThis.location.origin]}
+            />
           ) : (
             <pre className="whitespace-pre-wrap break-words font-sans text-sm leading-relaxed text-ink">
               {message.bodyText || '（无正文）'}

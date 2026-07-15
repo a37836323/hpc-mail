@@ -3,6 +3,7 @@ import {
   listMessagesQuerySchema,
   markReadRequestSchema,
   sendMailRequestSchema,
+  starMessagesRequestSchema,
 } from '@hpc-mail/shared';
 import { Hono, type Context } from 'hono';
 import { ok, parseBody, parseId, parseQuery } from '../lib/http.js';
@@ -12,6 +13,7 @@ import {
   getMessageDetail,
   listMessages,
   markMessages,
+  starMessages,
   type Viewer,
 } from '../services/message.js';
 import { sendMail } from '../services/outbound.js';
@@ -50,6 +52,12 @@ app.post('/delete', async (c) => {
   const req = await parseBody(c, deleteMessagesRequestSchema);
   const deleted = await deleteMessages(c.env, viewerOf(c), req.ids);
   return ok(c, { deleted });
+});
+
+app.post('/star', async (c) => {
+  const req = await parseBody(c, starMessagesRequestSchema);
+  const changed = await starMessages(c.env, viewerOf(c), req.ids, req.starred);
+  return ok(c, { changed });
 });
 
 app.get('/:id', async (c) => {

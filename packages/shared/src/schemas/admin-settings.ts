@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { REGISTRATION_MODES } from '../constants.js';
 import { emailAddressSchema } from './mail.js';
+import { domainSchema } from './mailbox.js';
 
 /** 掩码占位：设置回显时密文一律显示为该值；提交时值等于它则不更新 */
 export const SECRET_MASK = '******';
@@ -39,6 +40,11 @@ export const apiSettingSchema = z.object({
   enabled: z.boolean(),
 });
 
+/** 收件域名列表：空数组表示回退到部署配置（env.domain） */
+export const domainsSettingSchema = z.object({
+  list: z.array(domainSchema).max(64),
+});
+
 export const SETTING_SCHEMAS = {
   register_mode: registerModeSchema,
   gmail_forward: gmailForwardSettingSchema,
@@ -47,6 +53,7 @@ export const SETTING_SCHEMAS = {
   resend: resendSettingSchema,
   site: siteSettingSchema,
   api: apiSettingSchema,
+  domains: domainsSettingSchema,
 } as const;
 export type SettingKey = keyof typeof SETTING_SCHEMAS;
 
@@ -62,6 +69,7 @@ export const DEFAULT_SETTINGS: Settings = {
   resend: { tokens: {} },
   site: { title: 'HPC Mail' },
   api: { enabled: true },
+  domains: { list: [] },
 };
 
 export const updateSettingsRequestSchema = z
@@ -73,6 +81,7 @@ export const updateSettingsRequestSchema = z
     resend: resendSettingSchema.optional(),
     site: siteSettingSchema.optional(),
     api: apiSettingSchema.optional(),
+    domains: domainsSettingSchema.optional(),
   })
   .refine((v) => Object.values(v).some((x) => x !== undefined), {
     message: '至少提供一个待更新配置',

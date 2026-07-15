@@ -8,7 +8,7 @@ import type {
 } from '@hpc-mail/shared';
 import { and, desc, eq, inArray, like, lt, or, type SQL } from 'drizzle-orm';
 import { createDb, type Db } from '../db/client.js';
-import { attachments as attachmentsTable, messages } from '../db/schema.js';
+import { attachments as attachmentsTable, messages, stars } from '../db/schema.js';
 import { signAttachment } from '../lib/crypto.js';
 import { AppError } from '../lib/errors.js';
 import { decodeCursor, encodeCursor } from '../lib/pagination.js';
@@ -36,7 +36,7 @@ function scopeCondition(scope: 'all' | string[]): SQL | undefined {
   return inArray(messages.address, scope);
 }
 
-function summarize(row: MessageRow, hasAttachments: boolean): MessageSummary {
+function summarize(row: MessageRow, hasAttachments: boolean, isStarred: boolean): MessageSummary {
   return {
     id: row.id,
     direction: row.direction,
@@ -49,6 +49,7 @@ function summarize(row: MessageRow, hasAttachments: boolean): MessageSummary {
     verificationCode: row.verificationCode,
     status: row.status,
     isRead: row.isRead,
+    isStarred,
     hasAttachments,
     size: row.size,
     createdAt: row.createdAt.toISOString(),
@@ -61,6 +62,17 @@ async function attachmentFlags(db: Db, ids: number[]): Promise<Set<number>> {
     .select({ messageId: attachmentsTable.messageId })
     .from(attachmentsTable)
     .where(inArray(attachmentsTable.messageId, ids))
+    .all();
+  return new Set(rows.map((r) => r.messageId));
+}
+
+/** 当前用户对给定邮件集合的星标标记 */
+async function starFlags(db: Db, userId: number, ids: number[]): Promise<Set<number>> {
+  if (ids.length === 0) return new Set();
+  const rows = await db
+    .select({ messageId: stars.messageId })
+    .from(stars)
+    .where(and(eq(stars.userId, userId), inArray(stars.messageId, ids)))
     .all();
   return new Set(rows.map((r) => r.messageId));
 }
@@ -78,9 +90,23 @@ export async function listMessages(
   if (query.domain) conds.push(eq(messages.domain, query.domain));
   if (query.address) conds.push(eq(messages.address, query.address));
   if (query.unread) conds.push(eq(messages.isRead, false));
+  if (query.starred) {
+    conds.push(
+      inArray(
+        messages.id,
+        db.select({ id: stars.messageId }).from(stars).where(eq(stars.userId, viewer.userId)),
+      ),
+    );
+  }
   if (query.q) {
     const term = `%${query.q}%`;
-    conds.push(or(like(messages.subject, term), like(messages.fromAddress, term)));
+    conds.push(
+      or(
+        like(messages.subject, term),
+        like(messages.fromAddress, term),
+        like(messages.bodyText, term),
+      ),
+    );
   }
   const cursorId = decodeCursor(query.cursor);
   if (cursorId) conds.push(lt(messages.id, cursorId));
@@ -96,13 +122,14 @@ export async function listMessages(
 
   const hasMore = rows.length > query.limit;
   const page = hasMore ? rows.slice(0, query.limit) : rows;
-  const attSet = await attachmentFlags(
-    db,
-    page.map((r) => r.id),
-  );
+  const ids = page.map((r) => r.id);
+  const [attSet, starSet] = await Promise.all([
+    attachmentFlags(db, ids),
+    starFlags(db, viewer.userId, ids),
+  ]);
 
   return {
-    items: page.map((r) => summarize(r, attSet.has(r.id))),
+    items: page.map((r) => summarize(r, attSet.has(r.id), starSet.has(r.id))),
     nextCursor: hasMore ? encodeCursor(page[page.length - 1]!.id) : null,
   };
 }
@@ -149,11 +176,10 @@ export async function getMessageDetail(
     }
   }
 
-  const attRows = await db
-    .select()
-    .from(attachmentsTable)
-    .where(eq(attachmentsTable.messageId, id))
-    .all();
+  const [attRows, starSet] = await Promise.all([
+    db.select().from(attachmentsTable).where(eq(attachmentsTable.messageId, id)).all(),
+    starFlags(db, viewer.userId, [id]),
+  ]);
 
   const attachmentMetas = await Promise.all(
     attRows.map(async (a) => {
@@ -176,7 +202,7 @@ export async function getMessageDetail(
   );
 
   return {
-    ...summarize(row, attRows.length > 0),
+    ...summarize(row, attRows.length > 0, starSet.has(id)),
     recipients: row.recipients as MessageRecipients,
     bodyText,
     bodyHtml,
@@ -225,6 +251,36 @@ export async function markMessages(
   return result.meta.changes ?? 0;
 }
 
+/** 批量星标/取消（每用户独立；限可见范围） */
+export async function starMessages(
+  env: Env,
+  viewer: Viewer,
+  ids: number[],
+  starred: boolean,
+): Promise<number> {
+  const db = createDb(env);
+  const scope = await resolveScope(env, viewer);
+  const cond =
+    scope === 'all'
+      ? inArray(messages.id, ids)
+      : and(inArray(messages.id, ids), scopeCondition(scope));
+  const visible = await db.select({ id: messages.id }).from(messages).where(cond).all();
+  const visibleIds = visible.map((v) => v.id);
+  if (visibleIds.length === 0) return 0;
+
+  if (starred) {
+    await db
+      .insert(stars)
+      .values(visibleIds.map((id) => ({ userId: viewer.userId, messageId: id })))
+      .onConflictDoNothing();
+  } else {
+    await db
+      .delete(stars)
+      .where(and(eq(stars.userId, viewer.userId), inArray(stars.messageId, visibleIds)));
+  }
+  return visibleIds.length;
+}
+
 /** 批量删除（可见范围内）：D1 行删 + R2 清理 */
 export async function deleteMessages(env: Env, viewer: Viewer, ids: number[]): Promise<number> {
   const db = createDb(env);
@@ -241,6 +297,7 @@ export async function deleteMessages(env: Env, viewer: Viewer, ids: number[]): P
   if (targets.length === 0) return 0;
   const targetIds = targets.map((t) => t.id);
   await db.delete(attachmentsTable).where(inArray(attachmentsTable.messageId, targetIds));
+  await db.delete(stars).where(inArray(stars.messageId, targetIds));
   await db.delete(messages).where(inArray(messages.id, targetIds));
   for (const t of targets) {
     await deleteMessageObjects(env, t.id, t.bodyR2Key);

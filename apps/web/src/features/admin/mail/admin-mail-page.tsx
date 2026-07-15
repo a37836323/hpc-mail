@@ -49,7 +49,6 @@ export function AdminMailPage() {
         />
         <MailList
           query={query}
-          variant="inbox"
           hasActiveFilters={hasActiveFilters}
           onClearFilters={reset}
           emptyTitle="暂无邮件"

@@ -1,11 +1,14 @@
 import { SECRET_MASK } from '@hpc-mail/shared';
 import { env } from 'cloudflare:test';
+import { and, eq } from 'drizzle-orm';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createDb } from '../src/db/client.js';
 import { messages, users } from '../src/db/schema.js';
 import { AppError } from '../src/lib/errors.js';
+import { getDomains } from '../src/services/domain.js';
 import { claimMailbox } from '../src/services/mailbox.js';
-import { listMessages } from '../src/services/message.js';
+import { listMessages, starMessages } from '../src/services/message.js';
+import { sendMail } from '../src/services/outbound.js';
 import { getSettings, maskSettings, updateSettings } from '../src/services/setting.js';
 
 async function seedUser(username: string, role: 'admin' | 'user'): Promise<number> {
@@ -17,18 +20,23 @@ async function seedUser(username: string, role: 'admin' | 'user'): Promise<numbe
   return row!.id;
 }
 
-async function seedInbound(address: string, subject: string): Promise<void> {
+async function seedInbound(address: string, subject: string, bodyText = ''): Promise<number> {
   const db = createDb(env);
-  await db.insert(messages).values({
-    direction: 'inbound',
-    address,
-    domain: address.split('@')[1]!,
-    fromAddress: 'sender@example.com',
-    fromName: 'Sender',
-    subject,
-    status: 'received',
-    createdAt: new Date(),
-  });
+  const [row] = await db
+    .insert(messages)
+    .values({
+      direction: 'inbound',
+      address,
+      domain: address.split('@')[1]!,
+      fromAddress: 'sender@example.com',
+      fromName: 'Sender',
+      subject,
+      bodyText,
+      status: 'received',
+      createdAt: new Date(),
+    })
+    .returning({ id: messages.id });
+  return row!.id;
 }
 
 describe('settings 脱敏与掩码写入', () => {
@@ -109,5 +117,124 @@ describe('message 可见性 user vs admin', () => {
       { limit: 30 } as never,
     );
     expect(mine.items).toHaveLength(0);
+  });
+});
+
+describe('星标与正文搜索', () => {
+  it('星标为每用户独立，starred 过滤与 isStarred 标记生效', async () => {
+    const admin = await seedUser('star-admin', 'admin');
+    const other = await seedUser('star-other', 'admin');
+    const mid = await seedInbound('star@hpc.email', 'hello star');
+
+    await starMessages(env, { userId: admin, role: 'admin' }, [mid], true);
+
+    const adminList = await listMessages(env, { userId: admin, role: 'admin' }, { limit: 30 } as never);
+    const starredForAdmin = adminList.items.find((m) => m.id === mid);
+    expect(starredForAdmin?.isStarred).toBe(true);
+
+    // 另一个用户看到的同一封邮件未被星标
+    const otherList = await listMessages(env, { userId: other, role: 'admin' }, { limit: 30 } as never);
+    expect(otherList.items.find((m) => m.id === mid)?.isStarred).toBe(false);
+
+    // starred=true 过滤只返回星标邮件
+    const onlyStarred = await listMessages(
+      env,
+      { userId: admin, role: 'admin' },
+      { limit: 30, starred: true } as never,
+    );
+    expect(onlyStarred.items.every((m) => m.isStarred)).toBe(true);
+    expect(onlyStarred.items.some((m) => m.id === mid)).toBe(true);
+
+    // 取消星标
+    await starMessages(env, { userId: admin, role: 'admin' }, [mid], false);
+    const afterUnstar = await listMessages(
+      env,
+      { userId: admin, role: 'admin' },
+      { limit: 30, starred: true } as never,
+    );
+    expect(afterUnstar.items.some((m) => m.id === mid)).toBe(false);
+  });
+
+  it('q 搜索命中正文 bodyText', async () => {
+    const admin = await seedUser('search-admin', 'admin');
+    await seedInbound('s1@hpc.email', '普通主题', '这里有一个 UNIQUETOKEN9 在正文里');
+    await seedInbound('s2@hpc.email', '另一封', '无关内容');
+
+    const hit = await listMessages(
+      env,
+      { userId: admin, role: 'admin' },
+      { limit: 30, q: 'UNIQUETOKEN9' } as never,
+    );
+    expect(hit.items).toHaveLength(1);
+    expect(hit.items[0]!.address).toBe('s1@hpc.email');
+  });
+});
+
+describe('动态域名 getDomains', () => {
+  it('无 domains 设置时 fallback 到 env.domain', async () => {
+    const domains = await getDomains(env);
+    expect(domains).toEqual(env.domain);
+    expect(domains).toContain('hpc.email');
+  });
+
+  it('settings.domains.list 非空时覆盖 env.domain，可认领新域名、拒绝表外域名', async () => {
+    await updateSettings(env, { domains: { list: ['custom-domain.io', 'hpc.email'] } });
+    expect(await getDomains(env)).toEqual(['custom-domain.io', 'hpc.email']);
+
+    const uid = await seedUser('dom-user', 'user');
+    const box = await claimMailbox(env, uid, { localPart: 'hi', domain: 'custom-domain.io' });
+    expect(box.address).toBe('hi@custom-domain.io');
+
+    // 覆盖后，原本在 env.domain 但不在 list 的域名被拒
+    await expect(
+      claimMailbox(env, uid, { localPart: 'x', domain: 'riba2534.cn' }),
+    ).rejects.toMatchObject({ code: 'validation_failed' });
+  });
+});
+
+describe('回复头 replyToMessageId', () => {
+  it('站内回复时 outbound 与 inbound 行写入原邮件 message_id 到 in_reply_to', async () => {
+    const db = createDb(env);
+    const uid = await seedUser('reply-user', 'user');
+    await claimMailbox(env, uid, { localPart: 'me', domain: 'hpc.email' });
+    const [orig] = await db
+      .insert(messages)
+      .values({
+        direction: 'inbound',
+        address: 'me@hpc.email',
+        domain: 'hpc.email',
+        fromAddress: 'ext@example.com',
+        subject: 'Original',
+        messageId: '<orig-abc@example.com>',
+        status: 'received',
+        createdAt: new Date(),
+      })
+      .returning({ id: messages.id });
+
+    const ctx = { waitUntil: () => {} };
+    await sendMail(env, ctx, { userId: uid, role: 'user' }, {
+      from: { localPart: 'me', domain: 'hpc.email' },
+      to: ['friend@hpc.email'],
+      cc: [],
+      bcc: [],
+      subject: 'Re: Original',
+      text: '回复内容',
+      attachments: [],
+      replyToMessageId: orig!.id,
+    } as never);
+
+    const outbound = await db
+      .select()
+      .from(messages)
+      .where(and(eq(messages.direction, 'outbound'), eq(messages.address, 'me@hpc.email')))
+      .get();
+    expect(outbound?.inReplyTo).toBe('<orig-abc@example.com>');
+
+    const internal = await db
+      .select()
+      .from(messages)
+      .where(and(eq(messages.direction, 'inbound'), eq(messages.address, 'friend@hpc.email')))
+      .get();
+    expect(internal?.inReplyTo).toBe('<orig-abc@example.com>');
   });
 });

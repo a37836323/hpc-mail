@@ -6,12 +6,13 @@ import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Spinner } from '@/components/ui/spinner';
+import type { MessageSummary } from '@hpc-mail/shared';
 import { MessageRow } from './message-row';
 import { useMessagesQuery } from './use-messages';
+import { useStarMutation } from './use-star';
 
 export interface MailListProps {
   query: Partial<ListMessagesQuery>;
-  variant: 'inbox' | 'sent';
   hasActiveFilters?: boolean;
   onClearFilters?: () => void;
   emptyTitle: string;
@@ -36,7 +37,6 @@ function ListSkeleton() {
 
 export function MailList({
   query,
-  variant,
   hasActiveFilters = false,
   onClearFilters,
   emptyTitle,
@@ -45,6 +45,10 @@ export function MailList({
   const { data, isLoading, isError, error, fetchNextPage, hasNextPage, isFetchingNextPage, refetch } =
     useMessagesQuery(query);
   const items = data?.pages.flatMap((page) => page.items) ?? [];
+
+  const star = useStarMutation();
+  const handleToggleStar = (message: MessageSummary) =>
+    star.mutate({ id: message.id, starred: !message.isStarred });
 
   const listRef = useRef<HTMLDivElement>(null);
   const [scrollMargin, setScrollMargin] = useState(0);
@@ -135,7 +139,7 @@ export function MailList({
               className="absolute inset-x-0 top-0"
               style={{ transform: `translateY(${virtualItem.start - scrollMargin}px)` }}
             >
-              <MessageRow message={message} variant={variant} />
+              <MessageRow message={message} onToggleStar={handleToggleStar} />
             </div>
           );
         })}

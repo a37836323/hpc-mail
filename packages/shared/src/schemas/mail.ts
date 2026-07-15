@@ -26,6 +26,11 @@ export const listMessagesQuerySchema = z.object({
     .union([z.literal('1'), z.literal('true'), z.literal('0'), z.literal('false')])
     .transform((v) => v === '1' || v === 'true')
     .optional(),
+  starred: z
+    .union([z.literal('1'), z.literal('true'), z.literal('0'), z.literal('false')])
+    .transform((v) => v === '1' || v === 'true')
+    .optional(),
+  /** 搜索主题 / 发件人 / 正文 */
   q: z.string().trim().max(256).optional(),
   /** admin 专用：'mine' 只看自己认领地址（默认全站） */
   scope: z.enum(['mine', 'all']).optional(),
@@ -68,6 +73,8 @@ export const sendMailRequestSchema = z
     text: z.string().max(MAX_BODY_BYTES).optional(),
     html: z.string().max(MAX_BODY_BYTES).optional(),
     attachments: z.array(sendAttachmentSchema).max(MAX_ATTACHMENTS).default([]),
+    /** 回复的站内邮件 id：后端据此注入 In-Reply-To / References 头 */
+    replyToMessageId: z.number().int().positive().optional(),
   })
   .refine((v) => v.to.length + v.cc.length + v.bcc.length <= MAX_RECIPIENTS, {
     message: `收件人合计不能超过 ${MAX_RECIPIENTS} 个`,
@@ -94,6 +101,12 @@ export const deleteMessagesRequestSchema = z.object({
 });
 export type DeleteMessagesRequest = z.infer<typeof deleteMessagesRequestSchema>;
 
+export const starMessagesRequestSchema = z.object({
+  ids: z.array(z.number().int().positive()).min(1).max(500),
+  starred: z.boolean().default(true),
+});
+export type StarMessagesRequest = z.infer<typeof starMessagesRequestSchema>;
+
 export interface MessageSummary {
   id: number;
   direction: MessageDirection;
@@ -106,6 +119,7 @@ export interface MessageSummary {
   verificationCode: string;
   status: string;
   isRead: boolean;
+  isStarred: boolean;
   hasAttachments: boolean;
   size: number;
   createdAt: string;

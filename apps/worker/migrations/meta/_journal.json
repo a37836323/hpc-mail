@@ -8,6 +8,13 @@
       "when": 1784063603236,
       "tag": "0000_moaning_maelstrom",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1784084529275,
+      "tag": "0001_legal_stellaris",
+      "breakpoints": true
     }
   ]
 }

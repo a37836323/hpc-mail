@@ -1,6 +1,7 @@
 import type { PublicConfig } from '@hpc-mail/shared';
 import { Hono } from 'hono';
 import { ok } from '../lib/http.js';
+import { getDomains } from '../services/domain.js';
 import { getSettings } from '../services/setting.js';
 import type { AppContext } from '../types.js';
 
@@ -12,7 +13,7 @@ app.get('/', async (c) => {
   const config: PublicConfig = {
     siteTitle: settings.site.title,
     registrationMode: settings.register_mode,
-    domains: c.env.domain,
+    domains: await getDomains(c.env, settings),
   };
   return ok(c, config);
 });

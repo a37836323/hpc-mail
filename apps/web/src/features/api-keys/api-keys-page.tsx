@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { KeyRound, Plus, Power, Trash2 } from 'lucide-react';
+import { KeyRound, Plus, Power, ScrollText, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import type { ApiKeyStatus, ApiKeySummary } from '@hpc-mail/shared';
 import { queryKeys } from '@/api/query-keys';
@@ -16,6 +16,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { toast } from '@/components/ui/toast';
 import { formatDateTime, formatRelativeTime } from '@/lib/format';
 import { useCurrentUser } from '@/lib/use-session';
+import { AuditLogDialog } from './audit-log-dialog';
 import { CreateApiKeyDialog } from './create-api-key-dialog';
 
 const STATUS_META: Record<ApiKeyStatus, { label: string; tone: BadgeTone }> = {
@@ -31,6 +32,7 @@ export function ApiKeysPage() {
   const [view, setView] = useState<'mine' | 'all'>('mine');
   const [createOpen, setCreateOpen] = useState(false);
   const [deleting, setDeleting] = useState<ApiKeySummary | null>(null);
+  const [auditKey, setAuditKey] = useState<ApiKeySummary | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: queryKeys.apiKeys.list(view === 'all' ? 'admin' : 'mine'),
@@ -103,7 +105,7 @@ export function ApiKeysPage() {
               <TableHead>权限</TableHead>
               <TableHead>状态</TableHead>
               <TableHead>最近使用</TableHead>
-              {editable && <TableHead className="text-right">操作</TableHead>}
+              <TableHead className="text-right">操作</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -133,23 +135,30 @@ export function ApiKeysPage() {
                   <TableCell className="text-ink-tertiary" title={key.lastUsedAt ? formatDateTime(key.lastUsedAt) : ''}>
                     {key.lastUsedAt ? formatRelativeTime(key.lastUsedAt) : '从未'}
                   </TableCell>
-                  {editable && (
-                    <TableCell>
-                      <div className="flex items-center justify-end gap-1">
-                        <IconButton
-                          size="sm"
-                          aria-label={key.status === 'active' ? '停用' : '启用'}
-                          disabled={key.status === 'revoked' || toggleStatus.isPending}
-                          onClick={() => toggleStatus.mutate(key)}
-                        >
-                          <Power className="size-4" />
-                        </IconButton>
-                        <IconButton size="sm" aria-label="删除密钥" onClick={() => setDeleting(key)}>
-                          <Trash2 className="size-4 text-critical" />
-                        </IconButton>
-                      </div>
-                    </TableCell>
-                  )}
+                  <TableCell>
+                    <div className="flex items-center justify-end gap-1">
+                      {editable ? (
+                        <>
+                          <IconButton
+                            size="sm"
+                            aria-label={key.status === 'active' ? '停用' : '启用'}
+                            disabled={key.status === 'revoked' || toggleStatus.isPending}
+                            onClick={() => toggleStatus.mutate(key)}
+                          >
+                            <Power className="size-4" />
+                          </IconButton>
+                          <IconButton size="sm" aria-label="删除密钥" onClick={() => setDeleting(key)}>
+                            <Trash2 className="size-4 text-critical" />
+                          </IconButton>
+                        </>
+                      ) : (
+                        <Button variant="ghost" size="sm" onClick={() => setAuditKey(key)}>
+                          <ScrollText className="size-4" />
+                          审计日志
+                        </Button>
+                      )}
+                    </div>
+                  </TableCell>
                 </TableRow>
               );
             })}
@@ -158,6 +167,7 @@ export function ApiKeysPage() {
       )}
 
       <CreateApiKeyDialog open={createOpen} onOpenChange={setCreateOpen} />
+      <AuditLogDialog apiKey={auditKey} onClose={() => setAuditKey(null)} />
       <ConfirmDialog
         open={deleting !== null}
         onOpenChange={(next) => !next && setDeleting(null)}

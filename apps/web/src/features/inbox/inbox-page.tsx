@@ -48,7 +48,6 @@ export function InboxPage() {
         />
         <MailList
           query={query}
-          variant="inbox"
           hasActiveFilters={hasActiveFilters}
           onClearFilters={reset}
           emptyTitle="还没有邮件"

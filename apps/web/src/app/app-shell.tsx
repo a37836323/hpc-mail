@@ -11,6 +11,7 @@ import {
   PenLine,
   Send,
   Settings,
+  Star,
   Ticket,
   Users,
   type LucideIcon,
@@ -42,6 +43,7 @@ interface NavEntry {
 
 const PRIMARY_NAV: NavEntry[] = [
   { to: '/inbox', label: '收件箱', icon: Inbox },
+  { to: '/starred', label: '星标', icon: Star },
   { to: '/sent', label: '已发送', icon: Send },
   { to: '/compose', label: '写邮件', icon: PenLine },
   { to: '/mailboxes', label: '我的邮箱', icon: AtSign },
@@ -55,7 +57,12 @@ const ADMIN_NAV: NavEntry[] = [
   { to: '/admin/settings', label: '系统设置', icon: Settings },
 ];
 
-const MOBILE_NAV = PRIMARY_NAV.slice(0, 4);
+const MOBILE_NAV: NavEntry[] = [
+  { to: '/inbox', label: '收件箱', icon: Inbox },
+  { to: '/starred', label: '星标', icon: Star },
+  { to: '/compose', label: '写邮件', icon: PenLine },
+  { to: '/mailboxes', label: '邮箱', icon: AtSign },
+];
 
 function SideLink({ entry, full, onNavigate }: { entry: NavEntry; full: boolean; onNavigate?: () => void }) {
   const Icon = entry.icon;

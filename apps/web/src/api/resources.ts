@@ -1,6 +1,7 @@
 import type {
   AdminUser,
   ApiKeySummary,
+  ApiRequestLogEntry,
   ChangePasswordRequest,
   ClaimMailboxRequest,
   CreateApiKeyRequest,
@@ -63,6 +64,8 @@ export const messageApi = {
   send: (body: SendMailRequest) => api.post<MessageSummary, SendMailRequest>('/messages/send', body),
   markRead: (ids: number[], isRead: boolean) =>
     api.post<void, { ids: number[]; isRead: boolean }>('/messages/read', { ids, isRead }),
+  star: (ids: number[], starred: boolean) =>
+    api.post<void, { ids: number[]; starred: boolean }>('/messages/star', { ids, starred }),
   remove: (ids: number[]) => api.post<void, { ids: number[] }>('/messages/delete', { ids }),
 };
 
@@ -74,6 +77,9 @@ export const apiKeyApi = {
     api.put<ApiKeySummary, UpdateApiKeyRequest>(`/api-keys/${id}`, body),
   remove: (id: number) => api.delete<void>(`/api-keys/${id}`),
   listAll: () => api.get<ApiKeySummary[]>('/admin/api-keys'),
+  logs: (id: number, cursor?: string, limit = 30) =>
+    api.get<Page<ApiRequestLogEntry>>(`/admin/api-keys/${id}/logs`, { query: { cursor, limit } }),
+  revokeAdmin: (id: number) => api.delete<void>(`/admin/api-keys/${id}`),
 };
 
 // ---- 管理端 ----
