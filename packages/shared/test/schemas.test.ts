@@ -4,6 +4,7 @@ import {
   createApiKeyRequestSchema,
   createInviteRequestSchema,
   DEFAULT_SETTINGS,
+  feishuSettingSchema,
   listMessagesQuerySchema,
   loginRequestSchema,
   registerRequestSchema,
@@ -134,8 +135,8 @@ describe('settings', () => {
   it('register_mode 默认 closed', () => {
     expect(DEFAULT_SETTINGS.register_mode).toBe('closed');
   });
-  it('feishu webhook 只接受 https 或空', () => {
-    const s = SETTING_SCHEMAS.feishu;
+  it('feishu webhook 只接受 https 或空（个人偏好复用同一 schema）', () => {
+    const s = feishuSettingSchema;
     expect(s.safeParse({ enabled: true, webhookUrl: 'http://x.com/hook', secret: '' }).success).toBe(false);
     expect(s.safeParse({ enabled: false, webhookUrl: '', secret: '' }).success).toBe(true);
   });

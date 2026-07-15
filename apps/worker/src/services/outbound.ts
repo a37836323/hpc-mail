@@ -19,7 +19,11 @@ import type { Env, ExecCtx } from '../types.js';
 import { extractCodeByRegex } from './code-extract.js';
 import { getDomains } from './domain.js';
 import { sendFeishuNotification } from './feishu.js';
+import { getMailboxOwner } from './mailbox.js';
+import { getUserNotifyPrefs } from './notify-prefs.js';
 import { getSettings } from './setting.js';
+import { getActiveAdminIds } from './user.js';
+import { sendNotifyWebhook } from './webhook-notify.js';
 import { attachmentKey, getExt, sha256Hex16 } from './storage.js';
 
 export interface Sender {
@@ -438,22 +442,46 @@ export async function sendMail(
     await persistAttachments(env, db, inbound!.id, decoded);
   }
 
-  // 站内互投飞书通知（异步，逐地址 try/catch）
-  if (internalTargets.length && settings.feishu.enabled) {
+  // 站内互投通知（异步）：按每个收件地址所属用户的个人偏好推送飞书 + 通用 webhook
+  if (internalTargets.length) {
     ctx.waitUntil(
       (async () => {
-        for (const target of internalTargets) {
-          try {
-            await sendFeishuNotification(env, settings, {
-              subject: req.subject,
-              fromAddress: from.address,
-              fromName: from.displayName,
-              toAddress: target,
-              code,
-              body: text || html,
-            });
-          } catch (e) {
-            console.error('站内互投飞书通知失败:', e);
+        for (let i = 0; i < internalTargets.length; i++) {
+          const target = internalTargets[i]!;
+          const messageId = internalRows[i]!;
+          const ownerId = await getMailboxOwner(env, target);
+          const ownerIds = ownerId !== null ? [ownerId] : await getActiveAdminIds(env);
+          for (const id of ownerIds) {
+            const prefs = await getUserNotifyPrefs(env, id);
+            try {
+              await sendFeishuNotification(prefs.feishu, {
+                subject: req.subject,
+                fromAddress: from.address,
+                fromName: from.displayName,
+                toAddress: target,
+                code,
+                body: text || html,
+              });
+            } catch (e) {
+              console.error('站内互投飞书通知失败:', e);
+            }
+            try {
+              await sendNotifyWebhook(prefs.webhook, {
+                event: 'mail.received',
+                message: {
+                  id: messageId,
+                  address: target,
+                  fromAddress: from.address,
+                  fromName: from.displayName,
+                  subject: req.subject,
+                  verificationCode: code,
+                  preview,
+                  createdAt: new Date().toISOString(),
+                },
+              });
+            } catch (e) {
+              console.error('站内互投通用 webhook 失败:', e);
+            }
           }
         }
       })(),

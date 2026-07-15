@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/toast';
 import { stripDataUrlPrefix } from '@/lib/data-url';
 import { useCurrentUser } from '@/lib/use-session';
+import { ForwardingSection } from './forwarding-section';
 import { TwoFactorSection } from './two-factor-section';
 
 const ALLOWED_TYPES = ['image/png', 'image/jpeg', 'image/webp'] as const;
@@ -85,7 +86,7 @@ export function ProfilePage() {
 
   return (
     <div className="mx-auto max-w-2xl">
-      <PageHeader title="个人设置" description="管理你的头像与账户安全。" />
+      <PageHeader title="个人设置" description="管理你的头像、账户安全，以及邮件的转发与通知。" />
 
       <div className="flex flex-col gap-4">
         <section className="rounded-lg border border-line bg-surface p-5">
@@ -141,6 +142,8 @@ export function ProfilePage() {
         </section>
 
         <TwoFactorSection />
+
+        <ForwardingSection />
       </div>
 
       <ChangePasswordDialog open={passwordOpen} onOpenChange={setPasswordOpen} />

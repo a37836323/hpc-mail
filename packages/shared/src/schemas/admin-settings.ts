@@ -96,12 +96,11 @@ export const mailboxPolicySettingSchema = z.object({
   reservedLocalParts: z.array(z.string().trim().toLowerCase().max(64)).max(200),
 });
 
+// gmail_forward / feishu / notify_webhook 已从系统设置下放为「每用户的个人转发与通知偏好」
+// （见 schemas/notify-prefs.ts）；下面三个 schema 定义保留、被个人偏好复用。
 export const SETTING_SCHEMAS = {
   register_mode: registerModeSchema,
-  gmail_forward: gmailForwardSettingSchema,
-  feishu: feishuSettingSchema,
   code_extract: codeExtractSettingSchema,
-  notify_webhook: notifyWebhookSettingSchema,
   site: siteSettingSchema,
   api: apiSettingSchema,
   domains: domainsSettingSchema,
@@ -118,10 +117,7 @@ export type Settings = {
 
 export const DEFAULT_SETTINGS: Settings = {
   register_mode: 'closed',
-  gmail_forward: { enabled: false, addresses: [] },
-  feishu: { enabled: false, webhookUrl: '', secret: '', contentLevel: 'summary' },
   code_extract: { enabled: true, aiEnabled: true },
-  notify_webhook: { enabled: false, url: '', secret: '' },
   site: { title: 'HPC Mail' },
   api: { enabled: true },
   domains: { list: [] },
@@ -139,10 +135,7 @@ export const DEFAULT_SETTINGS: Settings = {
 export const updateSettingsRequestSchema = z
   .object({
     register_mode: registerModeSchema.optional(),
-    gmail_forward: gmailForwardSettingSchema.optional(),
-    feishu: feishuSettingSchema.optional(),
     code_extract: codeExtractSettingSchema.optional(),
-    notify_webhook: notifyWebhookSettingSchema.optional(),
     site: siteSettingSchema.optional(),
     api: apiSettingSchema.optional(),
     domains: domainsSettingSchema.optional(),

@@ -17,6 +17,7 @@ import type { AuthUser, Env, ExecCtx } from '../types.js';
 import { avatarUrl } from './avatar.js';
 import { sendFeishuNotification } from './feishu.js';
 import { consumeInvite } from './invite.js';
+import { getUserNotifyPrefs } from './notify-prefs.js';
 import { getInstanceEpoch, getUserEpoch, bumpUserEpoch, createSession, destroySession } from './session.js';
 import { getSettings } from './setting.js';
 
@@ -168,14 +169,13 @@ export async function login(
     .set({ lastLoginAt: new Date(), lastLoginIp: ip })
     .where(eq(users.id, user.id));
 
-  // 新 IP 登录飞书告警：与上次登录 IP 不同则异步推送（不阻塞登录）
+  // 新 IP 登录飞书告警：与上次登录 IP 不同则异步推送（走登录用户自己的个人飞书，不阻塞登录）
   if (ctx && previousIp && previousIp !== ip) {
     ctx.waitUntil(
       (async () => {
         try {
-          const settings = await getSettings(env);
-          if (!settings.feishu.enabled) return;
-          await sendFeishuNotification(env, settings, {
+          const prefs = await getUserNotifyPrefs(env, user.id);
+          await sendFeishuNotification(prefs.feishu, {
             subject: `⚠ 账号 ${user.username} 新 IP 登录`,
             fromAddress: 'system@hpc.email',
             fromName: 'HPC Mail',

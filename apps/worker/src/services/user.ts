@@ -20,6 +20,17 @@ async function assertNotLastAdmin(db: Db, targetId: number): Promise<void> {
   if (!other) throw new AppError('forbidden', '至少保留一个可用管理员，无法执行此操作');
 }
 
+/** 全部启用状态的管理员 id：未认领地址收到的邮件按这些管理员的个人偏好处理 */
+export async function getActiveAdminIds(env: Env): Promise<number[]> {
+  const db = createDb(env);
+  const rows = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(and(eq(users.role, 'admin'), eq(users.status, 'active')))
+    .all();
+  return rows.map((r) => r.id);
+}
+
 const mailboxCountSql = sql<number>`(SELECT COUNT(*) FROM mailboxes WHERE mailboxes.user_id = users.id)`;
 const apiKeyCountSql = sql<number>`(SELECT COUNT(*) FROM api_keys WHERE api_keys.user_id = users.id)`;
 

@@ -1,6 +1,5 @@
 import {
   DEFAULT_SETTINGS,
-  SECRET_MASK,
   SETTING_SCHEMAS,
   type SettingKey,
   type Settings,
@@ -63,32 +62,15 @@ export async function invalidateSettingsCache(env: Env): Promise<void> {
   }
 }
 
-/** 写设置：处理 SECRET_MASK 保留旧值，逐 key 校验后落库并失效缓存 */
+/** 写设置：逐 key 校验后落库并失效缓存 */
 export async function updateSettings(env: Env, patch: UpdateSettingsRequest): Promise<void> {
-  const current = await loadFromDb(env);
   const db = createDb(env);
   const writes: { key: string; value: string }[] = [];
 
   for (const key of Object.keys(patch) as SettingKey[]) {
     const incoming = patch[key];
     if (incoming === undefined) continue;
-    let next: unknown = incoming;
-
-    if (key === 'feishu') {
-      const incomingFeishu = incoming as Settings['feishu'];
-      next = {
-        ...incomingFeishu,
-        secret: incomingFeishu.secret === SECRET_MASK ? current.feishu.secret : incomingFeishu.secret,
-      };
-    } else if (key === 'notify_webhook') {
-      const inc = incoming as Settings['notify_webhook'];
-      next = {
-        ...inc,
-        secret: inc.secret === SECRET_MASK ? current.notify_webhook.secret : inc.secret,
-      };
-    }
-
-    const parsed = SETTING_SCHEMAS[key].safeParse(next);
+    const parsed = SETTING_SCHEMAS[key].safeParse(incoming);
     if (!parsed.success) continue;
     writes.push({ key, value: JSON.stringify(parsed.data) });
   }
@@ -102,17 +84,7 @@ export async function updateSettings(env: Env, patch: UpdateSettingsRequest): Pr
   await invalidateSettingsCache(env);
 }
 
-/** 管理端回显脱敏：feishu / notify_webhook secret 用 SECRET_MASK（保留 configured 状态） */
+/** 管理端回显：系统设置已无密文字段（飞书/webhook 密钥已下放个人偏好），原样返回 */
 export function maskSettings(settings: Settings): Settings {
-  return {
-    ...settings,
-    feishu: {
-      ...settings.feishu,
-      secret: settings.feishu.secret ? SECRET_MASK : '',
-    },
-    notify_webhook: {
-      ...settings.notify_webhook,
-      secret: settings.notify_webhook.secret ? SECRET_MASK : '',
-    },
-  };
+  return { ...settings };
 }

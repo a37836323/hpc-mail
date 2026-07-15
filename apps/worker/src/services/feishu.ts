@@ -1,7 +1,6 @@
-import type { Settings } from '@hpc-mail/shared';
+import type { FeishuConfig } from '@hpc-mail/shared';
 import { hmacSha256Base64 } from '../lib/crypto.js';
 import { AppError } from '../lib/errors.js';
-import type { Env } from '../types.js';
 
 const FEISHU_WEBHOOK_HOSTS = new Set([
   'open.feishu.cn',
@@ -190,16 +189,14 @@ async function postToFeishu(
   throw lastError instanceof Error ? lastError : new Error(String(lastError));
 }
 
-/** 发送收件卡片；throwOnError=false 时静默失败（供 waitUntil 使用） */
+/** 发送收件卡片；throwOnError=false 时静默失败（供 waitUntil 使用）。feishu 配置由调用方按 owner 提供 */
 export async function sendFeishuNotification(
-  _env: Env,
-  settings: Settings,
+  feishu: FeishuConfig,
   info: FeishuMailInfo,
   options: { test?: boolean; force?: boolean; throwOnError?: boolean } = {},
 ): Promise<boolean> {
   const { test = false, force = false, throwOnError = false } = options;
   try {
-    const feishu = settings.feishu;
     if (!force && !feishu.enabled) return false;
     if (!feishu.webhookUrl) {
       if (throwOnError) throw new AppError('validation_failed', '飞书 webhook 未配置');

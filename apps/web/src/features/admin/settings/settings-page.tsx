@@ -1,18 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type ReactNode, useEffect, useState } from 'react';
-import { SECRET_MASK, type Settings } from '@hpc-mail/shared';
+import { type Settings } from '@hpc-mail/shared';
 import { ApiError } from '@/api/errors';
 import { queryKeys } from '@/api/query-keys';
 import { adminApi } from '@/api/resources';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { PasswordInput } from '@/components/ui/password-input';
 import { SegmentedControl } from '@/components/ui/segmented-control';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
 import { toast } from '@/components/ui/toast';
-import { RecipientInput } from '@/features/compose/recipient-input';
 
 function Section({ title, description, children }: { title: string; description?: string; children: ReactNode }) {
   return (
@@ -117,12 +115,6 @@ export function SettingsPage() {
     onError: (err) => toast({ title: err instanceof ApiError ? err.message : '保存失败，请重试', variant: 'error' }),
   });
 
-  const feishuTest = useMutation({
-    mutationFn: () => adminApi.testFeishu(),
-    onSuccess: () => toast({ title: '测试卡片已发送', variant: 'success' }),
-    onError: (err) => toast({ title: err instanceof ApiError ? err.message : '发送失败', variant: 'error' }),
-  });
-
   if (isLoading || !draft || !data) {
     return (
       <div className="mx-auto max-w-3xl space-y-4">
@@ -191,101 +183,6 @@ export function SettingsPage() {
             checked={draft.code_extract.aiEnabled}
             onChange={(value) => patch((s) => void (s.code_extract.aiEnabled = value))}
           />
-        </Section>
-
-        <Section title="Gmail 转发" description="将收到的邮件转发到已验证的 Gmail 地址。">
-          <ToggleRow
-            label="启用转发"
-            checked={draft.gmail_forward.enabled}
-            onChange={(value) => patch((s) => void (s.gmail_forward.enabled = value))}
-          />
-          <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium text-ink">转发目标地址</span>
-            <RecipientInput
-              value={draft.gmail_forward.addresses}
-              onChange={(addresses) => patch((s) => void (s.gmail_forward.addresses = addresses))}
-              placeholder="输入已验证的 Gmail 地址后回车"
-            />
-          </label>
-        </Section>
-
-        <Section title="飞书通知" description="收件时推送飞书卡片。">
-          <ToggleRow
-            label="启用飞书通知"
-            checked={draft.feishu.enabled}
-            onChange={(value) => patch((s) => void (s.feishu.enabled = value))}
-          />
-          <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium text-ink">Webhook URL</span>
-            <Input
-              placeholder="https://open.feishu.cn/open-apis/bot/v2/hook/..."
-              value={draft.feishu.webhookUrl}
-              onChange={(event) => patch((s) => void (s.feishu.webhookUrl = event.target.value))}
-            />
-          </label>
-          <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium text-ink">签名密钥</span>
-            <PasswordInput
-              placeholder={draft.feishu.secret === SECRET_MASK ? '已配置（留空保持不变）' : '可选'}
-              value={draft.feishu.secret === SECRET_MASK ? '' : draft.feishu.secret}
-              onChange={(event) => patch((s) => void (s.feishu.secret = event.target.value))}
-            />
-          </label>
-          <div className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium text-ink">推送内容</span>
-            <SegmentedControl
-              aria-label="飞书推送内容分级"
-              value={draft.feishu.contentLevel}
-              onValueChange={(value) => patch((s) => void (s.feishu.contentLevel = value))}
-              options={[
-                { value: 'code_only', label: '仅验证码' },
-                { value: 'summary', label: '摘要' },
-                { value: 'full', label: '全文原文' },
-              ]}
-            />
-            <span className="text-xs text-ink-tertiary">
-              摘要仅推送正文前 200 字；全文会把完整正文（含敏感信息）推送到群里，多人可见请谨慎。
-            </span>
-          </div>
-          <div>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              loading={feishuTest.isPending}
-              onClick={() => feishuTest.mutate()}
-            >
-              发送测试卡片
-            </Button>
-          </div>
-        </Section>
-
-        <Section
-          title="通用 Webhook 通知"
-          description="新邮件时 POST JSON 到你的 HTTPS 端点（Bark / ntfy / 自建服务），带 HMAC 签名。"
-        >
-          <ToggleRow
-            label="启用"
-            checked={draft.notify_webhook.enabled}
-            onChange={(value) => patch((s) => void (s.notify_webhook.enabled = value))}
-          />
-          <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium text-ink">Webhook URL</span>
-            <Input
-              placeholder="https://..."
-              value={draft.notify_webhook.url}
-              onChange={(event) => patch((s) => void (s.notify_webhook.url = event.target.value))}
-            />
-            <span className="text-xs text-ink-tertiary">仅支持 HTTPS，且不能指向内网地址。</span>
-          </label>
-          <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium text-ink">签名密钥</span>
-            <PasswordInput
-              placeholder={draft.notify_webhook.secret === SECRET_MASK ? '已配置（留空保持不变）' : '可选，用于 X-HPC-Signature 校验'}
-              value={draft.notify_webhook.secret === SECRET_MASK ? '' : draft.notify_webhook.secret}
-              onChange={(event) => patch((s) => void (s.notify_webhook.secret = event.target.value))}
-            />
-          </label>
         </Section>
 
         <Section

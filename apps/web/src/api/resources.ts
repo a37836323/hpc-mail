@@ -11,6 +11,8 @@ import type {
   CreateUserRequest,
   DisableTwoFactorRequest,
   DomainOnboardingStatus,
+  UpdateNotifyPrefsRequest,
+  UserNotifyPrefs,
   TwoFactorEnabled,
   TwoFactorSetup,
   Invite,
@@ -61,6 +63,14 @@ export const configApi = {
 // ---- 可见域名（需登录，按角色：管理员=全部，普通用户=公开子集）----
 export const domainApi = {
   visible: () => api.get<string[]>('/domains'),
+};
+
+// ---- 个人转发与通知偏好 ----
+export const notifyPrefsApi = {
+  get: () => api.get<UserNotifyPrefs>('/me/notify-prefs'),
+  update: (body: UpdateNotifyPrefsRequest) =>
+    api.put<UserNotifyPrefs, UpdateNotifyPrefsRequest>('/me/notify-prefs', body),
+  testFeishu: () => api.post<{ ok: boolean }>('/me/notify-prefs/feishu-test'),
 };
 
 // ---- 邮箱 ----
@@ -125,7 +135,6 @@ export const adminApi = {
   getSettings: () => api.get<Settings>('/admin/settings'),
   updateSettings: (body: UpdateSettingsRequest) =>
     api.put<Settings, UpdateSettingsRequest>('/admin/settings', body),
-  testFeishu: () => api.post<{ ok: boolean }>('/admin/settings/feishu-test'),
   domainStatus: (domain: string) =>
     api.get<DomainOnboardingStatus>('/admin/settings/domain-status', { query: { domain } }),
   listInvites: () => api.get<Invite[]>('/admin/invites'),

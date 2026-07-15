@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm';
 import { index, integer, primaryKey, sqliteTable, text } from 'drizzle-orm/sqlite-core';
-import type { MessageRecipients } from '@hpc-mail/shared';
+import type { MessageRecipients, UserNotifyPrefs } from '@hpc-mail/shared';
 
 /** 统一时间戳列：unix 毫秒，Drizzle 映射为 Date */
 const createdAtColumn = () =>
@@ -27,6 +27,8 @@ export const users = sqliteTable('users', {
   totpEnabledAt: integer('totp_enabled_at', { mode: 'timestamp_ms' }),
   /** 恢复码哈希列表（JSON，SHA-256）；每个用一次即移除 */
   totpRecoveryCodes: text('totp_recovery_codes', { mode: 'json' }).$type<string[]>(),
+  /** 个人转发与通知偏好（JSON）：飞书/通用 webhook/邮箱转发。null=未配置，走默认（管理员则继承旧全局） */
+  notifyPrefs: text('notify_prefs', { mode: 'json' }).$type<UserNotifyPrefs>(),
   createdAt: createdAtColumn(),
   lastLoginAt: integer('last_login_at', { mode: 'timestamp_ms' }),
   lastLoginIp: text('last_login_ip'),

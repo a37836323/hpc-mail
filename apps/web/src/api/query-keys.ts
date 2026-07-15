@@ -4,6 +4,7 @@ import type { ListMessagesQuery } from '@hpc-mail/shared';
 export const queryKeys = {
   config: ['config', 'public'] as const,
   domains: ['domains', 'visible'] as const,
+  notifyPrefs: ['notify-prefs'] as const,
   session: ['session'] as const,
 
   mailboxes: {

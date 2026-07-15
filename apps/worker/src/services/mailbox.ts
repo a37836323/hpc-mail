@@ -203,6 +203,17 @@ export async function userAddresses(env: Env, userId: number): Promise<string[]>
   return rows.map((r) => r.address);
 }
 
+/** 地址 → 认领它的用户 id（地址全局唯一，至多一个 owner）；未认领返回 null */
+export async function getMailboxOwner(env: Env, address: string): Promise<number | null> {
+  const db = createDb(env);
+  const row = await db
+    .select({ userId: mailboxes.userId })
+    .from(mailboxes)
+    .where(eq(mailboxes.address, address))
+    .get();
+  return row?.userId ?? null;
+}
+
 /** 校验地址归属（发件身份校验用） */
 export async function userOwnsAddress(env: Env, userId: number, address: string): Promise<boolean> {
   const db = createDb(env);

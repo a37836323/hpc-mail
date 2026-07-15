@@ -3,13 +3,18 @@ import { env } from 'cloudflare:test';
 import { and, eq } from 'drizzle-orm';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createDb } from '../src/db/client.js';
-import { messages, users } from '../src/db/schema.js';
+import { messages, settings as settingsTable, users } from '../src/db/schema.js';
 import { AppError } from '../src/lib/errors.js';
 import { getDomains, getPublicDomains, getVisibleDomains } from '../src/services/domain.js';
 import { claimMailbox } from '../src/services/mailbox.js';
 import { countUnread, listMessages, markMessages, starMessages } from '../src/services/message.js';
+import {
+  getUserNotifyPrefs,
+  maskUserNotifyPrefs,
+  updateUserNotifyPrefs,
+} from '../src/services/notify-prefs.js';
 import { sendMail } from '../src/services/outbound.js';
-import { getSettings, maskSettings, updateSettings } from '../src/services/setting.js';
+import { updateSettings } from '../src/services/setting.js';
 
 async function seedUser(username: string, role: 'admin' | 'user'): Promise<number> {
   const db = createDb(env);
@@ -56,17 +61,40 @@ async function setDomains(list: string[] = TEST_DOMAINS): Promise<void> {
   });
 }
 
-describe('settings 脱敏与掩码写入', () => {
+describe('个人通知偏好脱敏与掩码写入', () => {
   it('feishu secret 掩码提交保留旧值', async () => {
     const webhookUrl = 'https://open.feishu.cn/open-apis/bot/v2/hook/abcdefghijklmnop';
-    await updateSettings(env, { feishu: { enabled: true, webhookUrl, secret: 's3cr3t', contentLevel: 'summary' } });
-    let settings = await getSettings(env);
-    expect(settings.feishu.secret).toBe('s3cr3t');
-    expect(maskSettings(settings).feishu.secret).toBe(SECRET_MASK);
+    const uid = await seedUser('notify-mask-user', 'user');
+    await updateUserNotifyPrefs(env, uid, {
+      feishu: { enabled: true, webhookUrl, secret: 's3cr3t', contentLevel: 'summary' },
+    });
+    let prefs = await getUserNotifyPrefs(env, uid);
+    expect(prefs.feishu.secret).toBe('s3cr3t');
+    expect(maskUserNotifyPrefs(prefs).feishu.secret).toBe(SECRET_MASK);
 
-    await updateSettings(env, { feishu: { enabled: true, webhookUrl, secret: SECRET_MASK, contentLevel: 'summary' } });
-    settings = await getSettings(env);
-    expect(settings.feishu.secret).toBe('s3cr3t');
+    // 提交掩码值 → 保留旧 secret
+    await updateUserNotifyPrefs(env, uid, {
+      feishu: { enabled: true, webhookUrl, secret: SECRET_MASK, contentLevel: 'summary' },
+    });
+    prefs = await getUserNotifyPrefs(env, uid);
+    expect(prefs.feishu.secret).toBe('s3cr3t');
+  });
+
+  it('管理员未配置个人偏好时继承旧全局通知设置', async () => {
+    // 旧全局键已从系统设置移除，但历史数据仍在 settings 表；此处直接写库模拟历史值
+    const db = createDb(env);
+    await db
+      .insert(settingsTable)
+      .values({ key: 'gmail_forward', value: JSON.stringify({ enabled: true, addresses: ['legacy@gmail.com'] }) })
+      .onConflictDoUpdate({ target: settingsTable.key, set: { value: JSON.stringify({ enabled: true, addresses: ['legacy@gmail.com'] }) } });
+    const adminId = await seedUser('legacy-admin', 'admin');
+    const prefs = await getUserNotifyPrefs(env, adminId);
+    expect(prefs.forward.enabled).toBe(true);
+    expect(prefs.forward.addresses).toContain('legacy@gmail.com');
+    // 普通用户不继承全局
+    const userId = await seedUser('legacy-user', 'user');
+    const uprefs = await getUserNotifyPrefs(env, userId);
+    expect(uprefs.forward.enabled).toBe(false);
   });
 });
 

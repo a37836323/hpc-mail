@@ -1,4 +1,4 @@
-import type { Settings } from '@hpc-mail/shared';
+import type { WebhookConfig } from '@hpc-mail/shared';
 import { hmacSha256Base64 } from '../lib/crypto.js';
 
 // 阻止指向内网/回环的 host（基础 SSRF 防护；仅 admin 可配，DNS-rebinding 残余风险接受）
@@ -32,12 +32,11 @@ export interface WebhookMailPayload {
   };
 }
 
-/** 新邮件通用 webhook 推送（HMAC-SHA256 签名于 X-HPC-Signature，10s 超时，静默失败） */
+/** 新邮件通用 webhook 推送（HMAC-SHA256 签名于 X-HPC-Signature，10s 超时，静默失败）。cfg 由调用方按 owner 提供 */
 export async function sendNotifyWebhook(
-  settings: Settings,
+  cfg: WebhookConfig,
   payload: WebhookMailPayload,
 ): Promise<void> {
-  const cfg = settings.notify_webhook;
   if (!cfg.enabled || !cfg.url) return;
   const url = validateNotifyWebhookUrl(cfg.url);
   if (!url) return;

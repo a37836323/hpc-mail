@@ -7,7 +7,10 @@ import { htmlToText, makePreview } from '../lib/text.js';
 import type { Env, ExecCtx } from '../types.js';
 import { extractCodeByAi, extractCodeByRegex } from './code-extract.js';
 import { sendFeishuNotification } from './feishu.js';
+import { getMailboxOwner } from './mailbox.js';
+import { getUserNotifyPrefs } from './notify-prefs.js';
 import { getSettings } from './setting.js';
+import { getActiveAdminIds } from './user.js';
 import { sendNotifyWebhook } from './webhook-notify.js';
 import { attachmentKey, bodyKey, getExt, putJson, putObject, sha256Hex16 } from './storage.js';
 
@@ -164,18 +167,25 @@ export async function handleInbound(
     }
   }
 
-  // 同步 Gmail 转发（逐地址 try/catch 隔离）
-  if (settings.gmail_forward.enabled && settings.gmail_forward.addresses.length) {
-    for (const target of settings.gmail_forward.addresses) {
-      try {
-        await message.forward(target);
-      } catch (e) {
-        console.error(`Gmail 转发到 ${target} 失败:`, e);
-      }
+  // 归属解析：收件地址所属用户 → 其个人偏好；未认领地址归全部管理员，按各自个人偏好处理
+  const ownerId = await getMailboxOwner(env, toAddress);
+  const ownerIds = ownerId !== null ? [ownerId] : await getActiveAdminIds(env);
+  const ownerPrefs = await Promise.all(ownerIds.map((id) => getUserNotifyPrefs(env, id)));
+
+  // 同步邮箱转发（按 owner 的个人转发目标，去重；逐地址 try/catch）
+  // 注意：目标须为 Cloudflare Email Routing 已验证 destination，否则 forward() 抛错——静默记录。
+  const forwardTargets = [
+    ...new Set(ownerPrefs.filter((p) => p.forward.enabled).flatMap((p) => p.forward.addresses)),
+  ];
+  for (const target of forwardTargets) {
+    try {
+      await message.forward(target);
+    } catch (e) {
+      console.error(`转发到 ${target} 失败（需为已验证 destination）:`, e);
     }
   }
 
-  // 异步后处理：AI 兜底提码 + 飞书通知
+  // 异步后处理：AI 兜底提码 + 按 owner 个人偏好的飞书/通用 webhook（各自 try/catch 隔离）
   ctx.waitUntil(
     (async () => {
       let finalCode = code;
@@ -193,34 +203,36 @@ export async function handleInbound(
           console.error('AI 提码失败:', e);
         }
       }
-      try {
-        await sendFeishuNotification(env, settings, {
-          subject,
-          fromAddress,
-          fromName,
-          toAddress,
-          code: finalCode,
-          body: text || htmlToText(html),
-        });
-      } catch (e) {
-        console.error('飞书通知失败:', e);
-      }
-      try {
-        await sendNotifyWebhook(settings, {
-          event: 'mail.received',
-          message: {
-            id: messageId,
-            address: toAddress,
+      for (const prefs of ownerPrefs) {
+        try {
+          await sendFeishuNotification(prefs.feishu, {
+            subject,
             fromAddress,
             fromName,
-            subject,
-            verificationCode: finalCode,
-            preview,
-            createdAt: new Date().toISOString(),
-          },
-        });
-      } catch (e) {
-        console.error('通用 webhook 失败:', e);
+            toAddress,
+            code: finalCode,
+            body: text || htmlToText(html),
+          });
+        } catch (e) {
+          console.error('飞书通知失败:', e);
+        }
+        try {
+          await sendNotifyWebhook(prefs.webhook, {
+            event: 'mail.received',
+            message: {
+              id: messageId,
+              address: toAddress,
+              fromAddress,
+              fromName,
+              subject,
+              verificationCode: finalCode,
+              preview,
+              createdAt: new Date().toISOString(),
+            },
+          });
+        } catch (e) {
+          console.error('通用 webhook 失败:', e);
+        }
       }
     })(),
   );
