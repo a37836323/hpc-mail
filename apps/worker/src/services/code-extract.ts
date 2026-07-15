@@ -92,6 +92,11 @@ export async function extractCodeByAi(
     const json = JSON.parse(match[0]) as { code?: unknown };
     if (typeof json.code !== 'string') return '';
     if (json.code.length > 8 || /\s/.test(json.code)) return '';
+    // 回验：AI 返回的码必须在模型所见的原文（主题 + 正文）中真实出现，
+    // 否则丢弃——邮件正文是攻击者可控输入，防止 prompt injection / 幻觉写入验证码字段
+    if (json.code && !`${subject}\n${body}`.toLowerCase().includes(json.code.toLowerCase())) {
+      return '';
+    }
     return json.code;
   } catch {
     return '';

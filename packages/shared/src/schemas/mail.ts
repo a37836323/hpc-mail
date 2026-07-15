@@ -118,6 +118,8 @@ export interface MessageSummary {
   preview: string;
   verificationCode: string;
   status: string;
+  /** 发送失败/部分失败原因（inbound 与成功发送为空串）；让调用方能识别「假成功」 */
+  errorDetail: string;
   isRead: boolean;
   isStarred: boolean;
   hasAttachments: boolean;
@@ -146,6 +148,5 @@ export interface MessageDetail extends MessageSummary {
   recipients: MessageRecipients;
   bodyText: string;
   bodyHtml: string;
-  errorDetail: string;
   attachments: AttachmentMeta[];
 }

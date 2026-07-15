@@ -70,7 +70,9 @@ curl -s $BASE/api/messages/123 -H "Authorization: Bearer $TOKEN"
 
 ### 轮询等待验证码到达
 
-触发某操作后，验证码邮件通常几秒内到。按地址轮询，读到即停。为避免读到**旧**验证码，先记下当前最新邮件 id，只认比它更新的邮件：
+触发某操作后，验证码邮件通常几秒内到。按地址轮询，读到即停。为避免读到**旧**验证码，先记下当前最新邮件 id，只认比它更新的邮件。
+
+**关键：每次拉一整页（`limit=10`）并遍历所有 `id > LAST` 的新邮件**，而不是只看最新一封——否则验证码邮件之后若又进来一封别的邮件（如营销/通知），只看第一封就会漏掉验证码。
 
 ```bash
 ADDR="bot@hpc.email"
@@ -79,14 +81,21 @@ LAST=$(curl -s "$BASE/api/messages?direction=inbound&address=$ADDR&limit=1" \
   | python3 -c "import json,sys;i=json.load(sys.stdin)['data']['items'];print(i[0]['id'] if i else 0)")
 # ……在此触发会产生验证码邮件的操作……
 for i in $(seq 1 20); do
-  RESULT=$(curl -s "$BASE/api/messages?direction=inbound&address=$ADDR&limit=1" \
+  CODE=$(curl -s "$BASE/api/messages?direction=inbound&address=$ADDR&limit=10" \
     -H "Authorization: Bearer $TOKEN" \
-    | python3 -c "import json,sys;i=json.load(sys.stdin)['data']['items'];print(f\"{i[0]['id']}:{i[0]['verificationCode']}\" if i else '0:')")
-  ID="${RESULT%%:*}"; CODE="${RESULT#*:}"
-  if [ "$ID" -gt "$LAST" ] && [ -n "$CODE" ]; then echo "验证码：$CODE"; break; fi
+    | python3 -c "import json,sys,os
+last=int(os.environ['LAST'])
+items=json.load(sys.stdin)['data']['items']
+# items 按 id 降序；取 id>last 且有验证码里最新的一封
+for m in items:
+    if m['id']>last and m['verificationCode']:
+        print(m['verificationCode']); break")
+  if [ -n "$CODE" ]; then echo "验证码：$CODE"; break; fi
   sleep 3
 done
 ```
+
+> `/v1`（API Key）用户可用长轮询端点 `GET /v1/messages/wait?address=<地址>&afterId=<LAST>&timeout=25` 一步到位，服务端 hold 到有新邮件即返回，免去自己写轮询循环（见文末进阶）。
 
 ## 任务：发送邮件
 
@@ -103,7 +112,9 @@ curl -s -X POST $BASE/api/messages/send \
 
 - `from` 二选一：`{"localPart":"bot","domain":"hpc.email"}` 或 `{"mailboxId":5}`（用你认领的地址）。
 - 正文 `text`（纯文本）和 `html` 至少给一个；可选 `cc` / `bcc` 数组、`attachments`。
+- **附件结构**：`attachments` 是数组，每项 `{"filename":"a.pdf","contentType":"application/pdf","content":"<base64>"}`，`content` 为不含 `data:` 前缀的 base64；单次 ≤10 个、合计 ≤25MB。
 - 收件人若也是本站域名，即时站内投递；站外地址需管理员配置了外发通道才能送达。
+- **判断是否真的发出去了**：成功响应的 `data` 是一封 outbound 邮件，看它的 `status` 与 `errorDetail`——`status:"failed"` 表示全部失败（此时 HTTP 也是错误码）；`status:"sent"` 但 `errorDetail` 非空表示**部分收件人失败**（`errorDetail` 里列出失败地址与原因），别把它当作全部送达。
 
 ## 任务：回复邮件
 
@@ -172,15 +183,22 @@ curl -s -X POST $BASE/api/messages/delete -H "Authorization: Bearer $TOKEN" -H '
 
 ## 错误码参考
 
-| code | 含义与应对 |
-|------|------|
-| `unauthorized` | 未登录 / token 失效 → 重新登录 |
-| `forbidden` | 无权限（如用非自己认领的地址发件）|
-| `validation_failed` | 参数不合法（如域名不在系统列表）|
-| `address_taken` | 认领的地址已被占用，换一个前缀 |
-| `not_found` | 资源不存在 |
-| `rate_limited` | 频率超限，稍后重试 |
-| `send_channel_unconfigured` | 该域名外发通道未配置 |
+| code | HTTP | 含义与应对 |
+|------|------|------|
+| `bad_credentials` | 401 | 登录时用户名或密码错误 → 核对凭据（注意与 `unauthorized` 区分：这是登录失败，不是 token 问题）|
+| `unauthorized` | 401 | 未登录 / token 或 API Key 失效、过期、被禁用 → 重新登录或更换 key |
+| `forbidden` | 403 | 无权限（如用非自己认领的地址发件、来源 IP 不在白名单、缺少 API scope）|
+| `user_disabled` | 403 | 账户已被管理员禁用 |
+| `registration_closed` | 403 | 当前未开放注册 |
+| `validation_failed` | 400 | 参数不合法（如域名不在系统列表）|
+| `invite_invalid` | 400 | 邀请码无效 / 已用尽 / 已过期 |
+| `send_channel_unconfigured` | 400 | 该域名外发通道未配置 |
+| `address_taken` | 409 | 认领的地址已被占用，换一个前缀 |
+| `conflict` | 409 | 资源冲突（如用户名已存在）|
+| `not_found` | 404 | 资源不存在 |
+| `rate_limited` | 429 | 频率超限，稍后重试（响应可能带 `X-RateLimit-*` / `Retry-After`）|
+| `payload_too_large` | 413 | 请求体过大（如附件超限）|
+| `internal` | 500 | 服务端错误，可重试 |
 
 ## 进阶：用 API Key + /v1 做长期自动化
 

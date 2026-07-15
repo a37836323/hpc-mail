@@ -5,6 +5,7 @@ import { createDb } from '../db/client.js';
 import { apiKeys, apiRateLimits, apiRequestLogs, users } from '../db/schema.js';
 import { sha256Hex } from '../lib/crypto.js';
 import { AppError } from '../lib/errors.js';
+import { ipInAllowList } from '../lib/ip-allowlist.js';
 import { getSettings } from '../services/setting.js';
 import type { AppContext } from '../types.js';
 
@@ -13,40 +14,6 @@ const KEY_PATTERN = new RegExp(`^${API_KEY_PREFIX}[a-f0-9]{64}$`);
 function clientIp(c: Context<AppContext>): string {
   const value = c.req.header('CF-Connecting-IP') || '';
   return (value.split(',')[0] ?? '').trim().toLowerCase() || 'unknown';
-}
-
-function ipv4ToInt(ip: string): number | null {
-  const parts = ip.split('.');
-  if (parts.length !== 4) return null;
-  let num = 0;
-  for (const part of parts) {
-    if (!/^\d{1,3}$/.test(part)) return null;
-    const n = Number(part);
-    if (n > 255) return null;
-    num = num * 256 + n;
-  }
-  return num >>> 0;
-}
-
-/** 支持精确匹配与 IPv4 CIDR */
-function ipInAllowList(ip: string, list: string[]): boolean {
-  if (list.length === 0) return true;
-  for (const entry of list) {
-    const trimmed = entry.trim().toLowerCase();
-    if (trimmed === ip) return true;
-    const slash = trimmed.indexOf('/');
-    if (slash > 0) {
-      const base = trimmed.slice(0, slash);
-      const bits = Number(trimmed.slice(slash + 1));
-      const ipInt = ipv4ToInt(ip);
-      const baseInt = ipv4ToInt(base);
-      if (ipInt !== null && baseInt !== null && bits >= 0 && bits <= 32) {
-        const mask = bits === 0 ? 0 : (0xffffffff << (32 - bits)) >>> 0;
-        if ((ipInt & mask) === (baseInt & mask)) return true;
-      }
-    }
-  }
-  return false;
 }
 
 /** /v1 鉴权：hash 查 key → 状态/过期/IP → 滑窗限流 → finally 审计 */

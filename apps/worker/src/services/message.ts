@@ -48,6 +48,7 @@ function summarize(row: MessageRow, hasAttachments: boolean, isStarred: boolean)
     preview: row.preview,
     verificationCode: row.verificationCode,
     status: row.status,
+    errorDetail: row.errorDetail ?? '',
     isRead: row.isRead,
     isStarred,
     hasAttachments,
@@ -224,7 +225,6 @@ export async function getMessageDetail(
     recipients: row.recipients as MessageRecipients,
     bodyText,
     bodyHtml,
-    errorDetail: row.errorDetail,
     attachments: attachmentMetas,
   };
 }

@@ -199,6 +199,7 @@ function summarize(
     preview: row.preview,
     verificationCode: row.verificationCode,
     status: row.status,
+    errorDetail: row.errorDetail ?? '',
     isRead: row.isRead,
     isStarred,
     hasAttachments,
@@ -353,7 +354,8 @@ export async function sendMail(
         domain: getEmailDomain(target),
         fromAddress: from.address,
         fromName: from.displayName,
-        recipients: { to: req.to, cc: req.cc, bcc: req.bcc },
+        // BCC 名单不写入收件方记录：密送收件人的副本不应暴露其他被密送者
+        recipients: { to: req.to, cc: req.cc, bcc: [] },
         subject: req.subject,
         preview,
         bodyText: text,

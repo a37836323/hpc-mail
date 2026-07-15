@@ -9,6 +9,7 @@ import {
   validateLocalPart,
 } from '../src/lib/email-address.js';
 import { extractCodeByRegex } from '../src/services/code-extract.js';
+import { ipInAllowList } from '../src/lib/ip-allowlist.js';
 import { AppError } from '../src/lib/errors.js';
 
 const SECRET = 'unit-test-secret-key-000000000000';
@@ -101,5 +102,34 @@ describe('code-extract 正则', () => {
   });
   it('无候选返回空', () => {
     expect(extractCodeByRegex('', 'your verification code is coming soon')).toBe('');
+  });
+});
+
+describe('ip-allowlist', () => {
+  it('空白名单放行', () => {
+    expect(ipInAllowList('1.2.3.4', [])).toBe(true);
+  });
+  it('IPv4 精确匹配', () => {
+    expect(ipInAllowList('1.2.3.4', ['1.2.3.4'])).toBe(true);
+    expect(ipInAllowList('1.2.3.5', ['1.2.3.4'])).toBe(false);
+  });
+  it('IPv4 CIDR', () => {
+    expect(ipInAllowList('192.168.1.55', ['192.168.1.0/24'])).toBe(true);
+    expect(ipInAllowList('192.168.2.55', ['192.168.1.0/24'])).toBe(false);
+    expect(ipInAllowList('10.0.0.1', ['0.0.0.0/0'])).toBe(true);
+  });
+  it('IPv6 精确匹配（压缩与展开等价）', () => {
+    expect(ipInAllowList('2001:db8::1', ['2001:db8::1'])).toBe(true);
+    expect(ipInAllowList('2001:0db8:0000:0000:0000:0000:0000:0001', ['2001:db8::1'])).toBe(true);
+    expect(ipInAllowList('::1', ['::1'])).toBe(true);
+  });
+  it('IPv6 CIDR（此前静默锁死的场景）', () => {
+    expect(ipInAllowList('2001:db8::abcd', ['2001:db8::/32'])).toBe(true);
+    expect(ipInAllowList('2001:db9::1', ['2001:db8::/32'])).toBe(false);
+    expect(ipInAllowList('fe80::1', ['fe80::/10'])).toBe(true);
+  });
+  it('跨协议族不误匹配', () => {
+    expect(ipInAllowList('1.2.3.4', ['2001:db8::/32'])).toBe(false);
+    expect(ipInAllowList('2001:db8::1', ['192.168.0.0/16'])).toBe(false);
   });
 });
