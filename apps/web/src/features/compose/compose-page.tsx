@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Paperclip, X } from 'lucide-react';
 import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -89,6 +89,12 @@ export function ComposePage() {
   const isAdmin = user.role === 'admin';
   const { data: config } = usePublicConfig();
   const { data: mailboxes } = useMailboxesQuery(false);
+  const { data: contactsData } = useQuery({
+    queryKey: ['messages', 'contacts'],
+    queryFn: () => messageApi.contacts(),
+    staleTime: 5 * 60_000,
+  });
+  const contacts = contactsData?.contacts;
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const initial = useMemo<ComposeInitial>(() => (location.state as ComposeInitial | null) ?? {}, [location.state]);
@@ -258,18 +264,22 @@ export function ComposePage() {
               </div>
             )}
           </div>
-          <RecipientInput value={to} onChange={setTo} placeholder="输入邮箱后回车" />
+          <RecipientInput value={to} onChange={setTo} placeholder="输入邮箱后回车" suggestions={contacts} />
         </div>
 
         {showCc && (
           <FormField label="抄送">
-            {(field) => <RecipientInput {...field} value={cc} onChange={setCc} placeholder="抄送收件人" />}
+            {(field) => (
+              <RecipientInput {...field} value={cc} onChange={setCc} placeholder="抄送收件人" suggestions={contacts} />
+            )}
           </FormField>
         )}
 
         {showBcc && (
           <FormField label="密送">
-            {(field) => <RecipientInput {...field} value={bcc} onChange={setBcc} placeholder="密送收件人" />}
+            {(field) => (
+              <RecipientInput {...field} value={bcc} onChange={setBcc} placeholder="密送收件人" suggestions={contacts} />
+            )}
           </FormField>
         )}
 

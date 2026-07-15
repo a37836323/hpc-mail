@@ -228,7 +228,9 @@ curl -s -X POST $BASE/api/api-keys -H "Authorization: Bearer $TOKEN" \
 | POST | `/v1/messages/read` | mail.write | 批量标记已读 `{ids,isRead}` |
 | POST | `/v1/messages/delete` | mail.write | 批量删除 `{ids}` |
 
-`/v1` 响应带 `X-RateLimit-*` 头，超限返回 429。
+`/v1` 响应带 `X-RateLimit-*` 头，超限返回 429。完整机器可读描述见 `GET https://hpc.email/v1/openapi.json`（OpenAPI 3.1，无需鉴权）。
+
+> 管理员另可在后台配置**通用 Webhook**：新邮件时系统会 POST JSON（`{event:"mail.received", message:{...}}`，带 `X-HPC-Signature` HMAC-SHA256 签名头）到你的 HTTPS 端点，比轮询更实时。
 
 ### 用长轮询高效等验证码（推荐）
 

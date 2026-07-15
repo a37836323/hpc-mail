@@ -94,6 +94,12 @@ export async function updateSettings(env: Env, patch: UpdateSettingsRequest): Pr
         ...incomingFeishu,
         secret: incomingFeishu.secret === SECRET_MASK ? current.feishu.secret : incomingFeishu.secret,
       };
+    } else if (key === 'notify_webhook') {
+      const inc = incoming as Settings['notify_webhook'];
+      next = {
+        ...inc,
+        secret: inc.secret === SECRET_MASK ? current.notify_webhook.secret : inc.secret,
+      };
     }
 
     const parsed = SETTING_SCHEMAS[key].safeParse(next);
@@ -122,6 +128,10 @@ export function maskSettings(settings: Settings): Settings {
     feishu: {
       ...settings.feishu,
       secret: settings.feishu.secret ? SECRET_MASK : '',
+    },
+    notify_webhook: {
+      ...settings.notify_webhook,
+      secret: settings.notify_webhook.secret ? SECRET_MASK : '',
     },
   };
 }

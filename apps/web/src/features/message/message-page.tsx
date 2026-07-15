@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Download, FileDown, Forward, ImageOff, MailOpen, Paperclip, Reply, ReplyAll, Star, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import type { MessageDetail } from '@hpc-mail/shared';
 import { queryKeys } from '@/api/query-keys';
 import { messageApi } from '@/api/resources';
@@ -42,6 +42,13 @@ export function MessagePage() {
   });
 
   const star = useStarMutation();
+
+  const { data: threadData } = useQuery({
+    queryKey: ['messages', 'thread', messageId],
+    queryFn: () => messageApi.thread(messageId),
+    enabled: Number.isFinite(messageId),
+  });
+  const thread = threadData?.items ?? [];
 
   const markRead = useMutation({
     mutationFn: (isRead: boolean) => messageApi.markRead([messageId], isRead, opScope),
@@ -291,6 +298,35 @@ export function MessagePage() {
           )}
         </div>
       </article>
+
+      {thread.length > 1 && (
+        <section className="mt-4 overflow-hidden rounded-lg border border-line bg-surface">
+          <h2 className="border-b border-line px-4 py-2.5 text-sm font-semibold text-ink">
+            会话（{thread.length} 封）
+          </h2>
+          <ul className="flex flex-col p-1.5">
+            {thread.map((item) => (
+              <li key={item.id}>
+                <Link
+                  to={`/mail/${item.id}`}
+                  className={cn(
+                    'flex items-center justify-between gap-3 rounded-md px-2.5 py-2 text-sm transition-colors hover:bg-surface-hover',
+                    item.id === messageId && 'bg-accent-soft',
+                  )}
+                >
+                  <span className="min-w-0 truncate text-ink">
+                    <span className="text-ink-secondary">
+                      {item.direction === 'outbound' ? '我' : item.fromName || item.fromAddress}：
+                    </span>
+                    {item.subject || '（无主题）'}
+                  </span>
+                  <span className="shrink-0 text-xs text-ink-tertiary">{formatDateTime(item.createdAt)}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <ConfirmDialog
         open={confirmDelete}

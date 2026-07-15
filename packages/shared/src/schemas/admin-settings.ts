@@ -29,6 +29,13 @@ export const codeExtractSettingSchema = z.object({
   aiEnabled: z.boolean(),
 });
 
+/** 通用 webhook：新邮件时 POST JSON 到自定义 https 端点（带 HMAC 签名），供 Bark/ntfy/自建服务 */
+export const notifyWebhookSettingSchema = z.object({
+  enabled: z.boolean(),
+  url: z.union([z.literal(''), z.url().startsWith('https://')]).default(''),
+  secret: z.string().max(128).default(''),
+});
+
 export const resendSettingSchema = z.object({
   /** 域名 -> Resend API token */
   tokens: z.record(z.string(), z.string().max(256)),
@@ -82,6 +89,7 @@ export const SETTING_SCHEMAS = {
   gmail_forward: gmailForwardSettingSchema,
   feishu: feishuSettingSchema,
   code_extract: codeExtractSettingSchema,
+  notify_webhook: notifyWebhookSettingSchema,
   resend: resendSettingSchema,
   site: siteSettingSchema,
   api: apiSettingSchema,
@@ -102,6 +110,7 @@ export const DEFAULT_SETTINGS: Settings = {
   gmail_forward: { enabled: false, addresses: [] },
   feishu: { enabled: false, webhookUrl: '', secret: '', contentLevel: 'summary' },
   code_extract: { enabled: true, aiEnabled: true },
+  notify_webhook: { enabled: false, url: '', secret: '' },
   resend: { tokens: {} },
   site: { title: 'HPC Mail' },
   api: { enabled: true },
@@ -123,6 +132,7 @@ export const updateSettingsRequestSchema = z
     gmail_forward: gmailForwardSettingSchema.optional(),
     feishu: feishuSettingSchema.optional(),
     code_extract: codeExtractSettingSchema.optional(),
+    notify_webhook: notifyWebhookSettingSchema.optional(),
     resend: resendSettingSchema.optional(),
     site: siteSettingSchema.optional(),
     api: apiSettingSchema.optional(),

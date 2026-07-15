@@ -13,6 +13,8 @@ import {
   deleteMessages,
   getMessageDetail,
   getRawMessageObject,
+  getRecentContacts,
+  getThread,
   listMessages,
   markMessages,
   purgeMessages,
@@ -84,6 +86,17 @@ app.post('/star', async (c) => {
 app.get('/unread-count', async (c) => {
   const user = c.get('user')!;
   return ok(c, { unread: await countUnread(c.env, user.id, user.role) });
+});
+
+/** 写信收件人自动补全：近期联系人 */
+app.get('/contacts', async (c) => {
+  return ok(c, { contacts: await getRecentContacts(c.env, viewerOf(c)) });
+});
+
+/** 会话线程（须在 /:id 之前注册） */
+app.get('/:id/thread', async (c) => {
+  const id = parseId(c.req.param('id'));
+  return ok(c, { items: await getThread(c.env, viewerOf(c), id) });
 });
 
 /** 下载原始 .eml（须在 /:id 之前注册） */

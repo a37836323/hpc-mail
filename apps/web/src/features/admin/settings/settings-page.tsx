@@ -264,6 +264,34 @@ export function SettingsPage() {
         </Section>
 
         <Section
+          title="通用 Webhook 通知"
+          description="新邮件时 POST JSON 到你的 HTTPS 端点（Bark / ntfy / 自建服务），带 HMAC 签名。"
+        >
+          <ToggleRow
+            label="启用"
+            checked={draft.notify_webhook.enabled}
+            onChange={(value) => patch((s) => void (s.notify_webhook.enabled = value))}
+          />
+          <label className="flex flex-col gap-1.5">
+            <span className="text-sm font-medium text-ink">Webhook URL</span>
+            <Input
+              placeholder="https://..."
+              value={draft.notify_webhook.url}
+              onChange={(event) => patch((s) => void (s.notify_webhook.url = event.target.value))}
+            />
+            <span className="text-xs text-ink-tertiary">仅支持 HTTPS，且不能指向内网地址。</span>
+          </label>
+          <label className="flex flex-col gap-1.5">
+            <span className="text-sm font-medium text-ink">签名密钥</span>
+            <PasswordInput
+              placeholder={draft.notify_webhook.secret === SECRET_MASK ? '已配置（留空保持不变）' : '可选，用于 X-HPC-Signature 校验'}
+              value={draft.notify_webhook.secret === SECRET_MASK ? '' : draft.notify_webhook.secret}
+              onChange={(event) => patch((s) => void (s.notify_webhook.secret = event.target.value))}
+            />
+          </label>
+        </Section>
+
+        <Section
           title="邮件保留策略"
           description="catch-all 会收下发往任意地址的邮件，需定期清理防止无限膨胀撑爆存储。0 表示不清理。"
         >

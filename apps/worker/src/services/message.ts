@@ -6,7 +6,7 @@ import type {
   Page,
   Role,
 } from '@hpc-mail/shared';
-import { and, count, desc, eq, gt, inArray, isNotNull, isNull, lt, or, sql, type SQL } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gt, inArray, isNotNull, isNull, lt, or, sql, type SQL } from 'drizzle-orm';
 import { createDb, type Db } from '../db/client.js';
 import { attachments as attachmentsTable, messages, stars } from '../db/schema.js';
 import { signAttachment } from '../lib/crypto.js';
@@ -174,6 +174,77 @@ export async function countUnread(env: Env, userId: number, role: Role): Promise
     )
     .get();
   return row?.value ?? 0;
+}
+
+/** 近期联系人：从可见邮件聚合收件人(outbound)与发件人(inbound)地址，供写信自动补全 */
+export async function getRecentContacts(env: Env, viewer: Viewer, limit = 100): Promise<string[]> {
+  const db = createDb(env);
+  const scope = await resolveScope(env, viewer);
+  const rows = await db
+    .select({
+      direction: messages.direction,
+      recipients: messages.recipients,
+      fromAddress: messages.fromAddress,
+    })
+    .from(messages)
+    .where(and(scopeCondition(scope), isNull(messages.deletedAt)))
+    .orderBy(desc(messages.id))
+    .limit(400)
+    .all();
+  const seen = new Set<string>();
+  for (const r of rows) {
+    if (r.direction === 'outbound') {
+      for (const addr of [...(r.recipients?.to ?? []), ...(r.recipients?.cc ?? [])]) {
+        if (addr) seen.add(addr);
+      }
+    } else if (r.fromAddress) {
+      seen.add(r.fromAddress);
+    }
+    if (seen.size >= limit) break;
+  }
+  return [...seen].slice(0, limit);
+}
+
+/** 归一化主题：剥离 Re:/Fwd:/回复:/转发: 前缀，用于会话归组 */
+function normalizeSubject(subject: string): string {
+  return subject
+    .replace(/^\s*((re|fwd?|回复|转发)\s*[:：]\s*)+/i, '')
+    .trim()
+    .toLowerCase();
+}
+
+/** 会话线程：同一归一化主题、可见范围内的邮件，按时间正序 */
+export async function getThread(env: Env, viewer: Viewer, id: number): Promise<MessageSummary[]> {
+  const db = createDb(env);
+  const target = await loadVisible(env, viewer, id);
+  const core = normalizeSubject(target.subject);
+  const summarizeRows = async (rows: MessageRow[]) => {
+    const ids = rows.map((r) => r.id);
+    const [attSet, starSet] = await Promise.all([
+      attachmentFlags(db, ids),
+      starFlags(db, viewer.userId, ids),
+    ]);
+    return rows.map((r) => summarize(r, attSet.has(r.id), starSet.has(r.id)));
+  };
+  if (!core) return summarizeRows([target]);
+
+  const scope = await resolveScope(env, viewer);
+  const escaped = core.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+  const rows = await db
+    .select()
+    .from(messages)
+    .where(
+      and(
+        scopeCondition(scope),
+        isNull(messages.deletedAt),
+        sql`${messages.subject} LIKE ${`%${escaped}%`} ESCAPE '\\'`,
+      ),
+    )
+    .orderBy(asc(messages.id))
+    .limit(100)
+    .all();
+  const thread = rows.filter((r) => normalizeSubject(r.subject) === core);
+  return summarizeRows(thread.length ? thread : [target]);
 }
 
 async function loadVisible(env: Env, viewer: Viewer, id: number): Promise<MessageRow> {

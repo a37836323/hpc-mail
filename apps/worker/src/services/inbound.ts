@@ -8,6 +8,7 @@ import type { Env, ExecCtx } from '../types.js';
 import { extractCodeByAi, extractCodeByRegex } from './code-extract.js';
 import { sendFeishuNotification } from './feishu.js';
 import { getSettings } from './setting.js';
+import { sendNotifyWebhook } from './webhook-notify.js';
 import { attachmentKey, bodyKey, getExt, putJson, putObject, sha256Hex16 } from './storage.js';
 
 const D1_BODY_LIMIT = 256 * 1024;
@@ -203,6 +204,23 @@ export async function handleInbound(
         });
       } catch (e) {
         console.error('飞书通知失败:', e);
+      }
+      try {
+        await sendNotifyWebhook(settings, {
+          event: 'mail.received',
+          message: {
+            id: messageId,
+            address: toAddress,
+            fromAddress,
+            fromName,
+            subject,
+            verificationCode: finalCode,
+            preview,
+            createdAt: new Date().toISOString(),
+          },
+        });
+      } catch (e) {
+        console.error('通用 webhook 失败:', e);
       }
     })(),
   );

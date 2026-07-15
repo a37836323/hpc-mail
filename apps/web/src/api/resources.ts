@@ -76,6 +76,8 @@ export const messageApi = {
   list: (query: Partial<ListMessagesQuery>) =>
     api.get<Page<MessageSummary>>('/messages', { query: query as unknown as QueryParams }),
   detail: (id: number) => api.get<MessageDetail>(`/messages/${id}`),
+  thread: (id: number) => api.get<{ items: MessageSummary[] }>(`/messages/${id}/thread`),
+  contacts: () => api.get<{ contacts: string[] }>('/messages/contacts'),
   send: (body: SendMailRequest) => api.post<MessageSummary, SendMailRequest>('/messages/send', body),
   unreadCount: () => api.get<{ unread: number }>('/messages/unread-count'),
   markRead: (ids: number[], isRead: boolean, scope?: 'mine' | 'all') =>

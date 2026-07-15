@@ -3,17 +3,29 @@ import { type ClipboardEvent, type KeyboardEvent, useState } from 'react';
 import { emailAddressSchema } from '@hpc-mail/shared';
 import { cn } from '@/lib/cn';
 
+let datalistSeq = 0;
+
 export interface RecipientInputProps {
   value: string[];
   onChange: (value: string[]) => void;
   id?: string;
   placeholder?: string;
+  /** 近期联系人建议（原生 datalist 自动补全） */
+  suggestions?: string[];
   'aria-describedby'?: string;
 }
 
-export function RecipientInput({ value, onChange, id, placeholder, ...aria }: RecipientInputProps) {
+export function RecipientInput({
+  value,
+  onChange,
+  id,
+  placeholder,
+  suggestions,
+  ...aria
+}: RecipientInputProps) {
   const [text, setText] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [listId] = useState(() => `recip-dl-${++datalistSeq}`);
 
   const addToken = (raw: string) => {
     const candidate = raw.trim().replace(/[,;\s]+$/, '');
@@ -85,6 +97,7 @@ export function RecipientInput({ value, onChange, id, placeholder, ...aria }: Re
           id={id}
           {...aria}
           value={text}
+          list={suggestions && suggestions.length ? listId : undefined}
           placeholder={value.length === 0 ? placeholder : undefined}
           onChange={(event) => {
             setText(event.target.value);
@@ -95,6 +108,13 @@ export function RecipientInput({ value, onChange, id, placeholder, ...aria }: Re
           onBlur={() => addToken(text)}
           className="h-6 min-w-40 flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-ink-tertiary"
         />
+        {suggestions && suggestions.length > 0 && (
+          <datalist id={listId}>
+            {suggestions.filter((s) => !value.includes(s)).map((s) => (
+              <option key={s} value={s} />
+            ))}
+          </datalist>
+        )}
       </div>
       {error && <p className="text-xs text-critical">{error}</p>}
     </div>

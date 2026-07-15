@@ -37,6 +37,7 @@ import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { useUnreadCount } from '@/features/inbox/use-unread-count';
 import { cn } from '@/lib/cn';
 import { usePublicConfig } from '@/lib/use-config';
+import { useKeyboardShortcuts } from '@/lib/use-keyboard-shortcuts';
 import { useCurrentUser } from '@/lib/use-session';
 import { ChangePasswordDialog } from './change-password-dialog';
 import { PageLoader } from './page-loader';
@@ -245,6 +246,7 @@ export function AppShell() {
   const isAdmin = user.role === 'admin';
   const siteTitle = config?.siteTitle ?? 'HPC Mail';
   const unreadCount = unread?.unread ?? 0;
+  useKeyboardShortcuts();
 
   return (
     <div className="flex min-h-dvh flex-col bg-canvas md:flex-row">
