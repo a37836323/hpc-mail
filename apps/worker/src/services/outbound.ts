@@ -112,7 +112,7 @@ async function sendViaCloudflare(
   // 且集成测试不发外部邮件，延迟到真实发送时才加载
   const [{ EmailMessage }, { createMimeMessage }] = await Promise.all([
     import('cloudflare:email'),
-    import('mimetext'),
+    import('mimetext/browser'),
   ]);
   const msg = createMimeMessage();
   msg.setSender({ name: from.displayName, addr: from.address });
