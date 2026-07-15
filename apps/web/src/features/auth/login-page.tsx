@@ -122,7 +122,6 @@ export function LoginPage() {
         <div className="mb-6 flex flex-col items-center gap-2 text-center">
           <img src="/logo.png" alt="" className="size-12 rounded-lg" />
           <h1 className="text-lg font-semibold text-ink">{config?.siteTitle ?? 'HPC Mail'}</h1>
-          <p className="text-sm text-ink-secondary">多域名多用户邮箱系统</p>
         </div>
 
         <div className="rounded-lg border border-line bg-surface p-6 shadow-xs">
