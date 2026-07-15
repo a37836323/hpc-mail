@@ -6,7 +6,7 @@ import type {
   Page,
   Role,
 } from '@hpc-mail/shared';
-import { and, count, desc, eq, inArray, like, lt, or, type SQL } from 'drizzle-orm';
+import { and, count, desc, eq, gt, inArray, like, lt, or, type SQL } from 'drizzle-orm';
 import { createDb, type Db } from '../db/client.js';
 import { attachments as attachmentsTable, messages, stars } from '../db/schema.js';
 import { signAttachment } from '../lib/crypto.js';
@@ -111,6 +111,7 @@ export async function listMessages(
   }
   const cursorId = decodeCursor(query.cursor);
   if (cursorId) conds.push(lt(messages.id, cursorId));
+  if (query.afterId) conds.push(gt(messages.id, query.afterId));
 
   const where = and(...conds.filter((x): x is SQL => x !== undefined));
   const rows = await db

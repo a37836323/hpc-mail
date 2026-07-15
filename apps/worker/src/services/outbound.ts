@@ -46,6 +46,52 @@ function decodeBase64(b64: string): Uint8Array {
   return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
 }
 
+interface QuotaCounter {
+  count: number;
+  recipients: number;
+}
+
+function quotaKey(userId: number): string {
+  const day = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  return `quota:out:${userId}:${day}`;
+}
+
+/** 外发日配额校验：仅普通用户 + 有站外收件人时生效（admin 豁免） */
+async function assertOutboundQuota(
+  env: Env,
+  quota: { dailyOutbound: number; dailyRecipients: number },
+  sender: Sender,
+  externalCount: number,
+): Promise<void> {
+  if (sender.role === 'admin') return;
+  if (quota.dailyOutbound === 0 && quota.dailyRecipients === 0) return;
+  const cur =
+    ((await env.kv.get(quotaKey(sender.userId), { type: 'json' })) as QuotaCounter | null) ?? {
+      count: 0,
+      recipients: 0,
+    };
+  if (quota.dailyOutbound > 0 && cur.count + 1 > quota.dailyOutbound) {
+    throw new AppError('rate_limited', `已达每日外发上限（${quota.dailyOutbound} 封），请明日再试`);
+  }
+  if (quota.dailyRecipients > 0 && cur.recipients + externalCount > quota.dailyRecipients) {
+    throw new AppError('rate_limited', `已达每日外发收件人上限（${quota.dailyRecipients}）`);
+  }
+}
+
+/** 记一次外发消耗（一封 + externalCount 个站外收件人），TTL 3 天自然过期 */
+async function bumpOutboundQuota(env: Env, sender: Sender, externalCount: number): Promise<void> {
+  if (sender.role === 'admin') return;
+  const key = quotaKey(sender.userId);
+  const cur =
+    ((await env.kv.get(key, { type: 'json' })) as QuotaCounter | null) ?? {
+      count: 0,
+      recipients: 0,
+    };
+  cur.count += 1;
+  cur.recipients += externalCount;
+  await env.kv.put(key, JSON.stringify(cur), { expirationTtl: 3 * 24 * 3600 });
+}
+
 async function resolveFrom(
   env: Env,
   sender: Sender,
@@ -272,6 +318,8 @@ export async function sendMail(
   let errorDetail = '';
   let sendChannel = hasExternal ? 'cloudflare' : 'internal';
   if (hasExternal) {
+    // 外发日配额（普通用户）：发送前校验，防被盗账号脚本化群发
+    await assertOutboundQuota(env, settings.quota, sender, externalTargets.length);
     const token = settings.resend.tokens[from.domain];
     const channelsUsed = new Set<string>();
     const failures: string[] = [];
@@ -309,6 +357,11 @@ export async function sendMail(
       status = 'sent';
       errorDetail = `部分收件人失败: ${failures.join('; ')}`;
     }
+  }
+
+  // 至少部分送达才计入配额（全失败不烧信誉，不计数）
+  if (hasExternal && status !== 'failed') {
+    await bumpOutboundQuota(env, sender, externalTargets.length);
   }
 
   // outbound 行落库

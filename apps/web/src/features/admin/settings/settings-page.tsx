@@ -48,6 +48,47 @@ function ToggleRow({
   );
 }
 
+function NumberRow({
+  label,
+  description,
+  value,
+  onChange,
+  min = 0,
+  max,
+  suffix,
+}: {
+  label: string;
+  description?: string;
+  value: number;
+  onChange: (value: number) => void;
+  min?: number;
+  max?: number;
+  suffix?: string;
+}) {
+  return (
+    <label className="flex items-center justify-between gap-4">
+      <span className="flex flex-col">
+        <span className="text-sm font-medium text-ink">{label}</span>
+        {description && <span className="text-xs text-ink-tertiary">{description}</span>}
+      </span>
+      <span className="flex shrink-0 items-center gap-2">
+        <Input
+          type="number"
+          className="w-28 text-right"
+          value={String(value)}
+          min={min}
+          max={max}
+          onChange={(event) => {
+            const n = Math.floor(Number(event.target.value));
+            if (Number.isFinite(n)) onChange(Math.max(min, max === undefined ? n : Math.min(max, n)));
+          }}
+        />
+        {suffix && <span className="text-xs text-ink-tertiary">{suffix}</span>}
+      </span>
+    </label>
+  );
+}
+
 export function SettingsPage() {
   const queryClient = useQueryClient();
   const { data, isLoading } = useQuery({ queryKey: queryKeys.admin.settings, queryFn: () => adminApi.getSettings() });
@@ -195,6 +236,82 @@ export function SettingsPage() {
               发送测试卡片
             </Button>
           </div>
+        </Section>
+
+        <Section
+          title="邮件保留策略"
+          description="catch-all 会收下发往任意地址的邮件，需定期清理防止无限膨胀撑爆存储。0 表示不清理。"
+        >
+          <NumberRow
+            label="未认领地址邮件保留"
+            description="发往无人认领地址的邮件（垃圾邮件主要来源）超期自动删除。建议 90 天。"
+            value={draft.retention.unclaimedDays}
+            onChange={(v) => patch((s) => void (s.retention.unclaimedDays = v))}
+            max={3650}
+            suffix="天"
+          />
+          <NumberRow
+            label="全局邮件保留上限"
+            description="所有邮件（含已认领）的总保留上限兜底。0 表示不限，谨慎开启。"
+            value={draft.retention.allMessagesDays}
+            onChange={(v) => patch((s) => void (s.retention.allMessagesDays = v))}
+            max={3650}
+            suffix="天"
+          />
+        </Section>
+
+        <Section
+          title="外发配额"
+          description="限制普通用户每日外发量，防被盗账号脚本化群发。管理员不受限。0 表示不限。"
+        >
+          <NumberRow
+            label="每日外发邮件上限"
+            value={draft.quota.dailyOutbound}
+            onChange={(v) => patch((s) => void (s.quota.dailyOutbound = v))}
+            max={100000}
+            suffix="封/天"
+          />
+          <NumberRow
+            label="每日外发收件人上限"
+            description="站外收件人总数（站内互投不计）。"
+            value={draft.quota.dailyRecipients}
+            onChange={(v) => patch((s) => void (s.quota.dailyRecipients = v))}
+            max={1000000}
+            suffix="人/天"
+          />
+        </Section>
+
+        <Section
+          title="邮箱认领策略"
+          description="约束普通用户认领行为（管理员不受限）。"
+        >
+          <NumberRow
+            label="每用户认领上限"
+            description="单个普通用户最多可认领的地址数。0 表示不限。"
+            value={draft.mailbox_policy.perUserLimit}
+            onChange={(v) => patch((s) => void (s.mailbox_policy.perUserLimit = v))}
+            max={10000}
+            suffix="个"
+          />
+          <label className="flex flex-col gap-1.5">
+            <span className="text-sm font-medium text-ink">保留前缀</span>
+            <span className="text-xs text-ink-tertiary">
+              普通用户禁止认领这些前缀（防冒充官方身份），逗号分隔。
+            </span>
+            <Input
+              value={draft.mailbox_policy.reservedLocalParts.join(', ')}
+              placeholder="admin, postmaster, abuse, noreply"
+              onChange={(event) =>
+                patch(
+                  (s) =>
+                    void (s.mailbox_policy.reservedLocalParts = event.target.value
+                      .split(/[,\s]+/)
+                      .map((x) => x.trim().toLowerCase())
+                      .filter(Boolean)),
+                )
+              }
+            />
+          </label>
         </Section>
 
         <Section title="Resend 外发" description="按发件域名配置 Resend API Token，用于站外投递。">

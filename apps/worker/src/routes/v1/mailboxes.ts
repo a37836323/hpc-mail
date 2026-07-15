@@ -22,7 +22,7 @@ app.post('/', async (c) => {
   requireScope(c, 'mailbox.write');
   const key = c.get('apiKey')!;
   const req = await parseBody(c, claimMailboxRequestSchema);
-  return ok(c, await claimMailbox(c.env, key.userId, req), 201);
+  return ok(c, await claimMailbox(c.env, key.userId, key.role, req), 201);
 });
 
 export default app;

@@ -55,7 +55,10 @@ export const mailboxApi = {
   claim: (body: ClaimMailboxRequest) => api.post<Mailbox, ClaimMailboxRequest>('/mailboxes', body),
   update: (id: number, body: UpdateMailboxRequest) =>
     api.put<Mailbox, UpdateMailboxRequest>(`/mailboxes/${id}`, body),
-  release: (id: number) => api.delete<void>(`/mailboxes/${id}`),
+  release: (id: number, deleteHistory = false) =>
+    api.delete<{ success: boolean; deletedMessages: number }>(`/mailboxes/${id}`, undefined, {
+      query: { deleteHistory: deleteHistory ? 1 : undefined },
+    }),
   availability: (localPart: string, domain: string) =>
     api.get<MailboxAvailability>('/mailboxes/availability', { query: { localPart, domain } }),
 };

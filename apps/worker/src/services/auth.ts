@@ -20,6 +20,8 @@ import { getSettings } from './setting.js';
 
 const LOGIN_WINDOW_SECONDS = 15 * 60;
 const MAX_FAILURES = 5;
+const REGISTER_WINDOW_SECONDS = 60 * 60;
+const MAX_REGISTER_PER_WINDOW = 10;
 
 interface FailureRecord {
   count: number;
@@ -66,6 +68,22 @@ async function resetLoginFailures(env: Env, username: string, ip: string): Promi
   await Promise.all(keys.map((k) => env.kv.delete(k)));
 }
 
+/** 注册按 IP 限流：每 IP 每小时上限（含失败尝试），堵开放模式灌号与邀请码暴力猜测 */
+async function assertRegisterAllowed(env: Env, ip: string): Promise<void> {
+  const key = `register:ip:${await sha256Hex(ip.toLowerCase())}`;
+  const rec = await env.kv.get<{ count: number }>(key, { type: 'json' });
+  if (rec && rec.count >= MAX_REGISTER_PER_WINDOW) {
+    throw new AppError('rate_limited', '注册尝试过于频繁，请稍后再试');
+  }
+}
+
+async function recordRegisterAttempt(env: Env, ip: string): Promise<void> {
+  const key = `register:ip:${await sha256Hex(ip.toLowerCase())}`;
+  const rec = (await env.kv.get<{ count: number }>(key, { type: 'json' })) ?? { count: 0 };
+  rec.count += 1;
+  await env.kv.put(key, JSON.stringify(rec), { expirationTtl: REGISTER_WINDOW_SECONDS });
+}
+
 function toSessionUser(row: typeof users.$inferSelect): SessionUser {
   return {
     id: row.id,
@@ -107,6 +125,8 @@ export async function login(env: Env, req: LoginRequest, ip: string): Promise<Lo
 }
 
 export async function register(env: Env, req: RegisterRequest, ip: string): Promise<LoginResponse> {
+  await assertRegisterAllowed(env, ip);
+  await recordRegisterAttempt(env, ip);
   const settings = await getSettings(env);
   const mode = settings.register_mode;
   if (mode === 'closed') throw new AppError('registration_closed', '注册已关闭');

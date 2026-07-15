@@ -34,6 +34,8 @@ export const listMessagesQuerySchema = z.object({
   q: z.string().trim().max(256).optional(),
   /** admin 专用：'mine' 只看自己认领地址（默认全站） */
   scope: z.enum(['mine', 'all']).optional(),
+  /** 增量拉取：只返回 id 大于该值的邮件（配合轮询/长轮询等码，避免漏检） */
+  afterId: z.coerce.number().int().positive().optional(),
   cursor: z.string().max(128).optional(),
   limit: z.coerce.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE),
 });

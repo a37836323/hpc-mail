@@ -208,10 +208,45 @@ curl -s -X POST $BASE/api/messages/delete -H "Authorization: Bearer $TOKEN" -H '
 # 用 $TOKEN 创建 key，data.key 是完整密钥（形如 hpcm_xxxx），只返回这一次，务必保存
 curl -s -X POST $BASE/api/api-keys -H "Authorization: Bearer $TOKEN" \
   -H 'Content-Type: application/json' \
-  -d '{"name":"my-agent","scopes":["mail.read","mail.send","mailbox.read","mailbox.write"]}'
+  -d '{"name":"my-agent","scopes":["mail.read","mail.write","mail.send","mailbox.read","mailbox.write"]}'
 ```
 
-之后用 `Authorization: Bearer hpcm_xxxx` 调用 `/v1`：`GET /v1/status`、`GET /v1/domains`、`GET|POST /v1/mailboxes`、`GET /v1/messages`（过滤参数同上）、`GET /v1/messages/:id`（含 verificationCode）、`GET /v1/messages/:id/attachments/:attId`、`POST /v1/messages`（发送，body 同上）。`/v1` 响应带 `X-RateLimit-*` 头，超限返回 429。
+**scope 说明**：`mail.read`（读邮件/验证码）、`mail.write`（标记已读、删除邮件）、`mail.send`（发信/回复）、`mailbox.read`（列邮箱）、`mailbox.write`（认领/释放）。按需最小授权。
+
+之后用 `Authorization: Bearer hpcm_xxxx` 调用 `/v1`：
+
+| 方法 | 路径 | scope | 说明 |
+|------|------|-------|------|
+| GET | `/v1/status` | — | 探活，返回 key 的 userId/role/scopes |
+| GET | `/v1/domains` | — | 可用系统域名 |
+| GET / POST | `/v1/mailboxes` | mailbox.read / mailbox.write | 列出 / 认领邮箱 |
+| GET | `/v1/messages` | mail.read | 收发件列表（过滤参数同 `/api`）|
+| GET | `/v1/messages/wait?address=&afterId=&timeout=25` | mail.read | **长轮询**：hold 到有 `id>afterId` 的新邮件即返回，专为等验证码设计 |
+| GET | `/v1/messages/:id` | mail.read | 详情（含 verificationCode）|
+| GET | `/v1/messages/:id/attachments/:attId` | mail.read | 下载附件 |
+| POST | `/v1/messages` | mail.send | 发送 / 回复（body 同上）|
+| POST | `/v1/messages/read` | mail.write | 批量标记已读 `{ids,isRead}` |
+| POST | `/v1/messages/delete` | mail.write | 批量删除 `{ids}` |
+
+`/v1` 响应带 `X-RateLimit-*` 头，超限返回 429。
+
+### 用长轮询高效等验证码（推荐）
+
+有 `mail.write`/`mail.read` 的 key 不必自己写轮询循环，用 wait 端点一步到位——服务端最多 hold `timeout` 秒，一有新邮件立即返回：
+
+```bash
+ADDR="bot@hpc.email"
+# 先拿当前最新 id 作为基线
+LAST=$(curl -s "$BASE/v1/messages?direction=inbound&address=$ADDR&limit=1" \
+  -H "Authorization: Bearer $KEY" \
+  | python3 -c "import json,sys;i=json.load(sys.stdin)['data']['items'];print(i[0]['id'] if i else 0)")
+# ……触发验证码邮件……
+# 长轮询：返回第一封 id>LAST 的新邮件（含 verificationCode），或 timeout 后返回 {message:null}
+curl -s "$BASE/v1/messages/wait?address=$ADDR&afterId=$LAST&timeout=25" \
+  -H "Authorization: Bearer $KEY"
+# → { "data": { "message": { "id":.., "verificationCode":"482913", ... } } }  命中
+# → { "data": { "message": null } }  超时未等到，再调一次即可
+```
 
 ---
 

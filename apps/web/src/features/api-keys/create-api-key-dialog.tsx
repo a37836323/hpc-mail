@@ -23,6 +23,7 @@ import { toast } from '@/components/ui/toast';
 
 const SCOPE_LABELS: Record<ApiScope, string> = {
   'mail.read': '读取邮件',
+  'mail.write': '标记已读/删除',
   'mail.send': '发送邮件',
   'mailbox.read': '读取邮箱',
   'mailbox.write': '管理邮箱',

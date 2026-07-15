@@ -88,16 +88,45 @@ describe('mailbox 认领唯一冲突', () => {
     await setDomains();
     const u1 = await seedUser('alice', 'user');
     const u2 = await seedUser('bob', 'user');
-    const box = await claimMailbox(env, u1, { localPart: 'test1', domain: 'claude-router.cc' });
+    const box = await claimMailbox(env, u1, 'user', { localPart: 'test1', domain: 'claude-router.cc' });
     expect(box.address).toBe('test1@claude-router.cc');
 
     await expect(
-      claimMailbox(env, u2, { localPart: 'test1', domain: 'claude-router.cc' }),
+      claimMailbox(env, u2, 'user', { localPart: 'test1', domain: 'claude-router.cc' }),
     ).rejects.toThrow(AppError);
 
     await expect(
-      claimMailbox(env, u1, { localPart: 'x', domain: 'not-a-system-domain.com' }),
+      claimMailbox(env, u1, 'user', { localPart: 'x', domain: 'not-a-system-domain.com' }),
     ).rejects.toMatchObject({ code: 'validation_failed' });
+  });
+});
+
+describe('mailbox 认领策略', () => {
+  it('普通用户禁止认领保留前缀，admin 豁免', async () => {
+    await setDomains();
+    const uid = await seedUser('dave', 'user');
+    const adminId = await seedUser('root2', 'admin');
+    await expect(
+      claimMailbox(env, uid, 'user', { localPart: 'admin', domain: 'hpc.email' }),
+    ).rejects.toMatchObject({ code: 'forbidden' });
+    const box = await claimMailbox(env, adminId, 'admin', {
+      localPart: 'postmaster',
+      domain: 'hpc.email',
+    });
+    expect(box.address).toBe('postmaster@hpc.email');
+  });
+
+  it('普通用户认领数达上限被拒', async () => {
+    await updateSettings(env, { mailbox_policy: { perUserLimit: 2, reservedLocalParts: [] } });
+    await setDomains();
+    const uid = await seedUser('eve', 'user');
+    await claimMailbox(env, uid, 'user', { localPart: 'eve1', domain: 'hpc.email' });
+    await claimMailbox(env, uid, 'user', { localPart: 'eve2', domain: 'hpc.email' });
+    await expect(
+      claimMailbox(env, uid, 'user', { localPart: 'eve3', domain: 'hpc.email' }),
+    ).rejects.toMatchObject({ code: 'forbidden' });
+    // 恢复宽松策略，避免污染同文件后续用例（共享存储）
+    await updateSettings(env, { mailbox_policy: { perUserLimit: 50, reservedLocalParts: [] } });
   });
 });
 
@@ -111,7 +140,7 @@ describe('message 可见性 user vs admin', () => {
 
   it('user 只看自己认领地址', async () => {
     const uid = await seedUser('carol', 'user');
-    await claimMailbox(env, uid, { localPart: 'carol', domain: 'claude-router.cc' });
+    await claimMailbox(env, uid, 'user', { localPart: 'carol', domain: 'claude-router.cc' });
     const page = await listMessages(
       env,
       { userId: uid, role: 'user' },
@@ -193,7 +222,7 @@ describe('动态域名 getDomains（纯 settings 驱动，无 fallback）', () =
 
     const uid = await seedUser('empty-dom-user', 'user');
     await expect(
-      claimMailbox(env, uid, { localPart: 'x', domain: 'hpc.email' }),
+      claimMailbox(env, uid, 'user', { localPart: 'x', domain: 'hpc.email' }),
     ).rejects.toMatchObject({ code: 'validation_failed' });
   });
 
@@ -202,12 +231,12 @@ describe('动态域名 getDomains（纯 settings 驱动，无 fallback）', () =
     expect(await getDomains(env)).toEqual(['custom-domain.io', 'hpc.email']);
 
     const uid = await seedUser('dom-user', 'user');
-    const box = await claimMailbox(env, uid, { localPart: 'hi', domain: 'custom-domain.io' });
+    const box = await claimMailbox(env, uid, 'user', { localPart: 'hi', domain: 'custom-domain.io' });
     expect(box.address).toBe('hi@custom-domain.io');
 
     // 不在 list 的域名被拒
     await expect(
-      claimMailbox(env, uid, { localPart: 'x', domain: 'riba2534.cn' }),
+      claimMailbox(env, uid, 'user', { localPart: 'x', domain: 'riba2534.cn' }),
     ).rejects.toMatchObject({ code: 'validation_failed' });
   });
 });
@@ -216,7 +245,7 @@ describe('收件箱未读数 countUnread', () => {
   it('user 只数自己认领地址的 inbound 未读，已读不计', async () => {
     await setDomains();
     const uid = await seedUser('unread-user', 'user');
-    await claimMailbox(env, uid, { localPart: 'ur', domain: 'hpc.email' });
+    await claimMailbox(env, uid, 'user', { localPart: 'ur', domain: 'hpc.email' });
 
     // 认领地址下 2 封未读 inbound
     await seedInbound('ur@hpc.email', 'unread 1');
@@ -233,7 +262,7 @@ describe('收件箱未读数 countUnread', () => {
   it('admin 也只数自己认领地址（scope=mine，非全站）', async () => {
     await setDomains();
     const adminId = await seedUser('unread-admin', 'admin');
-    await claimMailbox(env, adminId, { localPart: 'boss', domain: 'hpc.email' });
+    await claimMailbox(env, adminId, 'admin', { localPart: 'boss', domain: 'hpc.email' });
 
     await seedInbound('boss@hpc.email', 'mine unread'); // 计
     await seedInbound('elsewhere@hpc.email', 'site unread'); // 全站有未读但非自己认领 → 不计
@@ -253,7 +282,7 @@ describe('回复头 replyToMessageId', () => {
     await setDomains();
     const db = createDb(env);
     const uid = await seedUser('reply-user', 'user');
-    await claimMailbox(env, uid, { localPart: 'me', domain: 'hpc.email' });
+    await claimMailbox(env, uid, 'user', { localPart: 'me', domain: 'hpc.email' });
     const [orig] = await db
       .insert(messages)
       .values({

@@ -7,7 +7,13 @@ export type Role = (typeof ROLES)[number];
 export const USER_STATUSES = ['active', 'disabled'] as const;
 export type UserStatus = (typeof USER_STATUSES)[number];
 
-export const API_SCOPES = ['mail.read', 'mail.send', 'mailbox.read', 'mailbox.write'] as const;
+export const API_SCOPES = [
+  'mail.read',
+  'mail.write',
+  'mail.send',
+  'mailbox.read',
+  'mailbox.write',
+] as const;
 export type ApiScope = (typeof API_SCOPES)[number];
 
 export const MESSAGE_DIRECTIONS = ['inbound', 'outbound'] as const;
@@ -45,3 +51,22 @@ export const LOCAL_PART_REGEX = /^[a-z0-9](?:[a-z0-9._+-]{0,62}[a-z0-9])?$/;
 
 export const PASSWORD_MIN_LENGTH = 8;
 export const PASSWORD_MAX_LENGTH = 128;
+
+/** 默认保留前缀：普通用户禁止认领这些「官方/系统」身份（admin 豁免） */
+export const DEFAULT_RESERVED_LOCAL_PARTS = [
+  'admin',
+  'administrator',
+  'postmaster',
+  'hostmaster',
+  'webmaster',
+  'abuse',
+  'security',
+  'root',
+  'noreply',
+  'no-reply',
+  'mailer-daemon',
+  'support',
+  'billing',
+  'info',
+  'help',
+] as const;

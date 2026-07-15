@@ -33,7 +33,7 @@ app.get('/availability', async (c) => {
 app.post('/', async (c) => {
   const user = c.get('user')!;
   const req = await parseBody(c, claimMailboxRequestSchema);
-  return ok(c, await claimMailbox(c.env, user.id, req), 201);
+  return ok(c, await claimMailbox(c.env, user.id, user.role, req), 201);
 });
 
 app.put('/:id', async (c) => {
@@ -46,8 +46,9 @@ app.put('/:id', async (c) => {
 app.delete('/:id', async (c) => {
   const user = c.get('user')!;
   const id = parseId(c.req.param('id'));
-  await releaseMailbox(c.env, user.id, id, user.role === 'admin');
-  return ok(c, { success: true });
+  const deleteHistory = c.req.query('deleteHistory') === '1';
+  const result = await releaseMailbox(c.env, user.id, id, user.role === 'admin', deleteHistory);
+  return ok(c, { success: true, ...result });
 });
 
 export default app;

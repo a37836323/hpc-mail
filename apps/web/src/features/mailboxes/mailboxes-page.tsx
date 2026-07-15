@@ -6,7 +6,6 @@ import { queryKeys } from '@/api/query-keys';
 import { mailboxApi } from '@/api/resources';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
-import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader } from '@/components/ui/dialog';
 import { EmptyState } from '@/components/ui/empty-state';
 import { FormField } from '@/components/ui/form-field';
@@ -78,6 +77,84 @@ function EditMailboxDialog({ mailbox, onClose }: { mailbox: Mailbox | null; onCl
   );
 }
 
+function ReleaseDialog({
+  mailbox,
+  onClose,
+  onReleased,
+}: {
+  mailbox: Mailbox | null;
+  onClose: () => void;
+  onReleased: () => void;
+}) {
+  const [deleteHistory, setDeleteHistory] = useState(false);
+
+  const release = useMutation({
+    mutationFn: (args: { id: number; deleteHistory: boolean }) =>
+      mailboxApi.release(args.id, args.deleteHistory),
+    onSuccess: (res) => {
+      toast({
+        title: res.deletedMessages
+          ? `地址已释放，删除 ${res.deletedMessages} 封历史邮件`
+          : '地址已释放',
+        variant: 'success',
+      });
+      onReleased();
+      onClose();
+    },
+    onError: () => toast({ title: '释放失败，请重试', variant: 'error' }),
+  });
+
+  return (
+    <Dialog
+      open={mailbox !== null}
+      onOpenChange={(next) => {
+        if (!next) onClose();
+        else setDeleteHistory(false);
+      }}
+    >
+      <DialogContent className="max-w-md">
+        <DialogHeader title="释放这个地址？" description={mailbox?.address} />
+        <DialogBody>
+          <div className="flex flex-col gap-3 text-sm text-ink-secondary">
+            <p>释放后该地址回到未认领状态，其他用户可重新认领。</p>
+            {mailbox && mailbox.messageCount > 0 && (
+              <div className="rounded-md border border-caution/40 bg-caution-soft/40 p-3 text-ink">
+                <p className="font-medium text-caution">
+                  ⚠ 该地址有 {mailbox.messageCount} 封历史邮件
+                </p>
+                <p className="mt-1 text-xs text-ink-secondary">
+                  若不删除，下一个认领此地址的人将看到这些邮件的<b>全部内容</b>（含验证码、账单等敏感信息）。
+                </p>
+                <label className="mt-2 flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    className="size-4 accent-critical"
+                    checked={deleteHistory}
+                    onChange={(event) => setDeleteHistory(event.target.checked)}
+                  />
+                  <span className="text-sm text-ink">同时永久删除这些历史邮件</span>
+                </label>
+              </div>
+            )}
+          </div>
+        </DialogBody>
+        <DialogFooter>
+          <Button type="button" variant="secondary" onClick={onClose}>
+            取消
+          </Button>
+          <Button
+            variant="danger"
+            loading={release.isPending}
+            onClick={() => mailbox && release.mutate({ id: mailbox.id, deleteHistory })}
+          >
+            {deleteHistory ? '释放并删除历史' : '释放'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function MailboxesPage() {
   const queryClient = useQueryClient();
   const { data: config } = usePublicConfig();
@@ -86,15 +163,8 @@ export function MailboxesPage() {
   const [releasing, setReleasing] = useState<Mailbox | null>(null);
   const [editing, setEditing] = useState<Mailbox | null>(null);
 
-  const release = useMutation({
-    mutationFn: (id: number) => mailboxApi.release(id),
-    onSuccess: () => {
-      toast({ title: '地址已释放', variant: 'success' });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.mailboxes.root });
-      setReleasing(null);
-    },
-    onError: () => toast({ title: '释放失败，请重试', variant: 'error' }),
-  });
+  const invalidateMailboxes = () =>
+    void queryClient.invalidateQueries({ queryKey: queryKeys.mailboxes.root });
 
   const items = mailboxes ?? [];
 
@@ -157,19 +227,10 @@ export function MailboxesPage() {
 
       <ClaimDialog open={claimOpen} onOpenChange={setClaimOpen} domains={config?.domains ?? []} />
       <EditMailboxDialog mailbox={editing} onClose={() => setEditing(null)} />
-      <ConfirmDialog
-        open={releasing !== null}
-        onOpenChange={(next) => !next && setReleasing(null)}
-        title="释放这个地址？"
-        description={
-          releasing
-            ? `释放 ${releasing.address} 后，其他用户可重新认领；你将不再看到该地址的邮件。`
-            : undefined
-        }
-        confirmLabel="释放"
-        tone="danger"
-        loading={release.isPending}
-        onConfirm={() => releasing && release.mutate(releasing.id)}
+      <ReleaseDialog
+        mailbox={releasing}
+        onClose={() => setReleasing(null)}
+        onReleased={invalidateMailboxes}
       />
     </div>
   );
