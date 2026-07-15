@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Download, Forward, ImageOff, MailOpen, Paperclip, Reply, Star, Trash2 } from 'lucide-react';
+import { ArrowLeft, Download, Forward, ImageOff, MailOpen, Paperclip, Reply, ReplyAll, Star, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import type { MessageDetail } from '@hpc-mail/shared';
@@ -11,7 +11,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { IconButton } from '@/components/ui/icon-button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from '@/components/ui/toast';
-import { buildForward, buildReply } from '@/features/compose/compose-init';
+import { buildForward, buildReply, buildReplyAll, buildResend } from '@/features/compose/compose-init';
 import { useStarMutation } from '@/features/inbox/use-star';
 import { cn } from '@/lib/cn';
 import { countRemoteImages } from './count-remote-images';
@@ -56,19 +56,25 @@ export function MessagePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [message?.id, message?.isRead]);
 
+  // 直链/新标签页打开时无历史可退，回退到收件箱而非停在已 404 的详情
+  const goBack = () => {
+    if (window.history.length > 1) navigate(-1);
+    else navigate('/inbox');
+  };
+
   const deleteMutation = useMutation({
     mutationFn: () => messageApi.remove([messageId]),
     onSuccess: () => {
       toast({ title: '邮件已删除', variant: 'success' });
       void queryClient.invalidateQueries({ queryKey: queryKeys.messages.root });
-      navigate(-1);
+      goBack();
     },
     onError: () => toast({ title: '删除失败，请重试', variant: 'error' }),
   });
 
   const handleMarkUnread = () => {
     markRead.mutate(false);
-    navigate(-1);
+    goBack();
   };
 
   if (isLoading) {
@@ -98,9 +104,14 @@ export function MessagePage() {
     );
   }
 
-  const otpCode = message.verificationCode || extractOtp(message.subject, message.bodyText)?.code;
+  const outbound = message.direction === 'outbound';
+  // 验证码 banner 只对收到的邮件有意义，自己发出的邮件不提取/不展示
+  const otpCode = outbound
+    ? undefined
+    : message.verificationCode || extractOtp(message.subject, message.bodyText)?.code;
   const recipients = [...message.recipients.to, ...message.recipients.cc];
   const remoteImageCount = message.bodyHtml ? countRemoteImages(message.bodyHtml) : 0;
+  const sendIssue = outbound && (message.errorDetail || message.status === 'failed' || message.status === 'bounced');
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -113,6 +124,16 @@ export function MessagePage() {
             <Reply className="size-4" />
             回复
           </Button>
+          {message.recipients.to.length + message.recipients.cc.length > 1 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => navigate('/compose', { state: buildReplyAll(message) })}
+            >
+              <ReplyAll className="size-4" />
+              回复全部
+            </Button>
+          )}
           <Button variant="ghost" size="sm" onClick={() => navigate('/compose', { state: buildForward(message) })}>
             <Forward className="size-4" />
             转发
@@ -151,6 +172,23 @@ export function MessagePage() {
         </header>
 
         <div className="flex flex-col gap-4 px-5 py-5">
+          {sendIssue && (
+            <div className="rounded-md border border-critical/40 bg-critical-soft px-3 py-2.5 text-sm">
+              <p className="font-medium text-critical">
+                {message.status === 'failed' ? '发送失败' : message.status === 'bounced' ? '退信' : '部分收件人失败'}
+              </p>
+              {message.errorDetail && (
+                <p className="mt-1 break-words text-ink-secondary">{message.errorDetail}</p>
+              )}
+              <button
+                type="button"
+                className="mt-2 text-sm font-medium text-accent hover:underline"
+                onClick={() => navigate('/compose', { state: buildResend(message) })}
+              >
+                重新编辑并发送
+              </button>
+            </div>
+          )}
           {otpCode && <OtpBanner code={otpCode} />}
 
           {remoteImageCount > 0 && !showRemoteImages && (

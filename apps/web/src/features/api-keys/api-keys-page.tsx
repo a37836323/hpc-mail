@@ -137,7 +137,11 @@ export function ApiKeysPage() {
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center justify-end gap-1">
-                      {editable ? (
+                      <Button variant="ghost" size="sm" onClick={() => setAuditKey(key)}>
+                        <ScrollText className="size-4" />
+                        审计日志
+                      </Button>
+                      {editable && (
                         <>
                           <IconButton
                             size="sm"
@@ -151,11 +155,6 @@ export function ApiKeysPage() {
                             <Trash2 className="size-4 text-critical" />
                           </IconButton>
                         </>
-                      ) : (
-                        <Button variant="ghost" size="sm" onClick={() => setAuditKey(key)}>
-                          <ScrollText className="size-4" />
-                          审计日志
-                        </Button>
                       )}
                     </div>
                   </TableCell>
@@ -167,7 +166,7 @@ export function ApiKeysPage() {
       )}
 
       <CreateApiKeyDialog open={createOpen} onOpenChange={setCreateOpen} />
-      <AuditLogDialog apiKey={auditKey} onClose={() => setAuditKey(null)} />
+      <AuditLogDialog apiKey={auditKey} onClose={() => setAuditKey(null)} admin={view === 'all'} />
       <ConfirmDialog
         open={deleting !== null}
         onOpenChange={(next) => !next && setDeleting(null)}

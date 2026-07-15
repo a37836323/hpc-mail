@@ -98,6 +98,11 @@ export function MessageRow({
                 {status.label}
               </Badge>
             )}
+            {!outbound && (
+              <span className="ml-auto hidden max-w-[45%] shrink-0 truncate text-xs text-ink-tertiary sm:inline">
+                {message.address}
+              </span>
+            )}
           </div>
           {failed && message.errorDetail ? (
             <p className="mt-0.5 truncate text-sm text-critical">{message.errorDetail}</p>

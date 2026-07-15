@@ -54,6 +54,33 @@ function splitLocalPart(address: string | undefined): { localPart: string; domai
   return at > 0 ? { localPart: address.slice(0, at), domain: address.slice(at + 1) } : { localPart: '', domain: '' };
 }
 
+const DRAFT_KEY = 'hpc-compose-draft';
+interface ComposeDraft {
+  to: string[];
+  cc: string[];
+  bcc: string[];
+  subject: string;
+  body: string;
+  isHtml: boolean;
+}
+
+function readDraft(): ComposeDraft | null {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY);
+    return raw ? (JSON.parse(raw) as ComposeDraft) : null;
+  } catch {
+    return null;
+  }
+}
+
+function clearDraft() {
+  try {
+    localStorage.removeItem(DRAFT_KEY);
+  } catch {
+    // ignore
+  }
+}
+
 export function ComposePage() {
   const user = useCurrentUser();
   const navigate = useNavigate();
@@ -66,33 +93,68 @@ export function ComposePage() {
 
   const initial = useMemo<ComposeInitial>(() => (location.state as ComposeInitial | null) ?? {}, [location.state]);
   const initialIdentity = useMemo(() => splitLocalPart(initial.fromAddress), [initial.fromAddress]);
+  // 全新写信（无回复/转发预填）时恢复本地草稿；回复/转发有 location.state 则不覆盖
+  const savedDraft = useMemo(() => (location.state ? null : readDraft()), []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [mailboxId, setMailboxId] = useState<number | null>(null);
   const [localPart, setLocalPart] = useState(() => (isAdmin ? initialIdentity.localPart : ''));
   const [adminDomain, setAdminDomain] = useState(() => (isAdmin ? initialIdentity.domain : ''));
-  const [to, setTo] = useState<string[]>(initial.to ?? []);
-  const [cc, setCc] = useState<string[]>(initial.cc ?? []);
-  const [bcc, setBcc] = useState<string[]>([]);
-  const [showCc, setShowCc] = useState((initial.cc?.length ?? 0) > 0);
-  const [showBcc, setShowBcc] = useState(false);
-  const [subject, setSubject] = useState(initial.subject ?? '');
-  const [isHtml, setIsHtml] = useState(initial.isHtml ?? false);
-  const [body, setBody] = useState(initial.body ?? '');
+  const [to, setTo] = useState<string[]>(initial.to ?? savedDraft?.to ?? []);
+  const [cc, setCc] = useState<string[]>(initial.cc ?? savedDraft?.cc ?? []);
+  const [bcc, setBcc] = useState<string[]>(savedDraft?.bcc ?? []);
+  const [showCc, setShowCc] = useState((initial.cc?.length ?? savedDraft?.cc?.length ?? 0) > 0);
+  const [showBcc, setShowBcc] = useState((savedDraft?.bcc?.length ?? 0) > 0);
+  const [subject, setSubject] = useState(initial.subject ?? savedDraft?.subject ?? '');
+  const [isHtml, setIsHtml] = useState(initial.isHtml ?? savedDraft?.isHtml ?? false);
+  const [body, setBody] = useState(initial.body ?? savedDraft?.body ?? '');
   const [attachments, setAttachments] = useState<LocalAttachment[]>([]);
   const [error, setError] = useState<string | null>(null);
   const replyToMessageId = initial.replyToMessageId;
 
-  // 回复/转发预填了发件地址时，等自己的邮箱列表就绪后自动选中匹配项
+  // 预填了发件地址则选中匹配项；否则只有一个认领地址时自动选中（省一步手选）
   useEffect(() => {
-    if (isAdmin || mailboxId !== null || !initial.fromAddress) return;
-    const match = (mailboxes ?? []).find((box) => box.address === initial.fromAddress);
-    if (match) setMailboxId(match.id);
+    if (isAdmin || mailboxId !== null) return;
+    const boxes = mailboxes ?? [];
+    if (initial.fromAddress) {
+      const match = boxes.find((box) => box.address === initial.fromAddress);
+      if (match) setMailboxId(match.id);
+    } else if (boxes.length === 1) {
+      setMailboxId(boxes[0]!.id);
+    }
   }, [mailboxes, isAdmin, mailboxId, initial.fromAddress]);
+
+  // 草稿自动保存到 localStorage；有内容才存，清空则删；发送成功时清除
+  useEffect(() => {
+    const hasContent =
+      to.length > 0 || cc.length > 0 || bcc.length > 0 || subject.trim() !== '' || body.trim() !== '';
+    if (!hasContent) {
+      clearDraft();
+      return;
+    }
+    try {
+      localStorage.setItem(DRAFT_KEY, JSON.stringify({ to, cc, bcc, subject, body, isHtml }));
+    } catch {
+      // 存储不可用时静默
+    }
+  }, [to, cc, bcc, subject, body, isHtml]);
+
+  // 有未发送内容时离开页面/刷新给出浏览器原生拦截
+  useEffect(() => {
+    const dirty = to.length > 0 || subject.trim() !== '' || body.trim() !== '';
+    if (!dirty) return;
+    const handler = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [to.length, subject, body]);
 
   const sendMutation = useMutation({
     mutationFn: (payload: SendMailRequest) => messageApi.send(payload),
     onSuccess: () => {
       toast({ title: '邮件已发送', variant: 'success' });
+      clearDraft();
       void queryClient.invalidateQueries({ queryKey: queryKeys.messages.root });
       navigate('/sent');
     },
@@ -150,11 +212,14 @@ export function ComposePage() {
   };
 
   const attachmentTotal = attachments.reduce((sum, item) => sum + item.size, 0);
-  const title = replyToMessageId
-    ? '回复邮件'
-    : initial.subject?.toLowerCase().startsWith('fwd')
-      ? '转发邮件'
-      : '写邮件';
+  const title =
+    initial.mode === 'reply'
+      ? '回复邮件'
+      : initial.mode === 'forward'
+        ? '转发邮件'
+        : initial.mode === 'resend'
+          ? '重新发送'
+          : '写邮件';
 
   return (
     <div className="mx-auto max-w-2xl">

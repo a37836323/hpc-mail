@@ -4,6 +4,7 @@ import {
   markReadRequestSchema,
   sendMailRequestSchema,
   type ListMessagesQuery,
+  type MessageSummary,
 } from '@hpc-mail/shared';
 import { Hono } from 'hono';
 import { buildSecureHeaders } from '../../lib/attachment-security.js';
@@ -37,7 +38,21 @@ app.post('/', async (c) => {
   requireScope(c, 'mail.send');
   const key = c.get('apiKey')!;
   const req = await parseBody(c, sendMailRequestSchema);
+  // 幂等：带 Idempotency-Key 时按 (key, idemKey) 缓存结果 24h，超时重试不会重复发信
+  const idemKey = c.req.header('Idempotency-Key')?.trim();
+  const cacheKey = idemKey ? `idem:${key.id}:${idemKey}` : null;
+  if (cacheKey) {
+    const cached = await c.env.kv.get(cacheKey, { type: 'json' });
+    if (cached) return ok(c, cached as MessageSummary, 201);
+  }
   const summary = await sendMail(c.env, c.executionCtx, { userId: key.userId, role: key.role }, req);
+  if (cacheKey) {
+    try {
+      await c.env.kv.put(cacheKey, JSON.stringify(summary), { expirationTtl: 24 * 3600 });
+    } catch {
+      // 缓存写失败不影响发送结果
+    }
+  }
   return ok(c, summary, 201);
 });
 

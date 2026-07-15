@@ -85,6 +85,10 @@ export const apiKeyApi = {
     api.put<ApiKeySummary, UpdateApiKeyRequest>(`/api-keys/${id}`, body),
   remove: (id: number) => api.delete<void>(`/api-keys/${id}`),
   listAll: () => api.get<ApiKeySummary[]>('/admin/api-keys'),
+  /** 自助：查看自己 key 的调用审计 */
+  logsMine: (id: number, cursor?: string, limit = 30) =>
+    api.get<Page<ApiRequestLogEntry>>(`/api-keys/${id}/logs`, { query: { cursor, limit } }),
+  /** admin：查看全站任意 key 的审计 */
   logs: (id: number, cursor?: string, limit = 30) =>
     api.get<Page<ApiRequestLogEntry>>(`/admin/api-keys/${id}/logs`, { query: { cursor, limit } }),
   revokeAdmin: (id: number) => api.delete<void>(`/admin/api-keys/${id}`),

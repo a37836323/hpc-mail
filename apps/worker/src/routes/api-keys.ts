@@ -1,3 +1,4 @@
+import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from '@hpc-mail/shared';
 import { createApiKeyRequestSchema, updateApiKeyRequestSchema } from '@hpc-mail/shared';
 import { Hono } from 'hono';
 import { ok, parseBody, parseId } from '../lib/http.js';
@@ -5,6 +6,7 @@ import { requireAuth } from '../middleware/auth.js';
 import {
   createApiKey,
   getApiKey,
+  listApiKeyLogs,
   listApiKeys,
   revokeApiKey,
   updateApiKey,
@@ -30,6 +32,19 @@ app.get('/:id', async (c) => {
   const user = c.get('user')!;
   const id = parseId(c.req.param('id'));
   return ok(c, await getApiKey(c.env, id, user.id));
+});
+
+/** 自助审计日志：先按 userId 校验归属（非本人 key 抛 not_found），再返回日志 */
+app.get('/:id/logs', async (c) => {
+  const user = c.get('user')!;
+  const id = parseId(c.req.param('id'));
+  await getApiKey(c.env, id, user.id);
+  const cursor = c.req.query('cursor');
+  const limitRaw = Number(c.req.query('limit'));
+  const limit = Number.isInteger(limitRaw)
+    ? Math.min(MAX_PAGE_SIZE, Math.max(1, limitRaw))
+    : DEFAULT_PAGE_SIZE;
+  return ok(c, await listApiKeyLogs(c.env, id, cursor, limit));
 });
 
 app.put('/:id', async (c) => {

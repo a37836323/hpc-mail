@@ -6,7 +6,7 @@ import type {
   Page,
   Role,
 } from '@hpc-mail/shared';
-import { and, count, desc, eq, gt, inArray, like, lt, or, type SQL } from 'drizzle-orm';
+import { and, count, desc, eq, gt, inArray, lt, or, sql, type SQL } from 'drizzle-orm';
 import { createDb, type Db } from '../db/client.js';
 import { attachments as attachmentsTable, messages, stars } from '../db/schema.js';
 import { signAttachment } from '../lib/crypto.js';
@@ -101,12 +101,17 @@ export async function listMessages(
     );
   }
   if (query.q) {
-    const term = `%${query.q}%`;
+    // 转义 LIKE 通配符（% _ \），否则用户搜 "50%" 会变成任意匹配；配 ESCAPE 子句生效
+    const escaped = query.q.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+    const term = `%${escaped}%`;
     conds.push(
       or(
-        like(messages.subject, term),
-        like(messages.fromAddress, term),
-        like(messages.bodyText, term),
+        sql`${messages.subject} LIKE ${term} ESCAPE '\\'`,
+        sql`${messages.fromAddress} LIKE ${term} ESCAPE '\\'`,
+        sql`${messages.fromName} LIKE ${term} ESCAPE '\\'`,
+        sql`${messages.bodyText} LIKE ${term} ESCAPE '\\'`,
+        // recipients 存的是 JSON 文本，对其 LIKE 即可按收件人搜索（已发送找「发给谁」）
+        sql`${messages.recipients} LIKE ${term} ESCAPE '\\'`,
       ),
     );
   }

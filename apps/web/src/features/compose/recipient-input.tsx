@@ -1,5 +1,5 @@
 import { X } from 'lucide-react';
-import { type KeyboardEvent, useState } from 'react';
+import { type ClipboardEvent, type KeyboardEvent, useState } from 'react';
 import { emailAddressSchema } from '@hpc-mail/shared';
 import { cn } from '@/lib/cn';
 
@@ -37,6 +37,26 @@ export function RecipientInput({ value, onChange, id, placeholder, ...aria }: Re
     }
   };
 
+  // 粘贴含分隔符的多个地址时一次性解析（如从表格/邮件头复制 "a@x.com, b@y.com"）
+  const handlePaste = (event: ClipboardEvent<HTMLInputElement>) => {
+    const pasted = event.clipboardData.getData('text');
+    if (!/[,;\s]/.test(pasted)) return;
+    event.preventDefault();
+    const parts = pasted.split(/[,;\s]+/).map((s) => s.trim()).filter(Boolean);
+    const next = [...value];
+    let firstError: string | null = null;
+    for (const part of parts) {
+      const parsed = emailAddressSchema.safeParse(part);
+      if (parsed.success) {
+        if (!next.includes(parsed.data)) next.push(parsed.data);
+      } else if (!firstError) {
+        firstError = `“${part}” 不是有效的邮箱地址`;
+      }
+    }
+    if (next.length !== value.length) onChange(next);
+    setError(firstError);
+  };
+
   return (
     <div className="flex flex-col gap-1">
       <div
@@ -71,6 +91,7 @@ export function RecipientInput({ value, onChange, id, placeholder, ...aria }: Re
             if (error) setError(null);
           }}
           onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
           onBlur={() => addToken(text)}
           className="h-6 min-w-40 flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-ink-tertiary"
         />

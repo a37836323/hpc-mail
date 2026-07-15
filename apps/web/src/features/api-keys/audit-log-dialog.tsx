@@ -16,10 +16,20 @@ function statusTone(code: number): BadgeTone {
   return 'positive';
 }
 
-export function AuditLogDialog({ apiKey, onClose }: { apiKey: ApiKeySummary | null; onClose: () => void }) {
+export function AuditLogDialog({
+  apiKey,
+  onClose,
+  admin = false,
+}: {
+  apiKey: ApiKeySummary | null;
+  onClose: () => void;
+  /** admin 全站视图走 /admin 端点；自助视图走 /api-keys/:id/logs */
+  admin?: boolean;
+}) {
   const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery({
-    queryKey: ['api-keys', 'logs', apiKey?.id],
-    queryFn: ({ pageParam }) => apiKeyApi.logs(apiKey!.id, pageParam || undefined),
+    queryKey: ['api-keys', 'logs', admin ? 'admin' : 'mine', apiKey?.id],
+    queryFn: ({ pageParam }) =>
+      (admin ? apiKeyApi.logs : apiKeyApi.logsMine)(apiKey!.id, pageParam || undefined),
     initialPageParam: '',
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
     enabled: apiKey !== null,

@@ -224,7 +224,7 @@ curl -s -X POST $BASE/api/api-keys -H "Authorization: Bearer $TOKEN" \
 | GET | `/v1/messages/wait?address=&afterId=&timeout=25` | mail.read | **长轮询**：hold 到有 `id>afterId` 的新邮件即返回，专为等验证码设计 |
 | GET | `/v1/messages/:id` | mail.read | 详情（含 verificationCode）|
 | GET | `/v1/messages/:id/attachments/:attId` | mail.read | 下载附件 |
-| POST | `/v1/messages` | mail.send | 发送 / 回复（body 同上）|
+| POST | `/v1/messages` | mail.send | 发送 / 回复（body 同上；带 `Idempotency-Key: <唯一串>` 头可去重，24h 内同 key 重试不重复发信）|
 | POST | `/v1/messages/read` | mail.write | 批量标记已读 `{ids,isRead}` |
 | POST | `/v1/messages/delete` | mail.write | 批量删除 `{ids}` |
 
