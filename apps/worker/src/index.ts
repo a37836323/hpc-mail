@@ -12,7 +12,14 @@ export default {
       return app.fetch(request, env, ctx);
     }
     // 其余路径交给静态资源（SPA fallback 由 assets 处理）
-    return env.assets.fetch(request);
+    const res = await env.assets.fetch(request);
+    // .md（如 /skill.md）assets 默认不带 charset，浏览器会按非 UTF-8 解析导致中文乱码，补上
+    if (url.pathname.endsWith('.md')) {
+      const headers = new Headers(res.headers);
+      headers.set('Content-Type', 'text/markdown; charset=utf-8');
+      return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
+    }
+    return res;
   },
 
   async email(message: ForwardableEmailMessage, env: Env, ctx: ExecutionContext): Promise<void> {
