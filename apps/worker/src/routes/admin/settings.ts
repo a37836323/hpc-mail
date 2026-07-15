@@ -1,8 +1,10 @@
-import { updateSettingsRequestSchema } from '@hpc-mail/shared';
+import { domainSchema, updateSettingsRequestSchema } from '@hpc-mail/shared';
 import { Hono } from 'hono';
+import { AppError } from '../../lib/errors.js';
 import { clientIp, ok, parseBody } from '../../lib/http.js';
 import { requireAdmin, requireAuth } from '../../middleware/auth.js';
 import { logAdminAction } from '../../services/audit.js';
+import { checkDomainOnboarding } from '../../services/domain-check.js';
 import { sendFeishuNotification } from '../../services/feishu.js';
 import { getSettings, maskSettings, updateSettings } from '../../services/setting.js';
 import type { AppContext } from '../../types.js';
@@ -23,6 +25,15 @@ app.put('/', async (c) => {
   await logAdminAction(c.env, acting, 'settings.update', Object.keys(req).join('、'), '', clientIp(c));
   const settings = await getSettings(c.env);
   return ok(c, maskSettings(settings));
+});
+
+/** 域名接入自检：DoH 探测该域 MX 是否已指向 Cloudflare Email Routing（无需 CF 凭据） */
+app.get('/domain-status', async (c) => {
+  const parsed = domainSchema.safeParse((c.req.query('domain') ?? '').trim().toLowerCase());
+  if (!parsed.success) throw new AppError('validation_failed', '域名格式非法');
+  const settings = await getSettings(c.env);
+  const status = await checkDomainOnboarding(parsed.data, settings.domains.list.includes(parsed.data));
+  return ok(c, status);
 });
 
 /** 用当前保存的飞书配置发一张测试卡片 */

@@ -10,6 +10,7 @@ import type {
   CreateInviteRequest,
   CreateUserRequest,
   DisableTwoFactorRequest,
+  DomainOnboardingStatus,
   TwoFactorEnabled,
   TwoFactorSetup,
   Invite,
@@ -120,6 +121,8 @@ export const adminApi = {
   updateSettings: (body: UpdateSettingsRequest) =>
     api.put<Settings, UpdateSettingsRequest>('/admin/settings', body),
   testFeishu: () => api.post<{ ok: boolean }>('/admin/settings/feishu-test'),
+  domainStatus: (domain: string) =>
+    api.get<DomainOnboardingStatus>('/admin/settings/domain-status', { query: { domain } }),
   listInvites: () => api.get<Invite[]>('/admin/invites'),
   createInvites: (body: CreateInviteRequest) => api.post<Invite[], CreateInviteRequest>('/admin/invites', body),
   revokeInvite: (id: number) => api.delete<void>(`/admin/invites/${id}`),

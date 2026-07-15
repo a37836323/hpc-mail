@@ -147,3 +147,18 @@ export interface PublicConfig {
   /** 是否强制两步验证（前端据此引导未启用用户设置） */
   require2fa: boolean;
 }
+
+/** 域名接入自检状态：DNS-over-HTTPS 探测 MX/SPF 是否已指向 Cloudflare Email Routing（无需 CF 凭据） */
+export interface DomainOnboardingStatus {
+  domain: string;
+  /** 已加入系统域名列表 */
+  inList: boolean;
+  /** MX 已指向 Cloudflare Email Routing（*.mx.cloudflare.net）→ 视为该域已开启 Email Routing */
+  mxReady: boolean;
+  /** SPF TXT 已包含 Cloudflare Email Routing（_spf.mx.cloudflare.net） */
+  spfReady: boolean;
+  /** 实测到的 MX 目标主机（用于展示与排查） */
+  mxRecords: string[];
+  /** DNS 查询本身是否成功（false=探测失败，需重试；≠ 域名未接入） */
+  resolved: boolean;
+}

@@ -28,5 +28,6 @@ export const queryKeys = {
     users: ['admin', 'users'] as const,
     settings: ['admin', 'settings'] as const,
     invites: ['admin', 'invites'] as const,
+    domainStatus: (domain: string) => ['admin', 'domain-status', domain] as const,
   },
 } as const;
