@@ -50,7 +50,8 @@ pnpm --filter @hpc-mail/worker db:migrate:local  # 应用到本地 D1
 - **收件域名完全由 `settings.domains.list`（数据库）驱动，没有任何写死 fallback**。`env.domain` 已删除；`services/domain.ts` 的 `getDomains()` 纯读 settings。全新部署初始域名为空（合法状态，管理员在 `/admin/domains` 页手动加）。加域名还需先在 Cloudflare 给该域配 Email Routing catch-all 指向本 Worker。
 - **外发只走 Cloudflare `send_email` binding，且它只能发到 Email Routing 已验证的 destination**。`outbound.ts` 单通道；站内互投直接落库。**发不到任意外部地址是 CF 硬限制**——要发某个外部邮箱，需先在 Cloudflare Email Routing 里把它加为已验证 destination。（Resend 兜底通道已按需求彻底移除。）
 - **D1 单行上限 ~2MB**：正文 >256KB 时 D1 存 64KB 截断预览、完整正文落 R2（`bodyR2Key`）。附件一律 R2（key 前缀 `att/{messageId}/`，删邮件 = 删前缀）。
-- **收件链路（`inbound.ts`）失败隔离**：只有 D1 落库失败才 throw（触发 SMTP 重试）；Gmail 转发同步 `await message.forward()`（只能转到已验证地址）；AI 提码 + 飞书通知走 `ctx.waitUntil` 且逐个 try/catch。
+- **转发/通知按「收件地址所属用户」分流（三层归属）**：域名（默认仅管理员，可 `public` 开放）→ 地址（已认领 / 未认领，**未认领归管理员**）→ 收件后按归属人的**个人偏好**处理。个人偏好存 `users.notify_prefs`（JSON：飞书 / 通用 webhook / 邮箱转发），端点 `/api/me/notify-prefs`。`inbound.ts` 用 `getMailboxOwner(address)` 解析 owner（未认领→`getActiveAdminIds`）。**gmail_forward/feishu/notify_webhook 已从系统设置移除、下放为个人偏好**；管理员未配置时惰性继承旧全局值（`readLegacyGlobalNotify`）。别退回「一份全局配置套所有入站邮件」的老路。
+- **收件链路（`inbound.ts`）失败隔离**：只有 D1 落库失败才 throw（触发 SMTP 重试）；邮箱转发同步 `await message.forward()`（按 owner 个人转发目标，只能转到已验证地址）；AI 提码 + 按 owner 个人偏好的飞书/webhook 通知走 `ctx.waitUntil` 且逐个 try/catch。
 - **鉴权**：JWT（`sub/sid/epoch/uepoch`）+ KV 会话；改密/禁用 bump `uepoch` 即时踢线，清库 bump `instance_epoch` 全员下线。**RBAC 只有 admin/user 两角色 + `requireAuth`/`requireAdmin` 两中间件**，无 perm 表。
 - **`cloudflare:email` 和 `mimetext` 必须在 `outbound.ts` 里动态 `import()`**（静态 import 会让 vitest 的 workerd 加载即崩）；mimetext 用 `mimetext/browser` 入口（避免 nodejs_compat 依赖）。
 

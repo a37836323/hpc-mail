@@ -141,9 +141,12 @@ curl -s -X POST "$BASE/v1/messages" \
 
 全部端点：`GET /v1/status` · `GET /v1/domains` · `GET|POST /v1/mailboxes` · `GET|POST /v1/messages` · `GET /v1/messages/:id` · `GET /v1/messages/:id/attachments/:attId`。scope 粒度：`mail.read` / `mail.send` / `mailbox.read` / `mailbox.write`。
 
-## ⚙️ 系统设置
+## ⚙️ 设置：系统级 vs 个人级
 
-管理后台可在线调整（无需重新部署）：注册模式、收件域名列表、Gmail 转发目标、飞书 Webhook（地址 + 签名密钥 + 内容分级 + 测试按钮）、通用 Webhook 通知、验证码提取开关（正则 / AI）、邮件保留策略、外发配额、认领策略、强制 2FA、站点标题、开放 API 总开关。
+**归属模型三层**：域名（默认仅管理员，可开放给普通用户）→ 地址（已认领 / 未认领，未认领归管理员）→ 收件后按归属人的个人配置处理。
+
+- **系统设置**（管理后台，仅管理员，全局生效）：注册模式、收件域名列表（含公开开关与每域每人认领上限）、验证码提取开关（正则 / AI）、邮件保留策略、外发配额、认领策略、强制 2FA、站点标题、开放 API 总开关。
+- **个人设置**（`/profile`，每个用户配自己的）：头像、密码、两步验证，以及**转发与通知**——把自己认领地址收到的邮件转发到自己的飞书 Webhook、通用 Webhook（Bark / ntfy / 自建）或外部邮箱。管理员的这份配置还作用于未认领地址与系统通知。外部邮箱转发受 Cloudflare 硬限制（目标须为 Email Routing 已验证 destination）。
 
 ## 📄 License
 
