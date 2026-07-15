@@ -1,5 +1,7 @@
 import type { MessageSummary, Role, SendMailRequest } from '@hpc-mail/shared';
+import { EmailMessage } from 'cloudflare:email';
 import { and, eq } from 'drizzle-orm';
+import { createMimeMessage } from 'mimetext';
 import { createDb, type Db } from '../db/client.js';
 import { attachments as attachmentsTable, mailboxes, messages } from '../db/schema.js';
 import {
@@ -100,6 +102,27 @@ async function persistAttachments(
   await db.insert(attachmentsTable).values(rows);
 }
 
+/** Cloudflare 原生发信：逐个已验证 destination 发送（send_email binding） */
+async function sendViaCloudflare(
+  env: Env,
+  from: ResolvedFrom,
+  toAddr: string,
+  req: SendMailRequest,
+  atts: DecodedAttachment[],
+): Promise<void> {
+  const msg = createMimeMessage();
+  msg.setSender({ name: from.displayName, addr: from.address });
+  msg.setRecipient(toAddr);
+  msg.setSubject(req.subject);
+  if (req.text) msg.addMessage({ contentType: 'text/plain', data: req.text });
+  if (req.html) msg.addMessage({ contentType: 'text/html', data: req.html });
+  for (const a of atts) {
+    msg.addAttachment({ filename: a.filename, contentType: a.mimeType, data: a.base64 });
+  }
+  const message = new EmailMessage(from.address, toAddr, msg.asRaw());
+  await env.email.send(message);
+}
+
 async function sendViaResend(
   token: string,
   from: string,
@@ -177,13 +200,9 @@ export async function sendMail(
 
   const allRecipients = [...req.to, ...req.cc, ...req.bcc].map(normalizeEmail);
   const isInternal = (addr: string) => env.domain.includes(getEmailDomain(addr));
-  const external = {
-    to: req.to.filter((a) => !isInternal(a)),
-    cc: req.cc.filter((a) => !isInternal(a)),
-    bcc: req.bcc.filter((a) => !isInternal(a)),
-  };
+  const externalTargets = [...new Set(allRecipients.filter((a) => !isInternal(a)))];
   const internalTargets = [...new Set(allRecipients.filter(isInternal))];
-  const hasExternal = external.to.length + external.cc.length + external.bcc.length > 0;
+  const hasExternal = externalTargets.length > 0;
 
   const text = req.text ?? '';
   const html = req.html ?? '';
@@ -191,20 +210,47 @@ export async function sendMail(
   const size = new TextEncoder().encode(text + html).length;
   const code = settings.code_extract.enabled ? extractCodeByRegex(req.subject, text) : '';
 
-  // 站外发送
+  // 站外发送：Cloudflare 原生优先（已验证 destination），失败回退 Resend（若配了该域 token）
   let resendId: string | null = null;
   let status = hasExternal ? 'sent' : 'delivered';
   let errorDetail = '';
-  let sendChannel = hasExternal ? 'resend' : 'internal';
+  let sendChannel = hasExternal ? 'cloudflare' : 'internal';
   if (hasExternal) {
     const token = settings.resend.tokens[from.domain];
-    if (!token) throw new AppError('send_channel_unconfigured', `发件域 ${from.domain} 未配置 Resend token`);
-    try {
-      const result = await sendViaResend(token, `${from.displayName} <${from.address}>`, external, req, decoded);
-      resendId = result.id;
-    } catch (e) {
+    const channelsUsed = new Set<string>();
+    const failures: string[] = [];
+    for (const addr of externalTargets) {
+      try {
+        await sendViaCloudflare(env, from, addr, req, decoded);
+        channelsUsed.add('cloudflare');
+      } catch (cfErr) {
+        const cfMsg = cfErr instanceof Error ? cfErr.message : String(cfErr);
+        if (token) {
+          try {
+            const result = await sendViaResend(
+              token,
+              `${from.displayName} <${from.address}>`,
+              { to: [addr], cc: [], bcc: [] },
+              req,
+              decoded,
+            );
+            resendId = result.id;
+            channelsUsed.add('resend');
+          } catch (rErr) {
+            failures.push(`${addr}: ${rErr instanceof Error ? rErr.message : String(rErr)}`);
+          }
+        } else {
+          failures.push(`${addr}: ${cfMsg}（Cloudflare 仅支持已验证地址，且该域未配 Resend token）`);
+        }
+      }
+    }
+    sendChannel = [...channelsUsed].join('+') || 'cloudflare';
+    if (failures.length === externalTargets.length) {
       status = 'failed';
-      errorDetail = e instanceof AppError ? e.message : String(e);
+      errorDetail = failures.join('; ');
+    } else if (failures.length) {
+      status = 'sent';
+      errorDetail = `部分收件人失败: ${failures.join('; ')}`;
     }
   }
 

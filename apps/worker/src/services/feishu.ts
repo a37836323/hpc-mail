@@ -3,7 +3,11 @@ import { hmacSha256Base64 } from '../lib/crypto.js';
 import { AppError } from '../lib/errors.js';
 import type { Env } from '../types.js';
 
-const FEISHU_WEBHOOK_HOSTS = new Set(['open.feishu.cn', 'open.larksuite.com']);
+const FEISHU_WEBHOOK_HOSTS = new Set([
+  'open.feishu.cn',
+  'open.larksuite.com',
+  'open.larkoffice.com',
+]);
 const FEISHU_WEBHOOK_PATH = /^\/open-apis\/bot\/v2\/hook\/[A-Za-z0-9_-]{16,200}$/;
 const SUMMARY_LIMIT = 800;
 
