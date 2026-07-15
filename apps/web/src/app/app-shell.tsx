@@ -163,9 +163,7 @@ export function AppShell() {
     <div className="flex min-h-dvh flex-col bg-canvas md:flex-row">
       <aside className="sticky top-0 hidden h-dvh shrink-0 flex-col border-r border-line bg-surface md:flex md:w-16 lg:w-[220px]">
         <div className="flex h-14 items-center border-b border-line px-4 lg:px-5">
-          <span className="grid size-7 shrink-0 place-items-center rounded-md bg-accent text-sm font-bold text-on-accent">
-            {siteTitle.slice(0, 1)}
-          </span>
+          <img src="/logo.png" alt="" className="size-7 shrink-0" />
           <span className="ml-2 hidden truncate text-sm font-semibold text-ink lg:inline">{siteTitle}</span>
         </div>
         <div className="flex-1 overflow-y-auto">
@@ -185,6 +183,7 @@ export function AppShell() {
               <NavSections isAdmin={isAdmin} full onNavigate={() => setMenuOpen(false)} />
             </SheetContent>
           </Sheet>
+          <img src="/logo.png" alt="" className="size-7 shrink-0 md:hidden" />
           <span className="truncate text-sm font-semibold text-ink md:hidden">{siteTitle}</span>
           <div className="ml-auto">
             <UserMenu />
