@@ -6,3 +6,4 @@ export * from './schemas/mail.js';
 export * from './schemas/api-key.js';
 export * from './schemas/invite.js';
 export * from './schemas/admin-settings.js';
+export * from './schemas/audit.js';

@@ -1,4 +1,5 @@
 import type {
+  AdminAuditLogEntry,
   AdminUser,
   ApiKeySummary,
   ApiRequestLogEntry,
@@ -109,4 +110,6 @@ export const adminApi = {
   listInvites: () => api.get<Invite[]>('/admin/invites'),
   createInvites: (body: CreateInviteRequest) => api.post<Invite[], CreateInviteRequest>('/admin/invites', body),
   revokeInvite: (id: number) => api.delete<void>(`/admin/invites/${id}`),
+  auditLogs: (cursor?: string, limit = 30) =>
+    api.get<Page<AdminAuditLogEntry>>('/admin/audit-logs', { query: { cursor, limit } }),
 };

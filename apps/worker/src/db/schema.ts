@@ -178,3 +178,22 @@ export const apiRateLimits = sqliteTable(
   },
   (t) => [primaryKey({ columns: [t.apiKeyId, t.windowStart] })],
 );
+
+/** 管理操作审计：记录 admin 的高危动作（删户/改密/改设置/删域名/邀请/吊销 key），可追溯 */
+export const adminAuditLogs = sqliteTable(
+  'admin_audit_logs',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    actorId: integer('actor_id').notNull(),
+    actorName: text('actor_name').notNull().default(''),
+    /** 动作类型，如 user.delete / settings.update / invite.revoke */
+    action: text('action').notNull(),
+    /** 目标的可读标识，如用户名、设置键、域名 */
+    target: text('target').notNull().default(''),
+    /** 附加说明 */
+    detail: text('detail').notNull().default(''),
+    ip: text('ip').notNull().default(''),
+    createdAt: createdAtColumn(),
+  },
+  (t) => [index('idx_admin_audit_created').on(t.createdAt)],
+);

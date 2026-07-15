@@ -11,6 +11,7 @@ import {
   Menu,
   PenLine,
   Send,
+  ScrollText,
   Settings,
   Star,
   Ticket,
@@ -58,6 +59,7 @@ const ADMIN_NAV: NavEntry[] = [
   { to: '/admin/domains', label: '域名', icon: Globe },
   { to: '/admin/mail', label: '全站邮件', icon: Mails },
   { to: '/admin/invites', label: '邀请码', icon: Ticket },
+  { to: '/admin/audit', label: '操作审计', icon: ScrollText },
   { to: '/admin/settings', label: '系统设置', icon: Settings },
 ];
 

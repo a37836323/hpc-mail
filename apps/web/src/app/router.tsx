@@ -32,6 +32,9 @@ const DomainsPage = lazy(() =>
 const SettingsPage = lazy(() =>
   import('@/features/admin/settings/settings-page').then((m) => ({ default: m.SettingsPage })),
 );
+const AuditPage = lazy(() =>
+  import('@/features/admin/audit/audit-page').then((m) => ({ default: m.AuditPage })),
+);
 
 export const router = createBrowserRouter([
   {
@@ -67,6 +70,7 @@ export const router = createBrowserRouter([
           { path: 'invites', element: <InvitesPage /> },
           { path: 'domains', element: <DomainsPage /> },
           { path: 'settings', element: <SettingsPage /> },
+          { path: 'audit', element: <AuditPage /> },
         ],
       },
       { path: '*', element: <NotFoundPage /> },

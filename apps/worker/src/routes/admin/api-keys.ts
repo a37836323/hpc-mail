@@ -1,8 +1,9 @@
 import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from '@hpc-mail/shared';
 import { Hono } from 'hono';
-import { ok, parseId } from '../../lib/http.js';
+import { clientIp, ok, parseId } from '../../lib/http.js';
 import { requireAdmin, requireAuth } from '../../middleware/auth.js';
 import { getApiKey, listApiKeyLogs, listApiKeys, revokeApiKey } from '../../services/api-key.js';
+import { logAdminAction } from '../../services/audit.js';
 import type { AppContext } from '../../types.js';
 
 const app = new Hono<AppContext>();
@@ -29,8 +30,10 @@ app.get('/:id/logs', async (c) => {
 
 /** admin 吊销任意 key */
 app.delete('/:id', async (c) => {
+  const acting = c.get('user')!;
   const id = parseId(c.req.param('id'));
   await revokeApiKey(c.env, id);
+  await logAdminAction(c.env, acting, 'apikey.revoke', `key#${id}`, '', clientIp(c));
   return ok(c, { success: true });
 });
 

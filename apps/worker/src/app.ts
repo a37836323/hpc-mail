@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { onError, requestId } from './middleware/error.js';
 import adminApiKeys from './routes/admin/api-keys.js';
+import adminAudit from './routes/admin/audit.js';
 import adminInvites from './routes/admin/invites.js';
 import adminSettings from './routes/admin/settings.js';
 import adminUsers from './routes/admin/users.js';
@@ -33,6 +34,7 @@ export function createApp() {
   api.route('/admin/settings', adminSettings);
   api.route('/admin/invites', adminInvites);
   api.route('/admin/api-keys', adminApiKeys);
+  api.route('/admin/audit-logs', adminAudit);
 
   app.route('/api', api);
   app.route('/v1', v1);

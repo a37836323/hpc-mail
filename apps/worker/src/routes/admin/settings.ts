@@ -1,7 +1,8 @@
 import { updateSettingsRequestSchema } from '@hpc-mail/shared';
 import { Hono } from 'hono';
-import { ok, parseBody } from '../../lib/http.js';
+import { clientIp, ok, parseBody } from '../../lib/http.js';
 import { requireAdmin, requireAuth } from '../../middleware/auth.js';
+import { logAdminAction } from '../../services/audit.js';
 import { sendFeishuNotification } from '../../services/feishu.js';
 import { getSettings, maskSettings, updateSettings } from '../../services/setting.js';
 import type { AppContext } from '../../types.js';
@@ -16,8 +17,10 @@ app.get('/', async (c) => {
 });
 
 app.put('/', async (c) => {
+  const acting = c.get('user')!;
   const req = await parseBody(c, updateSettingsRequestSchema);
   await updateSettings(c.env, req);
+  await logAdminAction(c.env, acting, 'settings.update', Object.keys(req).join('、'), '', clientIp(c));
   const settings = await getSettings(c.env);
   return ok(c, maskSettings(settings));
 });
