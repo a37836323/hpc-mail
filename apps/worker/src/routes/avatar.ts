@@ -17,6 +17,7 @@ app.get('/:userId', async (c) => {
     headers: {
       'Content-Type': contentType,
       'X-Content-Type-Options': 'nosniff',
+      // 有 ?v 版本号兜底，同一 URL 内容不变，可长缓存；换头像 ?v 变即时生效
       'Cache-Control': 'public, max-age=86400',
     },
   });

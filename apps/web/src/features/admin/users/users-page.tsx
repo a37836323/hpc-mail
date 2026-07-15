@@ -5,6 +5,7 @@ import type { AdminUser } from '@hpc-mail/shared';
 import { queryKeys } from '@/api/query-keys';
 import { adminApi } from '@/api/resources';
 import { PageHeader } from '@/components/page-header';
+import { Avatar } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -122,7 +123,12 @@ export function UsersPage() {
               const isSelf = user.id === currentUser.id;
               return (
                 <TableRow key={user.id}>
-                  <TableCell className="font-medium">{user.username}</TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2.5">
+                      <Avatar avatarUrl={user.avatarUrl} name={user.username} className="size-7 text-xs" />
+                      <span className="font-medium">{user.username}</span>
+                    </div>
+                  </TableCell>
                   <TableCell>
                     <Badge tone={user.role === 'admin' ? 'accent' : 'neutral'}>
                       {user.role === 'admin' ? '管理员' : '普通用户'}

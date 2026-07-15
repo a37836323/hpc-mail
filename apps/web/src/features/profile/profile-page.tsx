@@ -9,19 +9,19 @@ import { PageHeader } from '@/components/page-header';
 import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/toast';
+import { stripDataUrlPrefix } from '@/lib/data-url';
 import { useCurrentUser } from '@/lib/use-session';
 
 const ALLOWED_TYPES = ['image/png', 'image/jpeg', 'image/webp'] as const;
 type AllowedType = (typeof ALLOWED_TYPES)[number];
 
-async function fileToBase64(file: File): Promise<string> {
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  let binary = '';
-  const chunk = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunk) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
-  }
-  return btoa(binary);
+function readAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error ?? new Error('图片读取失败'));
+    reader.readAsDataURL(file);
+  });
 }
 
 export function ProfilePage() {
@@ -66,14 +66,15 @@ export function ProfilePage() {
       toast({ title: '头像图片不能超过 2MB', variant: 'error' });
       return;
     }
-    const image = await fileToBase64(file);
+    const dataUrl = await readAsDataUrl(file);
+    const image = stripDataUrlPrefix(dataUrl);
     const body = { contentType: file.type as AllowedType, image };
     const parsed = uploadAvatarRequestSchema.safeParse(body);
     if (!parsed.success) {
       toast({ title: parsed.error.issues[0]?.message ?? '图片无效', variant: 'error' });
       return;
     }
-    setPreview(`data:${file.type};base64,${image}`);
+    setPreview(dataUrl);
     upload.mutate(parsed.data);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };

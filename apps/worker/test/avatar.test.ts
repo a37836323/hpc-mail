@@ -22,9 +22,10 @@ async function seedUser(username: string, role: 'admin' | 'user' = 'user'): Prom
 }
 
 describe('avatarUrl helper', () => {
-  it('无 key 返回 null，有 key 返回带版本号 URL', () => {
+  it('无 key 返回 null，有 key 返回带版本号 URL；不同 key 版本号不同', () => {
     expect(avatarUrl(5, null)).toBeNull();
-    expect(avatarUrl(5, 'avatar/5/abcdef0123456789')).toMatch(/^\/api\/avatar\/5\?v=/);
+    expect(avatarUrl(5, 'avatar/5/aaaa')).toMatch(/^\/api\/avatar\/5\?v=[0-9a-f]{8}$/);
+    expect(avatarUrl(5, 'avatar/5/aaaa')).not.toBe(avatarUrl(5, 'avatar/5/bbbb'));
   });
 });
 
@@ -55,14 +56,19 @@ describe('头像上传 / 公开下发 / 删除', () => {
     expect(res2.status).toBe(404);
   });
 
-  it('重复上传替换旧 key', async () => {
+  it('重复上传生成新版本 key 并删除旧对象', async () => {
     const uid = await seedUser('avatar-replace');
-    await uploadAvatar(env, uid, { contentType: 'image/png', image: PNG_1X1 });
+    const url1 = await uploadAvatar(env, uid, { contentType: 'image/png', image: PNG_1X1 });
     const db = createDb(env);
-    const first = (await db.select().from(users).where(eq(users.id, uid)).get())!.avatarKey;
-    await uploadAvatar(env, uid, { contentType: 'image/webp', image: PNG_1X1 });
-    const second = (await db.select().from(users).where(eq(users.id, uid)).get())!.avatarKey;
-    expect(second).not.toBe(first);
+    const key1 = (await db.select().from(users).where(eq(users.id, uid)).get())!.avatarKey!;
+
+    const url2 = await uploadAvatar(env, uid, { contentType: 'image/webp', image: PNG_1X1 });
+    const key2 = (await db.select().from(users).where(eq(users.id, uid)).get())!.avatarKey!;
+
+    expect(key2).not.toBe(key1); // 版本化 key，每次上传变
+    expect(url2).not.toBe(url1); // ?v 随之变（换头像即时生效）
+    expect(await env.r2.get(key1)).toBeNull(); // 旧对象已删除，无孤儿
+    expect(await env.r2.get(key2)).not.toBeNull();
   });
 
   it('未上传头像时 GET 返回 404', async () => {

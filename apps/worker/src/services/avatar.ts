@@ -5,18 +5,27 @@ import { users } from '../db/schema.js';
 import { AppError } from '../lib/errors.js';
 import type { Env } from '../types.js';
 
-/** 头像访问 URL：`/api/avatar/{userId}?v={版本}`（版本随 avatarKey 变化防缓存）；无头像为 null */
+/** avatar_key 短 hash（FNV-1a），用作 URL 版本号 */
+function shortHash(input: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < input.length; i++) {
+    h ^= input.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(16).padStart(8, '0');
+}
+
+/** 头像访问 URL：`/api/avatar/{userId}?v={hash}`；avatar_key 每次上传变，?v 随之变，换头像即时生效 */
 export function avatarUrl(userId: number, avatarKey: string | null): string | null {
   if (!avatarKey) return null;
-  const version = avatarKey.slice(-12);
-  return `/api/avatar/${userId}?v=${version}`;
+  return `/api/avatar/${userId}?v=${shortHash(avatarKey)}`;
 }
 
 function decodeBase64(b64: string): Uint8Array {
   return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
 }
 
-/** 上传头像：落 R2、删除旧对象、更新 avatar_key，返回新 avatarUrl */
+/** 上传头像：base64 → R2（每次新随机 key）→ 更新 avatar_key → 删旧对象，返回新 avatarUrl */
 export async function uploadAvatar(
   env: Env,
   userId: number,
@@ -35,10 +44,9 @@ export async function uploadAvatar(
 
   const key = `avatar/${userId}/${crypto.randomUUID().replace(/-/g, '')}`;
   await env.r2.put(key, bytes, { httpMetadata: { contentType: req.contentType } });
-
   await db.update(users).set({ avatarKey: key }).where(eq(users.id, userId));
 
-  // 删除旧头像对象（best-effort）
+  // 删旧头像对象，避免孤儿（best-effort）
   if (current?.avatarKey && current.avatarKey !== key) {
     try {
       await env.r2.delete(current.avatarKey);
@@ -66,7 +74,7 @@ export async function deleteAvatar(env: Env, userId: number): Promise<void> {
   }
 }
 
-/** 取用户头像 R2 对象（供 GET /api/avatar/:userId 公开下发）；无头像返回 null */
+/** 取用户头像 R2 对象（供公开 GET /api/avatar/:userId 下发）；无头像返回 null */
 export async function getAvatarObject(env: Env, userId: number): Promise<R2ObjectBody | null> {
   const db = createDb(env);
   const row = await db
