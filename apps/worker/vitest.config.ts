@@ -9,7 +9,7 @@ export default defineConfig(async () => {
       cloudflareTest({
         // AI 无本地模拟；单测不真正调用 AI，关闭远程绑定避免要求 CF 凭据
         remoteBindings: false,
-        wrangler: { configPath: './wrangler.toml' },
+        wrangler: { configPath: './wrangler.test.toml' },
         miniflare: {
           bindings: {
             jwt_secret: 'test-jwt-secret-for-vitest-only-0000000000',
