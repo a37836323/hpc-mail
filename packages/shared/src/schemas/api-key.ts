@@ -31,6 +31,8 @@ export const updateApiKeyRequestSchema = z
     rateLimit: z.number().int().min(1).max(10000).optional(),
     allowedIps: z.array(ipOrCidrSchema).max(32).optional(),
     status: z.enum(['active', 'disabled']).optional(),
+    /** 续期：ISO 时间；显式传 null 表示改为永不过期 */
+    expiresAt: z.iso.datetime({ offset: true }).nullable().optional(),
   })
   .refine((v) => Object.values(v).some((x) => x !== undefined), {
     message: '至少提供一个待更新字段',

@@ -1,6 +1,6 @@
 import type { AdminUser, CreateUserRequest, UpdateUserRequest } from '@hpc-mail/shared';
-import { desc, eq, sql } from 'drizzle-orm';
-import { createDb } from '../db/client.js';
+import { and, desc, eq, ne, sql } from 'drizzle-orm';
+import { createDb, type Db } from '../db/client.js';
 import { apiKeys, mailboxes, stars, users } from '../db/schema.js';
 import { AppError } from '../lib/errors.js';
 import { hashPassword } from '../lib/password.js';
@@ -9,6 +9,16 @@ import { avatarUrl } from './avatar.js';
 import { bumpUserEpoch } from './session.js';
 
 type UserRow = typeof users.$inferSelect;
+
+/** 保证不会移除最后一个可用 admin（禁用/降级/删除该 admin 前调用） */
+async function assertNotLastAdmin(db: Db, targetId: number): Promise<void> {
+  const other = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(and(eq(users.role, 'admin'), eq(users.status, 'active'), ne(users.id, targetId)))
+    .get();
+  if (!other) throw new AppError('forbidden', '至少保留一个可用管理员，无法执行此操作');
+}
 
 const mailboxCountSql = sql<number>`(SELECT COUNT(*) FROM mailboxes WHERE mailboxes.user_id = users.id)`;
 const apiKeyCountSql = sql<number>`(SELECT COUNT(*) FROM api_keys WHERE api_keys.user_id = users.id)`;
@@ -66,10 +76,20 @@ export async function updateUser(
     if (req.status === 'disabled' && id === actingUserId) {
       throw new AppError('forbidden', '不能禁用自己');
     }
+    // 禁用一个 admin 前，确保还有其他可用 admin
+    if (req.status === 'disabled' && target.role === 'admin') {
+      await assertNotLastAdmin(db, id);
+    }
     patch.status = req.status;
     if (req.status === 'disabled') bumpEpoch = true;
   }
-  if (req.role !== undefined) patch.role = req.role;
+  // admin 降级为普通用户前，确保还有其他可用 admin（防降到 0 admin）
+  if (req.role !== undefined) {
+    if (req.role !== 'admin' && target.role === 'admin') {
+      await assertNotLastAdmin(db, id);
+    }
+    patch.role = req.role;
+  }
   if (req.password !== undefined) {
     patch.passwordHash = await hashPassword(req.password);
     bumpEpoch = true;
@@ -94,11 +114,12 @@ export async function deleteUser(env: Env, actingUserId: number, id: number): Pr
   if (id === actingUserId) throw new AppError('forbidden', '不能删除自己');
   const db = createDb(env);
   const target = await db
-    .select({ id: users.id, avatarKey: users.avatarKey })
+    .select({ id: users.id, role: users.role, avatarKey: users.avatarKey })
     .from(users)
     .where(eq(users.id, id))
     .get();
   if (!target) throw new AppError('not_found', '用户不存在');
+  if (target.role === 'admin') await assertNotLastAdmin(db, id);
 
   await db.delete(mailboxes).where(eq(mailboxes.userId, id));
   await db.delete(apiKeys).where(eq(apiKeys.userId, id));

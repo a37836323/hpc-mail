@@ -131,6 +131,10 @@ export async function updateApiKey(
   if (req.rateLimit !== undefined) patch.rateLimit = req.rateLimit;
   if (req.allowedIps !== undefined) patch.allowedIps = req.allowedIps;
   if (req.status !== undefined) patch.status = req.status;
+  // 续期：null 改为永久，字符串按新过期时间；undefined 不动
+  if (req.expiresAt !== undefined) {
+    patch.expiresAt = req.expiresAt === null ? null : normalizeExpiry(req.expiresAt);
+  }
   const [row] = await db.update(apiKeys).set(patch).where(eq(apiKeys.id, id)).returning();
   return serialize(row!);
 }

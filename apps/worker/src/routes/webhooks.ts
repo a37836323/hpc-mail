@@ -1,9 +1,14 @@
+import type { MessageRecipients } from '@hpc-mail/shared';
 import { eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { createDb } from '../db/client.js';
 import { messages } from '../db/schema.js';
 import { hmacSha256Base64, timingSafeEqualStr } from '../lib/crypto.js';
+import { sendFeishuNotification } from '../services/feishu.js';
+import { getSettings } from '../services/setting.js';
 import type { AppContext } from '../types.js';
+
+const ALERT_STATUSES = new Set(['bounced', 'failed', 'complained']);
 
 const app = new Hono<AppContext>();
 const TIMESTAMP_TOLERANCE_SECONDS = 5 * 60;
@@ -63,6 +68,31 @@ app.post('/resend', async (c) => {
       .update(messages)
       .set({ status: mapping.status, ...(errorDetail ? { errorDetail } : {}) })
       .where(eq(messages.resendId, emailId));
+
+    // 外发失败/退信/投诉：异步推送飞书告警（否则失败是黑洞，发件人无从得知）
+    if (ALERT_STATUSES.has(mapping.status)) {
+      c.executionCtx.waitUntil(
+        (async () => {
+          try {
+            const settings = await getSettings(c.env);
+            if (!settings.feishu.enabled) return;
+            const msg = await db.select().from(messages).where(eq(messages.resendId, emailId)).get();
+            if (!msg) return;
+            const recips = msg.recipients as MessageRecipients;
+            await sendFeishuNotification(c.env, settings, {
+              subject: `⚠ 外发${mapping.status === 'bounced' ? '退信' : mapping.status === 'complained' ? '被投诉' : '失败'}：${msg.subject}`,
+              fromAddress: msg.fromAddress,
+              fromName: msg.fromName,
+              toAddress: recips.to?.[0] ?? msg.address,
+              code: '',
+              body: errorDetail || `外发邮件状态更新为 ${mapping.status}`,
+            });
+          } catch (e) {
+            console.error('bounce 飞书告警失败:', e);
+          }
+        })(),
+      );
+    }
   }
 
   return c.json({ data: { received: true } });

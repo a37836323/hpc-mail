@@ -19,6 +19,7 @@ import { countRemoteImages } from './count-remote-images';
 import { EmailHtml } from '@/lib/email-html';
 import { formatBytes, formatDateTime } from '@/lib/format';
 import { extractOtp } from '@/lib/otp';
+import { isTrustedSender, trustSender } from '@/lib/trusted-senders';
 import { OtpBanner } from './otp-banner';
 
 export function MessagePage() {
@@ -59,6 +60,11 @@ export function MessagePage() {
     // 只在消息首次加载为未读时触发一次
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [message?.id, message?.isRead]);
+
+  // 该发件人此前被信任过 → 自动显示其远程图片
+  useEffect(() => {
+    if (message && isTrustedSender(message.fromAddress)) setShowRemoteImages(true);
+  }, [message?.id, message?.fromAddress]);
 
   // 直链/新标签页打开时无历史可退，回退到收件箱而非停在已 404 的详情
   const goBack = () => {
@@ -196,14 +202,26 @@ export function MessagePage() {
           {otpCode && <OtpBanner code={otpCode} />}
 
           {remoteImageCount > 0 && !showRemoteImages && (
-            <div className="flex items-center justify-between gap-3 rounded-md border border-line bg-canvas px-3 py-2 text-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-line bg-canvas px-3 py-2 text-sm">
               <span className="flex items-center gap-2 text-ink-secondary">
                 <ImageOff className="size-4 shrink-0 text-ink-tertiary" />
                 已阻止 {remoteImageCount} 张远程图片以保护隐私
               </span>
-              <Button variant="secondary" size="sm" onClick={() => setShowRemoteImages(true)}>
-                显示图片
-              </Button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="text-sm text-ink-tertiary hover:text-ink hover:underline"
+                  onClick={() => {
+                    trustSender(message.fromAddress);
+                    setShowRemoteImages(true);
+                  }}
+                >
+                  始终信任该发件人
+                </button>
+                <Button variant="secondary" size="sm" onClick={() => setShowRemoteImages(true)}>
+                  显示图片
+                </Button>
+              </div>
             </div>
           )}
 
