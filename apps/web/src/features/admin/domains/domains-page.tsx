@@ -13,6 +13,7 @@ import { IconButton } from '@/components/ui/icon-button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from '@/components/ui/toast';
+import { useMailboxesQuery } from '@/features/mailboxes/use-mailboxes';
 
 export function DomainsPage() {
   const queryClient = useQueryClient();
@@ -20,11 +21,16 @@ export function DomainsPage() {
     queryKey: queryKeys.admin.settings,
     queryFn: () => adminApi.getSettings(),
   });
+  // 全站已认领地址：用于删域名前预估影响面
+  const { data: allMailboxes } = useMailboxesQuery(true);
   const [newDomain, setNewDomain] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [removing, setRemoving] = useState<string | null>(null);
 
   const list = settings?.domains.list ?? [];
+  const affected = removing
+    ? (allMailboxes ?? []).filter((box) => box.domain === removing)
+    : [];
 
   const persist = useMutation({
     mutationFn: (nextList: string[]) => adminApi.updateSettings({ domains: { list: nextList } }),
@@ -125,7 +131,11 @@ export function DomainsPage() {
         title="移除这个域名？"
         description={
           removing
-            ? `移除 ${removing} 后，该域名将不再用于地址认领、发件白名单与前端展示（已收邮件不受影响）。`
+            ? `移除 ${removing} 后，该域名将不再用于地址认领、发件白名单与前端展示。${
+                affected.length > 0
+                  ? `当前该域下有 ${affected.length} 个已认领地址，移除后这些用户将无法用该域发件（历史邮件仍保留、仍可收信直到 Cloudflare 侧关闭 catch-all）。`
+                  : '（当前该域下暂无已认领地址。）'
+              }`
             : undefined
         }
         confirmLabel="移除"

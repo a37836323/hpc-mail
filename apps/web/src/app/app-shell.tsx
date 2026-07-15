@@ -57,6 +57,7 @@ const PRIMARY_NAV: NavEntry[] = [
 const ADMIN_NAV: NavEntry[] = [
   { to: '/admin/users', label: '用户', icon: Users },
   { to: '/admin/domains', label: '域名', icon: Globe },
+  { to: '/admin/addresses', label: '全站地址', icon: AtSign },
   { to: '/admin/mail', label: '全站邮件', icon: Mails },
   { to: '/admin/invites', label: '邀请码', icon: Ticket },
   { to: '/admin/audit', label: '操作审计', icon: ScrollText },
