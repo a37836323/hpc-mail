@@ -23,8 +23,35 @@ export const passwordSchema = z
 export const loginRequestSchema = z.object({
   username: usernameSchema,
   password: z.string().min(1).max(PASSWORD_MAX_LENGTH),
+  /** 已启用 2FA 的账户需附带 6 位 TOTP 或恢复码 */
+  totp: z.string().trim().max(32).optional(),
 });
 export type LoginRequest = z.infer<typeof loginRequestSchema>;
+
+// ---- 两步验证（2FA / TOTP） ----
+
+export const enableTwoFactorRequestSchema = z.object({
+  code: z.string().trim().regex(/^\d{6}$/, '请输入 6 位验证码'),
+});
+export type EnableTwoFactorRequest = z.infer<typeof enableTwoFactorRequestSchema>;
+
+export const disableTwoFactorRequestSchema = z.object({
+  /** 当前密码或有效 TOTP 码任一 */
+  password: z.string().max(PASSWORD_MAX_LENGTH).optional(),
+  code: z.string().trim().max(32).optional(),
+});
+export type DisableTwoFactorRequest = z.infer<typeof disableTwoFactorRequestSchema>;
+
+/** 开始登记：返回密钥与 otpauth URI（尚未启用，需 verify） */
+export interface TwoFactorSetup {
+  secret: string;
+  otpauthUri: string;
+}
+
+/** 启用成功：一次性返回恢复码 */
+export interface TwoFactorEnabled {
+  recoveryCodes: string[];
+}
 
 export const registerRequestSchema = z.object({
   username: usernameSchema,
@@ -46,6 +73,8 @@ export interface SessionUser {
   createdAt: string;
   /** 头像访问 URL（带版本号防缓存）；无头像时为 null，前端回退到用户名首字母 */
   avatarUrl: string | null;
+  /** 是否已启用两步验证 */
+  twoFactorEnabled: boolean;
 }
 
 /** 头像上传：base64 图片 + MIME 类型 */

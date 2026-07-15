@@ -160,6 +160,15 @@ export function SettingsPage() {
           />
         </Section>
 
+        <Section title="安全" description="账户安全策略。">
+          <ToggleRow
+            label="强制两步验证"
+            description="开启后，未启用 2FA 的用户登录后会被引导到个人设置完成绑定。"
+            checked={draft.security.require2fa}
+            onChange={(value) => patch((s) => void (s.security.require2fa = value))}
+          />
+        </Section>
+
         <Section title="注册模式" description="控制新用户如何注册平台账户。">
           <SegmentedControl
             aria-label="注册模式"

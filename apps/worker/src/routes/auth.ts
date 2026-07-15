@@ -1,5 +1,7 @@
 import {
   changePasswordRequestSchema,
+  disableTwoFactorRequestSchema,
+  enableTwoFactorRequestSchema,
   loginRequestSchema,
   registerRequestSchema,
   uploadAvatarRequestSchema,
@@ -11,6 +13,7 @@ import { clientIp, ok, parseBody } from '../lib/http.js';
 import { AppError } from '../lib/errors.js';
 import { changePassword, login, logout, register } from '../services/auth.js';
 import { avatarUrl, deleteAvatar, uploadAvatar } from '../services/avatar.js';
+import { disableTwoFactor, enableTwoFactor, setupTwoFactor } from '../services/twofa.js';
 import type { AppContext, AuthUser } from '../types.js';
 
 const app = new Hono<AppContext>();
@@ -23,6 +26,7 @@ function sessionUserOf(user: AuthUser, overrideAvatarUrl?: string | null): Sessi
     createdAt: user.createdAt.toISOString(),
     avatarUrl:
       overrideAvatarUrl !== undefined ? overrideAvatarUrl : avatarUrl(user.id, user.avatarKey),
+    twoFactorEnabled: user.twoFactorEnabled,
   };
 }
 
@@ -59,6 +63,24 @@ app.put('/password', requireAuth, async (c) => {
   const req = await parseBody(c, changePasswordRequestSchema);
   const result = await changePassword(c.env, c.get('user')!, req);
   return ok(c, result);
+});
+
+/** 两步验证：开始登记（返回密钥+otpauth URI） */
+app.post('/2fa/setup', requireAuth, async (c) => {
+  return ok(c, await setupTwoFactor(c.env, c.get('user')!.id));
+});
+
+/** 两步验证：校验一次性码并启用（返回一次性恢复码） */
+app.post('/2fa/enable', requireAuth, async (c) => {
+  const req = await parseBody(c, enableTwoFactorRequestSchema);
+  return ok(c, await enableTwoFactor(c.env, c.get('user')!.id, req.code), 201);
+});
+
+/** 两步验证：关闭（需密码或有效 TOTP 码） */
+app.post('/2fa/disable', requireAuth, async (c) => {
+  const req = await parseBody(c, disableTwoFactorRequestSchema);
+  await disableTwoFactor(c.env, c.get('user')!.id, req);
+  return ok(c, { success: true });
 });
 
 app.post('/logout', requireAuth, async (c) => {

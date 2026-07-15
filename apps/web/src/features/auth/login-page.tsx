@@ -32,6 +32,8 @@ export function LoginPage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [inviteCode, setInviteCode] = useState('');
+  const [totp, setTotp] = useState('');
+  const [totpRequired, setTotpRequired] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const fromState = (location.state as { from?: string } | null)?.from;
@@ -49,9 +51,17 @@ export function LoginPage() {
   };
 
   const loginMutation = useMutation({
-    mutationFn: () => authApi.login({ username, password }),
+    mutationFn: () => authApi.login({ username, password, totp: totp.trim() || undefined }),
     onSuccess: applySession,
-    onError: (err) => setError(err instanceof ApiError ? err.message : '登录失败，请重试'),
+    onError: (err) => {
+      if (err instanceof ApiError && err.code === 'totp_required') {
+        setTotpRequired(true);
+        setError(totp ? '两步验证码错误' : null);
+        return;
+      }
+      // 已进入 2FA 步骤时，错误多为验证码不对
+      setError(err instanceof ApiError ? err.message : '登录失败，请重试');
+    },
   });
 
   const registerMutation = useMutation({
@@ -77,7 +87,7 @@ export function LoginPage() {
     event.preventDefault();
     setError(null);
     if (mode === 'login') {
-      const parsed = loginRequestSchema.safeParse({ username, password });
+      const parsed = loginRequestSchema.safeParse({ username, password, totp: totp || undefined });
       if (!parsed.success) {
         setError(parsed.error.issues[0]?.message ?? '请检查输入');
         return;
@@ -156,6 +166,21 @@ export function LoginPage() {
                     placeholder="请输入邀请码"
                     value={inviteCode}
                     onChange={(event) => setInviteCode(event.target.value)}
+                  />
+                )}
+              </FormField>
+            )}
+            {mode === 'login' && totpRequired && (
+              <FormField label="两步验证码" required>
+                {(field) => (
+                  <Input
+                    {...field}
+                    autoFocus
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    placeholder="6 位验证码或恢复码"
+                    value={totp}
+                    onChange={(event) => setTotp(event.target.value)}
                   />
                 )}
               </FormField>

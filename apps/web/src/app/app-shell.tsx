@@ -293,6 +293,19 @@ export function AppShell() {
         </header>
 
         <main className="flex-1 px-4 pb-24 pt-4 md:px-6 md:pb-8">
+          {config?.require2fa && !user.twoFactorEnabled && (
+            <div className="mx-auto mb-4 flex max-w-4xl flex-wrap items-center justify-between gap-3 rounded-lg border border-caution/40 bg-caution-soft/40 px-4 py-3 text-sm">
+              <span className="text-ink">
+                管理员要求所有账户开启两步验证，请尽快在个人设置中完成绑定。
+              </span>
+              <NavLink
+                to="/profile"
+                className="shrink-0 rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-on-accent hover:bg-accent-hover"
+              >
+                去设置
+              </NavLink>
+            </div>
+          )}
           <Suspense fallback={<PageLoader />}>
             <Outlet />
           </Suspense>

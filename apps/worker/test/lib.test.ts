@@ -10,6 +10,7 @@ import {
 } from '../src/lib/email-address.js';
 import { extractCodeByRegex } from '../src/services/code-extract.js';
 import { ipInAllowList } from '../src/lib/ip-allowlist.js';
+import { generateCode, generateTotpSecret, verifyTotp } from '../src/lib/totp.js';
 import { AppError } from '../src/lib/errors.js';
 
 const SECRET = 'unit-test-secret-key-000000000000';
@@ -131,5 +132,26 @@ describe('ip-allowlist', () => {
   it('跨协议族不误匹配', () => {
     expect(ipInAllowList('1.2.3.4', ['2001:db8::/32'])).toBe(false);
     expect(ipInAllowList('2001:db8::1', ['192.168.0.0/16'])).toBe(false);
+  });
+});
+
+describe('totp', () => {
+  // RFC 6238 测试向量（seed=ascii "12345678901234567890" → base32）
+  const RFC_SECRET = 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ';
+  it('匹配 RFC 6238 向量', async () => {
+    expect(await generateCode(RFC_SECRET, 1)).toBe('287082');
+    expect(await generateCode(RFC_SECRET, Math.floor(1111111109 / 30))).toBe('081804');
+  });
+  it('当前时间码 verifyTotp 往返成功', async () => {
+    const secret = generateTotpSecret();
+    const counter = Math.floor(Date.now() / 1000 / 30);
+    const code = await generateCode(secret, counter);
+    expect(await verifyTotp(secret, code)).toBe(true);
+  });
+  it('非法/错误码被拒', async () => {
+    const secret = generateTotpSecret();
+    expect(await verifyTotp(secret, '000000')).toBe(false);
+    expect(await verifyTotp(secret, 'abc')).toBe(false);
+    expect(await verifyTotp(secret, '')).toBe(false);
   });
 });

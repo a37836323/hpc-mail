@@ -12,6 +12,7 @@ import { sha256Hex } from '../lib/crypto.js';
 import { AppError } from '../lib/errors.js';
 import { signToken } from '../lib/jwt.js';
 import { hashPassword, verifyPassword } from '../lib/password.js';
+import { hashRecoveryCode, verifyTotp } from '../lib/totp.js';
 import type { AuthUser, Env, ExecCtx } from '../types.js';
 import { avatarUrl } from './avatar.js';
 import { sendFeishuNotification } from './feishu.js';
@@ -92,7 +93,37 @@ function toSessionUser(row: typeof users.$inferSelect): SessionUser {
     role: row.role,
     createdAt: row.createdAt.toISOString(),
     avatarUrl: avatarUrl(row.id, row.avatarKey),
+    twoFactorEnabled: !!row.totpEnabledAt,
   };
+}
+
+/**
+ * 登录时校验两步验证：TOTP 或恢复码（恢复码用后即弃）。
+ * 未提供码但已启用 → 抛 totp_required 让前端追加输入。
+ */
+async function verifyLoginTwoFactor(
+  env: Env,
+  user: typeof users.$inferSelect,
+  totp: string | undefined,
+): Promise<void> {
+  if (!user.totpEnabledAt) return;
+  if (!totp) throw new AppError('totp_required', '需要两步验证码');
+  const cleaned = totp.replace(/\s/g, '');
+  if (user.totpSecret && (await verifyTotp(user.totpSecret, cleaned))) return;
+  // 尝试恢复码（用后从列表移除）
+  const codes = user.totpRecoveryCodes ?? [];
+  if (codes.length) {
+    const hash = await hashRecoveryCode(cleaned.toLowerCase());
+    if (codes.includes(hash)) {
+      const db = createDb(env);
+      await db
+        .update(users)
+        .set({ totpRecoveryCodes: codes.filter((c) => c !== hash) })
+        .where(eq(users.id, user.id));
+      return;
+    }
+  }
+  throw new AppError('bad_credentials', '两步验证码错误');
 }
 
 async function issueToken(env: Env, userId: number): Promise<string> {
@@ -119,6 +150,16 @@ export async function login(
     throw new AppError('bad_credentials', '用户名或密码错误');
   }
   if (user.status !== 'active') throw new AppError('user_disabled', '账号已被禁用');
+
+  try {
+    await verifyLoginTwoFactor(env, user, req.totp);
+  } catch (e) {
+    // 验证码错误计入失败限流；仅「需要验证码」的提示不计
+    if (e instanceof AppError && e.code === 'bad_credentials') {
+      await recordLoginFailure(env, req.username, ip);
+    }
+    throw e;
+  }
 
   await resetLoginFailures(env, req.username, ip);
   const previousIp = user.lastLoginIp;

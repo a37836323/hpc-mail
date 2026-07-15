@@ -42,6 +42,12 @@ export const apiSettingSchema = z.object({
   enabled: z.boolean(),
 });
 
+/** 安全策略 */
+export const securitySettingSchema = z.object({
+  /** 要求所有用户启用两步验证：未启用者登录后强制引导设置 */
+  require2fa: z.boolean(),
+});
+
 /** 系统域名列表：管理端维护，空数组表示未配置任何域名（认领/发件将被拒） */
 export const domainsSettingSchema = z.object({
   list: z.array(domainSchema).max(64),
@@ -83,6 +89,7 @@ export const SETTING_SCHEMAS = {
   retention: retentionSettingSchema,
   quota: quotaSettingSchema,
   mailbox_policy: mailboxPolicySettingSchema,
+  security: securitySettingSchema,
 } as const;
 export type SettingKey = keyof typeof SETTING_SCHEMAS;
 
@@ -107,6 +114,7 @@ export const DEFAULT_SETTINGS: Settings = {
     perUserLimit: 50,
     reservedLocalParts: [...DEFAULT_RESERVED_LOCAL_PARTS],
   },
+  security: { require2fa: false },
 };
 
 export const updateSettingsRequestSchema = z
@@ -122,6 +130,7 @@ export const updateSettingsRequestSchema = z
     retention: retentionSettingSchema.optional(),
     quota: quotaSettingSchema.optional(),
     mailbox_policy: mailboxPolicySettingSchema.optional(),
+    security: securitySettingSchema.optional(),
   })
   .refine((v) => Object.values(v).some((x) => x !== undefined), {
     message: '至少提供一个待更新配置',
@@ -133,4 +142,6 @@ export interface PublicConfig {
   siteTitle: string;
   registrationMode: z.infer<typeof registerModeSchema>;
   domains: string[];
+  /** 是否强制两步验证（前端据此引导未启用用户设置） */
+  require2fa: boolean;
 }

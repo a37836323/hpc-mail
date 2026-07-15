@@ -14,6 +14,7 @@ app.get('/', async (c) => {
     siteTitle: settings.site.title,
     registrationMode: settings.register_mode,
     domains: await getDomains(c.env, settings),
+    require2fa: settings.security.require2fa,
   };
   return ok(c, config);
 });

@@ -9,6 +9,9 @@ import type {
   CreatedApiKey,
   CreateInviteRequest,
   CreateUserRequest,
+  DisableTwoFactorRequest,
+  TwoFactorEnabled,
+  TwoFactorSetup,
   Invite,
   ListMessagesQuery,
   LoginRequest,
@@ -43,6 +46,10 @@ export const authApi = {
   uploadAvatar: (body: UploadAvatarRequest) =>
     api.post<SessionUser, UploadAvatarRequest>('/auth/avatar', body),
   deleteAvatar: () => api.delete<SessionUser>('/auth/avatar'),
+  setup2fa: () => api.post<TwoFactorSetup>('/auth/2fa/setup'),
+  enable2fa: (code: string) => api.post<TwoFactorEnabled, { code: string }>('/auth/2fa/enable', { code }),
+  disable2fa: (body: DisableTwoFactorRequest) =>
+    api.post<{ success: boolean }, DisableTwoFactorRequest>('/auth/2fa/disable', body),
 };
 
 // ---- 公开配置 ----

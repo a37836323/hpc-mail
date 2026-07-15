@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/toast';
 import { stripDataUrlPrefix } from '@/lib/data-url';
 import { useCurrentUser } from '@/lib/use-session';
+import { TwoFactorSection } from './two-factor-section';
 
 const ALLOWED_TYPES = ['image/png', 'image/jpeg', 'image/webp'] as const;
 type AllowedType = (typeof ALLOWED_TYPES)[number];
@@ -138,6 +139,8 @@ export function ProfilePage() {
             </Button>
           </div>
         </section>
+
+        <TwoFactorSection />
       </div>
 
       <ChangePasswordDialog open={passwordOpen} onOpenChange={setPasswordOpen} />

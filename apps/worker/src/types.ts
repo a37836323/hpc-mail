@@ -25,6 +25,7 @@ export interface AuthUser {
   status: UserStatus;
   createdAt: Date;
   avatarKey: string | null;
+  twoFactorEnabled: boolean;
 }
 
 /** /v1 API Key 鉴权后的上下文 */
