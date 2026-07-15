@@ -6,7 +6,7 @@ import type {
   Page,
   Role,
 } from '@hpc-mail/shared';
-import { and, desc, eq, inArray, like, lt, or, type SQL } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, like, lt, or, type SQL } from 'drizzle-orm';
 import { createDb, type Db } from '../db/client.js';
 import { attachments as attachmentsTable, messages, stars } from '../db/schema.js';
 import { signAttachment } from '../lib/crypto.js';
@@ -132,6 +132,24 @@ export async function listMessages(
     items: page.map((r) => summarize(r, attSet.has(r.id), starSet.has(r.id))),
     nextCursor: hasMore ? encodeCursor(page[page.length - 1]!.id) : null,
   };
+}
+
+/**
+ * 收件箱未读数：口径同 /inbox（scope=mine + inbound + 未读），一条 COUNT 查询。
+ * 复用 listMessages 的可见性逻辑（resolveScope/scopeCondition），避免条件漂移；
+ * admin 也按 scope=mine 只数自己认领地址（个人角标，非全站）。
+ */
+export async function countUnread(env: Env, userId: number, role: Role): Promise<number> {
+  const db = createDb(env);
+  const scope = await resolveScope(env, { userId, role, scope: 'mine' });
+  const row = await db
+    .select({ value: count() })
+    .from(messages)
+    .where(
+      and(scopeCondition(scope), eq(messages.direction, 'inbound'), eq(messages.isRead, false)),
+    )
+    .get();
+  return row?.value ?? 0;
 }
 
 async function loadVisible(env: Env, viewer: Viewer, id: number): Promise<MessageRow> {

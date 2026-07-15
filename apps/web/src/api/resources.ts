@@ -62,6 +62,7 @@ export const messageApi = {
     api.get<Page<MessageSummary>>('/messages', { query: query as unknown as QueryParams }),
   detail: (id: number) => api.get<MessageDetail>(`/messages/${id}`),
   send: (body: SendMailRequest) => api.post<MessageSummary, SendMailRequest>('/messages/send', body),
+  unreadCount: () => api.get<{ unread: number }>('/messages/unread-count'),
   markRead: (ids: number[], isRead: boolean) =>
     api.post<void, { ids: number[]; isRead: boolean }>('/messages/read', { ids, isRead }),
   star: (ids: number[], starred: boolean) =>

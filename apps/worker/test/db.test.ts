@@ -7,7 +7,7 @@ import { messages, users } from '../src/db/schema.js';
 import { AppError } from '../src/lib/errors.js';
 import { getDomains } from '../src/services/domain.js';
 import { claimMailbox } from '../src/services/mailbox.js';
-import { listMessages, starMessages } from '../src/services/message.js';
+import { countUnread, listMessages, markMessages, starMessages } from '../src/services/message.js';
 import { sendMail } from '../src/services/outbound.js';
 import { getSettings, maskSettings, updateSettings } from '../src/services/setting.js';
 
@@ -209,6 +209,42 @@ describe('动态域名 getDomains（纯 settings 驱动，无 fallback）', () =
     await expect(
       claimMailbox(env, uid, { localPart: 'x', domain: 'riba2534.cn' }),
     ).rejects.toMatchObject({ code: 'validation_failed' });
+  });
+});
+
+describe('收件箱未读数 countUnread', () => {
+  it('user 只数自己认领地址的 inbound 未读，已读不计', async () => {
+    await setDomains();
+    const uid = await seedUser('unread-user', 'user');
+    await claimMailbox(env, uid, { localPart: 'ur', domain: 'hpc.email' });
+
+    // 认领地址下 2 封未读 inbound
+    await seedInbound('ur@hpc.email', 'unread 1');
+    await seedInbound('ur@hpc.email', 'unread 2');
+    // 认领地址下 1 封已读 inbound（不计）
+    const readId = await seedInbound('ur@hpc.email', 'read one');
+    await markMessages(env, { userId: uid, role: 'user' }, [readId], true);
+    // 未认领地址下的未读（不计）
+    await seedInbound('someone-else@hpc.email', 'not mine');
+
+    expect(await countUnread(env, uid, 'user')).toBe(2);
+  });
+
+  it('admin 也只数自己认领地址（scope=mine，非全站）', async () => {
+    await setDomains();
+    const adminId = await seedUser('unread-admin', 'admin');
+    await claimMailbox(env, adminId, { localPart: 'boss', domain: 'hpc.email' });
+
+    await seedInbound('boss@hpc.email', 'mine unread'); // 计
+    await seedInbound('elsewhere@hpc.email', 'site unread'); // 全站有未读但非自己认领 → 不计
+
+    expect(await countUnread(env, adminId, 'admin')).toBe(1);
+  });
+
+  it('无认领地址时未读数为 0', async () => {
+    const uid = await seedUser('no-mailbox-user', 'user');
+    await seedInbound('random@hpc.email', 'x');
+    expect(await countUnread(env, uid, 'user')).toBe(0);
   });
 });
 

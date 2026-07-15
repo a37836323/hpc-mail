@@ -30,6 +30,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { IconButton } from '@/components/ui/icon-button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
+import { useUnreadCount } from '@/features/inbox/use-unread-count';
 import { cn } from '@/lib/cn';
 import { usePublicConfig } from '@/lib/use-config';
 import { useCurrentUser } from '@/lib/use-session';
@@ -46,7 +47,6 @@ const PRIMARY_NAV: NavEntry[] = [
   { to: '/inbox', label: '收件箱', icon: Inbox },
   { to: '/starred', label: '星标', icon: Star },
   { to: '/sent', label: '已发送', icon: Send },
-  { to: '/compose', label: '写邮件', icon: PenLine },
   { to: '/mailboxes', label: '我的邮箱', icon: AtSign },
   { to: '/api-keys', label: 'API Keys', icon: KeyRound },
 ];
@@ -66,33 +66,97 @@ const MOBILE_NAV: NavEntry[] = [
   { to: '/mailboxes', label: '邮箱', icon: AtSign },
 ];
 
-function SideLink({ entry, full, onNavigate }: { entry: NavEntry; full: boolean; onNavigate?: () => void }) {
+function formatBadge(count: number): string {
+  return count > 99 ? '99+' : String(count);
+}
+
+function ComposeButton({ full, onNavigate }: { full: boolean; onNavigate?: () => void }) {
+  return (
+    <NavLink
+      to="/compose"
+      onClick={onNavigate}
+      className={cn(
+        'mb-1 flex h-11 items-center gap-3 rounded-full bg-accent-soft px-4 font-semibold text-accent transition-colors hover:bg-accent hover:text-on-accent',
+        full ? 'justify-start' : 'justify-center lg:justify-start',
+      )}
+    >
+      <PenLine className="size-[18px] shrink-0" />
+      <span className={full ? 'inline' : 'hidden lg:inline'}>写邮件</span>
+    </NavLink>
+  );
+}
+
+function SideLink({
+  entry,
+  full,
+  badge,
+  onNavigate,
+}: {
+  entry: NavEntry;
+  full: boolean;
+  badge?: number;
+  onNavigate?: () => void;
+}) {
   const Icon = entry.icon;
+  const showCount = badge !== undefined && badge > 0;
   return (
     <NavLink
       to={entry.to}
       onClick={onNavigate}
       className={({ isActive }) =>
         cn(
-          'flex h-9 items-center gap-3 rounded-md px-3 text-sm font-medium transition-colors',
+          'flex h-10 items-center gap-3 rounded-full px-3 text-sm font-medium transition-colors',
           full ? 'justify-start' : 'justify-center lg:justify-start',
-          isActive
-            ? 'bg-accent-soft text-accent'
-            : 'text-ink-secondary hover:bg-surface-hover hover:text-ink',
+          isActive ? 'bg-accent-soft text-accent' : 'text-ink-secondary hover:bg-surface-hover hover:text-ink',
         )
       }
     >
-      <Icon className="size-[18px] shrink-0" />
-      <span className={full ? 'inline' : 'hidden lg:inline'}>{entry.label}</span>
+      <span className="relative flex shrink-0">
+        <Icon className="size-[18px]" />
+        {showCount && (
+          <span
+            aria-hidden
+            className={cn('absolute -right-1.5 -top-1 size-2 rounded-full bg-accent', full ? 'hidden' : 'lg:hidden')}
+          />
+        )}
+      </span>
+      <span className={cn('flex-1 truncate', full ? 'inline' : 'hidden lg:inline')}>{entry.label}</span>
+      {showCount && (
+        <span
+          className={cn(
+            'ml-auto text-xs font-semibold tabular-nums text-accent',
+            full ? 'inline' : 'hidden lg:inline',
+          )}
+        >
+          {formatBadge(badge)}
+        </span>
+      )}
     </NavLink>
   );
 }
 
-function NavSections({ isAdmin, full, onNavigate }: { isAdmin: boolean; full: boolean; onNavigate?: () => void }) {
+function NavSections({
+  isAdmin,
+  full,
+  unreadCount,
+  onNavigate,
+}: {
+  isAdmin: boolean;
+  full: boolean;
+  unreadCount: number;
+  onNavigate?: () => void;
+}) {
   return (
     <nav className="flex flex-col gap-1 p-2">
+      <ComposeButton full={full} onNavigate={onNavigate} />
       {PRIMARY_NAV.map((entry) => (
-        <SideLink key={entry.to} entry={entry} full={full} onNavigate={onNavigate} />
+        <SideLink
+          key={entry.to}
+          entry={entry}
+          full={full}
+          badge={entry.to === '/inbox' ? unreadCount : undefined}
+          onNavigate={onNavigate}
+        />
       ))}
       {isAdmin && (
         <>
@@ -164,9 +228,11 @@ function UserMenu() {
 export function AppShell() {
   const user = useCurrentUser();
   const { data: config } = usePublicConfig();
+  const { data: unread } = useUnreadCount();
   const [menuOpen, setMenuOpen] = useState(false);
   const isAdmin = user.role === 'admin';
   const siteTitle = config?.siteTitle ?? 'HPC Mail';
+  const unreadCount = unread?.unread ?? 0;
 
   return (
     <div className="flex min-h-dvh flex-col bg-canvas md:flex-row">
@@ -176,7 +242,7 @@ export function AppShell() {
           <span className="ml-2 hidden truncate text-sm font-semibold text-ink lg:inline">{siteTitle}</span>
         </div>
         <div className="flex-1 overflow-y-auto">
-          <NavSections isAdmin={isAdmin} full={false} />
+          <NavSections isAdmin={isAdmin} full={false} unreadCount={unreadCount} />
         </div>
       </aside>
 
@@ -189,7 +255,7 @@ export function AppShell() {
               </IconButton>
             </SheetTrigger>
             <SheetContent side="right" title={siteTitle}>
-              <NavSections isAdmin={isAdmin} full onNavigate={() => setMenuOpen(false)} />
+              <NavSections isAdmin={isAdmin} full unreadCount={unreadCount} onNavigate={() => setMenuOpen(false)} />
             </SheetContent>
           </Sheet>
           <img src="/logo.png" alt="" className="size-7 shrink-0 rounded-md md:hidden" />
@@ -209,6 +275,7 @@ export function AppShell() {
       <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-4 border-t border-line bg-surface md:hidden">
         {MOBILE_NAV.map((entry) => {
           const Icon = entry.icon;
+          const showCount = entry.to === '/inbox' && unreadCount > 0;
           return (
             <NavLink
               key={entry.to}
@@ -220,7 +287,14 @@ export function AppShell() {
                 )
               }
             >
-              <Icon className="size-5" />
+              <span className="relative flex">
+                <Icon className="size-5" />
+                {showCount && (
+                  <span className="absolute -right-2.5 -top-1.5 min-w-4 rounded-full bg-accent px-1 text-[10px] font-semibold leading-4 text-on-accent">
+                    {formatBadge(unreadCount)}
+                  </span>
+                )}
+              </span>
               {entry.label}
             </NavLink>
           );

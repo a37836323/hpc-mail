@@ -16,6 +16,7 @@ export const queryKeys = {
     root: ['messages'] as const,
     list: (filters: Partial<ListMessagesQuery>) => ['messages', 'list', filters] as const,
     detail: (id: number) => ['messages', 'detail', id] as const,
+    unreadCount: ['messages', 'unread-count'] as const,
   },
 
   apiKeys: {
