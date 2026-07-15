@@ -225,6 +225,22 @@ export function SettingsPage() {
               onChange={(event) => patch((s) => void (s.feishu.secret = event.target.value))}
             />
           </label>
+          <div className="flex flex-col gap-1.5">
+            <span className="text-sm font-medium text-ink">推送内容</span>
+            <SegmentedControl
+              aria-label="飞书推送内容分级"
+              value={draft.feishu.contentLevel}
+              onValueChange={(value) => patch((s) => void (s.feishu.contentLevel = value))}
+              options={[
+                { value: 'code_only', label: '仅验证码' },
+                { value: 'summary', label: '摘要' },
+                { value: 'full', label: '全文原文' },
+              ]}
+            />
+            <span className="text-xs text-ink-tertiary">
+              摘要仅推送正文前 200 字；全文会把完整正文（含敏感信息）推送到群里，多人可见请谨慎。
+            </span>
+          </div>
           <div>
             <Button
               type="button"

@@ -76,13 +76,21 @@ function cleanBody(value: string | undefined | null, limit: number): string {
   return normalized.length > limit ? `${normalized.slice(0, limit)}\n…（正文过长，已截断）` : normalized;
 }
 
-export function buildFeishuEmailCard(info: FeishuMailInfo, test = false): unknown {
+export type FeishuContentLevel = 'code_only' | 'summary' | 'full';
+
+export function buildFeishuEmailCard(
+  info: FeishuMailInfo,
+  test = false,
+  level: FeishuContentLevel = 'full',
+): unknown {
   const subject = cleanText(info.subject, 200) || '(无主题)';
   const senderAddress = cleanText(info.fromAddress, 254) || '未知';
   const senderName = cleanText(info.fromName, 100);
   const recipient = cleanText(info.toAddress, 254) || '未知';
   const code = cleanText(info.code, 64);
-  const body = cleanBody(info.body, BODY_LIMIT) || '（无纯文本正文）';
+  // summary 只推短摘要，full 推完整正文原文，code_only 不推正文
+  const bodyLimit = level === 'summary' ? 200 : BODY_LIMIT;
+  const body = cleanBody(info.body, bodyLimit) || '（无纯文本正文）';
 
   const elements: unknown[] = [
     {
@@ -100,10 +108,13 @@ export function buildFeishuEmailCard(info: FeishuMailInfo, test = false): unknow
       text: { tag: 'lark_md', content: `**验证码：**<font color='red'>${code}</font>` },
     });
   }
-  elements.push(
-    { tag: 'hr' },
-    { tag: 'div', text: { tag: 'plain_text', content: body } },
-  );
+  // code_only：只推元信息与验证码，不含正文，最大化保护隐私
+  if (level !== 'code_only') {
+    elements.push(
+      { tag: 'hr' },
+      { tag: 'div', text: { tag: 'plain_text', content: body } },
+    );
+  }
 
   return {
     msg_type: 'interactive',
@@ -120,7 +131,7 @@ export function buildFeishuEmailCard(info: FeishuMailInfo, test = false): unknow
   };
 }
 
-async function postToFeishu(
+async function postOnce(
   webhookUrl: string,
   secret: string,
   payload: Record<string, unknown>,
@@ -158,6 +169,27 @@ async function postToFeishu(
   }
 }
 
+/** 带重试的投递：飞书 webhook 有限频（100/分），瞬时失败重试 2 次（指数退避） */
+async function postToFeishu(
+  webhookUrl: string,
+  secret: string,
+  payload: Record<string, unknown>,
+): Promise<void> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt > 0) {
+      await new Promise((resolve) => setTimeout(resolve, attempt * 800));
+    }
+    try {
+      await postOnce(webhookUrl, secret, payload);
+      return;
+    } catch (e) {
+      lastError = e;
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(String(lastError));
+}
+
 /** 发送收件卡片；throwOnError=false 时静默失败（供 waitUntil 使用） */
 export async function sendFeishuNotification(
   _env: Env,
@@ -174,10 +206,13 @@ export async function sendFeishuNotification(
       return false;
     }
     const safeUrl = validateFeishuWebhookUrl(feishu.webhookUrl);
-    await postToFeishu(safeUrl, feishu.secret, buildFeishuEmailCard(info, test) as Record<
-      string,
-      unknown
-    >);
+    // 测试卡片强制推全文以便验证；正式通知按管理员设定的内容分级
+    const level = test ? 'full' : feishu.contentLevel;
+    await postToFeishu(
+      safeUrl,
+      feishu.secret,
+      buildFeishuEmailCard(info, test, level) as Record<string, unknown>,
+    );
     return true;
   } catch (error) {
     console.error('飞书通知失败:', error instanceof Error ? error.message : error);

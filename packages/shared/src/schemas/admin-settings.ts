@@ -20,6 +20,8 @@ export const feishuSettingSchema = z.object({
     .union([z.literal(''), z.url().startsWith('https://')])
     .default(''),
   secret: z.string().max(128).default(''),
+  /** 推送内容分级：仅验证码 / 摘要 / 全文原文。default 使旧配置（无此字段）仍能解析 */
+  contentLevel: z.enum(['code_only', 'summary', 'full']).default('summary'),
 });
 
 export const codeExtractSettingSchema = z.object({
@@ -91,7 +93,7 @@ export type Settings = {
 export const DEFAULT_SETTINGS: Settings = {
   register_mode: 'closed',
   gmail_forward: { enabled: false, addresses: [] },
-  feishu: { enabled: false, webhookUrl: '', secret: '' },
+  feishu: { enabled: false, webhookUrl: '', secret: '', contentLevel: 'summary' },
   code_extract: { enabled: true, aiEnabled: true },
   resend: { tokens: {} },
   site: { title: 'HPC Mail' },

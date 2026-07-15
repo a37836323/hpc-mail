@@ -72,12 +72,12 @@ describe('settings 脱敏与掩码写入', () => {
 
   it('feishu secret 掩码提交保留旧值', async () => {
     const webhookUrl = 'https://open.feishu.cn/open-apis/bot/v2/hook/abcdefghijklmnop';
-    await updateSettings(env, { feishu: { enabled: true, webhookUrl, secret: 's3cr3t' } });
+    await updateSettings(env, { feishu: { enabled: true, webhookUrl, secret: 's3cr3t', contentLevel: 'summary' } });
     let settings = await getSettings(env);
     expect(settings.feishu.secret).toBe('s3cr3t');
     expect(maskSettings(settings).feishu.secret).toBe(SECRET_MASK);
 
-    await updateSettings(env, { feishu: { enabled: true, webhookUrl, secret: SECRET_MASK } });
+    await updateSettings(env, { feishu: { enabled: true, webhookUrl, secret: SECRET_MASK, contentLevel: 'summary' } });
     settings = await getSettings(env);
     expect(settings.feishu.secret).toBe('s3cr3t');
   });
