@@ -7,6 +7,8 @@ export function useUnreadCount() {
   return useQuery({
     queryKey: queryKeys.messages.unreadCount,
     queryFn: () => messageApi.unreadCount(),
-    staleTime: 30_000,
+    staleTime: 20_000,
+    refetchInterval: 20_000,
+    refetchOnWindowFocus: true,
   });
 }

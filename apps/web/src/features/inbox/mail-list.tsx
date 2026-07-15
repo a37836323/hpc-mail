@@ -1,11 +1,15 @@
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useWindowVirtualizer } from '@tanstack/react-virtual';
-import { AlertCircle, Inbox as InboxIcon, SearchX } from 'lucide-react';
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { AlertCircle, Inbox as InboxIcon, MailOpen, SearchX, Star, Trash2, X } from 'lucide-react';
+import { type MouseEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ListMessagesQuery } from '@hpc-mail/shared';
+import { queryKeys } from '@/api/query-keys';
+import { messageApi } from '@/api/resources';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Spinner } from '@/components/ui/spinner';
+import { toast } from '@/components/ui/toast';
 import type { MessageSummary } from '@hpc-mail/shared';
 import { MessageRow } from './message-row';
 import { useMessagesQuery } from './use-messages';
@@ -42,6 +46,7 @@ export function MailList({
   emptyTitle,
   emptyDescription,
 }: MailListProps) {
+  const queryClient = useQueryClient();
   const { data, isLoading, isError, error, fetchNextPage, hasNextPage, isFetchingNextPage, refetch } =
     useMessagesQuery(query);
   const items = data?.pages.flatMap((page) => page.items) ?? [];
@@ -49,6 +54,86 @@ export function MailList({
   const star = useStarMutation();
   const handleToggleStar = (message: MessageSummary) =>
     star.mutate({ id: message.id, starred: !message.isStarred });
+
+  // ---- 批量选择 ----
+  const [selection, setSelection] = useState<Set<number>>(new Set());
+  const lastClickedRef = useRef<number | null>(null);
+  const loadedIds = useMemo(() => items.map((m) => m.id), [items]);
+
+  const clearSelection = useCallback(() => {
+    setSelection(new Set());
+    lastClickedRef.current = null;
+  }, []);
+
+  // 切换筛选条件时清空选择，避免残留已不在列表中的 id
+  const queryKey = JSON.stringify(query);
+  useEffect(() => {
+    clearSelection();
+  }, [queryKey, clearSelection]);
+
+  const toggleSelect = useCallback(
+    (id: number, event: MouseEvent) => {
+      setSelection((prev) => {
+        const next = new Set(prev);
+        // Shift 连选：选中上次点击到本次之间的所有行
+        if (event.shiftKey && lastClickedRef.current !== null) {
+          const a = loadedIds.indexOf(lastClickedRef.current);
+          const b = loadedIds.indexOf(id);
+          if (a !== -1 && b !== -1) {
+            const [lo, hi] = a < b ? [a, b] : [b, a];
+            for (let i = lo; i <= hi; i++) next.add(loadedIds[i]!);
+            lastClickedRef.current = id;
+            return next;
+          }
+        }
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        lastClickedRef.current = id;
+        return next;
+      });
+    },
+    [loadedIds],
+  );
+
+  const allSelected = loadedIds.length > 0 && loadedIds.every((id) => selection.has(id));
+
+  const invalidateMessages = () => {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.messages.root });
+  };
+
+  const batchRead = useMutation({
+    mutationFn: ({ ids, isRead }: { ids: number[]; isRead: boolean }) => messageApi.markRead(ids, isRead),
+    onSuccess: (_d, { isRead }) => {
+      toast({ title: isRead ? '已标记为已读' : '已标记为未读', variant: 'success' });
+      clearSelection();
+      invalidateMessages();
+    },
+    onError: () => toast({ title: '操作失败，请重试', variant: 'error' }),
+  });
+
+  const batchStar = useMutation({
+    mutationFn: (ids: number[]) => messageApi.star(ids, true),
+    onSuccess: () => {
+      toast({ title: '已加星标', variant: 'success' });
+      clearSelection();
+      invalidateMessages();
+    },
+    onError: () => toast({ title: '操作失败，请重试', variant: 'error' }),
+  });
+
+  const batchDelete = useMutation({
+    mutationFn: (ids: number[]) => messageApi.remove(ids),
+    onSuccess: (_d, ids) => {
+      toast({ title: `已删除 ${ids.length} 封`, variant: 'success' });
+      clearSelection();
+      invalidateMessages();
+    },
+    onError: () => toast({ title: '删除失败，请重试', variant: 'error' }),
+  });
+
+  const selectionActive = selection.size > 0;
+  const selectedIds = useMemo(() => [...selection], [selection]);
+  const batchPending = batchRead.isPending || batchStar.isPending || batchDelete.isPending;
 
   const listRef = useRef<HTMLDivElement>(null);
   const [scrollMargin, setScrollMargin] = useState(0);
@@ -123,6 +208,52 @@ export function MailList({
           网络异常，显示的是缓存内容。
         </div>
       )}
+      {selectionActive && (
+        <div className="sticky top-14 z-20 flex flex-wrap items-center gap-2 rounded-lg border border-line-strong bg-surface px-3 py-2 shadow-sm">
+          <button
+            type="button"
+            className="text-sm font-medium text-accent hover:underline"
+            onClick={() =>
+              allSelected ? clearSelection() : setSelection(new Set(loadedIds))
+            }
+          >
+            {allSelected ? '取消全选' : `全选本页（${loadedIds.length}）`}
+          </button>
+          <span className="text-sm text-ink-secondary">已选 {selection.size} 封</span>
+          <div className="ml-auto flex items-center gap-1">
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={batchPending}
+              onClick={() => batchRead.mutate({ ids: selectedIds, isRead: true })}
+            >
+              <MailOpen className="size-4" />
+              已读
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={batchPending}
+              onClick={() => batchStar.mutate(selectedIds)}
+            >
+              <Star className="size-4" />
+              星标
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={batchPending}
+              onClick={() => batchDelete.mutate(selectedIds)}
+            >
+              <Trash2 className="size-4 text-critical" />
+              删除
+            </Button>
+            <Button size="sm" variant="ghost" onClick={clearSelection} aria-label="取消选择">
+              <X className="size-4" />
+            </Button>
+          </div>
+        </div>
+      )}
       <div
         ref={listRef}
         className="relative overflow-hidden rounded-lg border border-line bg-surface"
@@ -139,7 +270,13 @@ export function MailList({
               className="absolute inset-x-0 top-0"
               style={{ transform: `translateY(${virtualItem.start - scrollMargin}px)` }}
             >
-              <MessageRow message={message} onToggleStar={handleToggleStar} />
+              <MessageRow
+                message={message}
+                onToggleStar={handleToggleStar}
+                selected={selection.has(message.id)}
+                selectionActive={selectionActive}
+                onToggleSelect={toggleSelect}
+              />
             </div>
           );
         })}

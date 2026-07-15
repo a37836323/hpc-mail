@@ -122,6 +122,8 @@ export interface MessageSummary {
   status: string;
   /** 发送失败/部分失败原因（inbound 与成功发送为空串）；让调用方能识别「假成功」 */
   errorDetail: string;
+  /** 收件人 To 列表；仅 outbound 填充，供已发送列表展示「发给了谁」 */
+  recipientsTo?: string[];
   isRead: boolean;
   isStarred: boolean;
   hasAttachments: boolean;

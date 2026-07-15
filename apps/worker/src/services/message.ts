@@ -49,6 +49,7 @@ function summarize(row: MessageRow, hasAttachments: boolean, isStarred: boolean)
     verificationCode: row.verificationCode,
     status: row.status,
     errorDetail: row.errorDetail ?? '',
+    recipientsTo: row.direction === 'outbound' ? (row.recipients?.to ?? []) : undefined,
     isRead: row.isRead,
     isStarred,
     hasAttachments,
