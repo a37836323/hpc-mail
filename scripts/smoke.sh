@@ -27,8 +27,8 @@ step "公开配置合法"
 config=$(curl -sS "$BASE_URL/api/config")
 mode=$(echo "$config" | jq -r '.data.registrationMode')
 echo "$mode" | grep -qE '^(closed|invite|open)$' || fail "registrationMode 非法: $config"
-domains_len=$(echo "$config" | jq '.data.domains | length')
-[ "$domains_len" -ge 1 ] || fail "domains 为空"
+# 域名由管理端维护，全新部署初始可为空（合法状态）；仅校验是数组
+echo "$config" | jq -e '.data.domains | type == "array"' >/dev/null || fail "domains 非数组: $config"
 
 step "管理员真实登录"
 login=$(curl -sS -X POST "$BASE_URL/api/auth/login" -H 'Content-Type: application/json' \

@@ -15,14 +15,7 @@ enabled = true
 crons = ["0 16 * * *"]
 
 [vars]
-domain = [
-  "hpc.email",
-  "happyclaw.cc",
-  "riba2534.cn",
-  "tiktok-row.cn",
-  "option.red",
-  "claude-router.cc",
-]
+# 系统域名不再写死在 vars，改由 settings.domains.list（管理端维护）；见 services/domain.ts
 ai_model = "@cf/meta/llama-3.1-8b-instruct"
 
 [[d1_databases]]

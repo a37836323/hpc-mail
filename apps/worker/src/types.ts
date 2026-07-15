@@ -9,8 +9,6 @@ export interface Env {
   assets: Fetcher;
   /** send_email binding：Cloudflare 原生发信（仅已验证 destination） */
   email: SendEmail;
-  /** [vars] domain：系统域名白名单 */
-  domain: string[];
   /** [vars] ai_model：验证码兜底模型 */
   ai_model: string;
   /** secret：JWT 签名密钥 */

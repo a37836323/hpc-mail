@@ -39,6 +39,19 @@ async function seedInbound(address: string, subject: string, bodyText = ''): Pro
   return row!.id;
 }
 
+// 域名不再来自 wrangler vars，认领/发件前需在 settings 里配置
+const TEST_DOMAINS = [
+  'hpc.email',
+  'happyclaw.cc',
+  'riba2534.cn',
+  'tiktok-row.cn',
+  'option.red',
+  'claude-router.cc',
+];
+async function setDomains(list: string[] = TEST_DOMAINS): Promise<void> {
+  await updateSettings(env, { domains: { list } });
+}
+
 describe('settings 脱敏与掩码写入', () => {
   it('resend token 存明文、回显掩码、掩码提交保留旧值', async () => {
     await updateSettings(env, { resend: { tokens: { 'hpc.email': 're_secret_abc' } } });
@@ -72,6 +85,7 @@ describe('settings 脱敏与掩码写入', () => {
 
 describe('mailbox 认领唯一冲突', () => {
   it('同地址二次认领被拒，跨域名被拒', async () => {
+    await setDomains();
     const u1 = await seedUser('alice', 'user');
     const u2 = await seedUser('bob', 'user');
     const box = await claimMailbox(env, u1, { localPart: 'test1', domain: 'claude-router.cc' });
@@ -90,6 +104,7 @@ describe('mailbox 认领唯一冲突', () => {
 describe('message 可见性 user vs admin', () => {
   // 地址与「认领唯一冲突」用例错开——同文件共享存储，test1@ 已被 alice 占用
   beforeEach(async () => {
+    await setDomains();
     await seedInbound('carol@claude-router.cc', 'claimed message');
     await seedInbound('other@hpc.email', 'unclaimed message');
   });
@@ -170,14 +185,17 @@ describe('星标与正文搜索', () => {
   });
 });
 
-describe('动态域名 getDomains', () => {
-  it('无 domains 设置时 fallback 到 env.domain', async () => {
-    const domains = await getDomains(env);
-    expect(domains).toEqual(env.domain);
-    expect(domains).toContain('hpc.email');
+describe('动态域名 getDomains（纯 settings 驱动，无 fallback）', () => {
+  it('未配置 domains 时返回空数组，任何域名都不能认领', async () => {
+    expect(await getDomains(env)).toEqual([]);
+
+    const uid = await seedUser('empty-dom-user', 'user');
+    await expect(
+      claimMailbox(env, uid, { localPart: 'x', domain: 'hpc.email' }),
+    ).rejects.toMatchObject({ code: 'validation_failed' });
   });
 
-  it('settings.domains.list 非空时覆盖 env.domain，可认领新域名、拒绝表外域名', async () => {
+  it('settings.domains.list 决定可用域名：表内可认领、表外被拒', async () => {
     await updateSettings(env, { domains: { list: ['custom-domain.io', 'hpc.email'] } });
     expect(await getDomains(env)).toEqual(['custom-domain.io', 'hpc.email']);
 
@@ -185,7 +203,7 @@ describe('动态域名 getDomains', () => {
     const box = await claimMailbox(env, uid, { localPart: 'hi', domain: 'custom-domain.io' });
     expect(box.address).toBe('hi@custom-domain.io');
 
-    // 覆盖后，原本在 env.domain 但不在 list 的域名被拒
+    // 不在 list 的域名被拒
     await expect(
       claimMailbox(env, uid, { localPart: 'x', domain: 'riba2534.cn' }),
     ).rejects.toMatchObject({ code: 'validation_failed' });
@@ -194,6 +212,7 @@ describe('动态域名 getDomains', () => {
 
 describe('回复头 replyToMessageId', () => {
   it('站内回复时 outbound 与 inbound 行写入原邮件 message_id 到 in_reply_to', async () => {
+    await setDomains();
     const db = createDb(env);
     const uid = await seedUser('reply-user', 'user');
     await claimMailbox(env, uid, { localPart: 'me', domain: 'hpc.email' });

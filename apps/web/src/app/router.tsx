@@ -25,6 +25,9 @@ const AdminMailPage = lazy(() =>
 const InvitesPage = lazy(() =>
   import('@/features/admin/invites/invites-page').then((m) => ({ default: m.InvitesPage })),
 );
+const DomainsPage = lazy(() =>
+  import('@/features/admin/domains/domains-page').then((m) => ({ default: m.DomainsPage })),
+);
 const SettingsPage = lazy(() =>
   import('@/features/admin/settings/settings-page').then((m) => ({ default: m.SettingsPage })),
 );
@@ -60,6 +63,7 @@ export const router = createBrowserRouter([
           { path: 'users', element: <UsersPage /> },
           { path: 'mail', element: <AdminMailPage /> },
           { path: 'invites', element: <InvitesPage /> },
+          { path: 'domains', element: <DomainsPage /> },
           { path: 'settings', element: <SettingsPage /> },
         ],
       },

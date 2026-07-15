@@ -2,6 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import {
   AtSign,
   ChevronDown,
+  Globe,
   Inbox,
   KeyRound,
   Lock,
@@ -52,6 +53,7 @@ const PRIMARY_NAV: NavEntry[] = [
 
 const ADMIN_NAV: NavEntry[] = [
   { to: '/admin/users', label: '用户', icon: Users },
+  { to: '/admin/domains', label: '域名', icon: Globe },
   { to: '/admin/mail', label: '全站邮件', icon: Mails },
   { to: '/admin/invites', label: '邀请码', icon: Ticket },
   { to: '/admin/settings', label: '系统设置', icon: Settings },

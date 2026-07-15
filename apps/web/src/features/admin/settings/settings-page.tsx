@@ -1,13 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, Trash2 } from 'lucide-react';
-import { type FormEvent, type ReactNode, useEffect, useState } from 'react';
-import { SECRET_MASK, type Settings, domainSchema } from '@hpc-mail/shared';
+import { type ReactNode, useEffect, useState } from 'react';
+import { SECRET_MASK, type Settings } from '@hpc-mail/shared';
 import { ApiError } from '@/api/errors';
 import { queryKeys } from '@/api/query-keys';
 import { adminApi } from '@/api/resources';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
-import { IconButton } from '@/components/ui/icon-button';
 import { Input } from '@/components/ui/input';
 import { PasswordInput } from '@/components/ui/password-input';
 import { SegmentedControl } from '@/components/ui/segmented-control';
@@ -15,7 +13,6 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
 import { toast } from '@/components/ui/toast';
 import { RecipientInput } from '@/features/compose/recipient-input';
-import { usePublicConfig } from '@/lib/use-config';
 
 function Section({ title, description, children }: { title: string; description?: string; children: ReactNode }) {
   return (
@@ -54,10 +51,7 @@ function ToggleRow({
 export function SettingsPage() {
   const queryClient = useQueryClient();
   const { data, isLoading } = useQuery({ queryKey: queryKeys.admin.settings, queryFn: () => adminApi.getSettings() });
-  const { data: config } = usePublicConfig();
   const [draft, setDraft] = useState<Settings | null>(null);
-  const [newDomain, setNewDomain] = useState('');
-  const [domainError, setDomainError] = useState<string | null>(null);
 
   useEffect(() => {
     if (data && draft === null) setDraft(structuredClone(data));
@@ -99,31 +93,9 @@ export function SettingsPage() {
   }
 
   const dirty = JSON.stringify(draft) !== JSON.stringify(data);
-  const domains = draft.domains.list.length > 0 ? draft.domains.list : (config?.domains ?? []);
-
-  const addDomain = (event: FormEvent) => {
-    event.preventDefault();
-    const value = newDomain.trim().toLowerCase();
-    const parsed = domainSchema.safeParse(value);
-    if (!parsed.success) {
-      setDomainError(parsed.error.issues[0]?.message ?? '域名格式非法');
-      return;
-    }
-    if (draft.domains.list.includes(parsed.data)) {
-      setDomainError('该域名已在列表中');
-      return;
-    }
-    patch((settings) => {
-      settings.domains.list.push(parsed.data);
-    });
-    setNewDomain('');
-    setDomainError(null);
-  };
-
-  const removeDomain = (index: number) =>
-    patch((settings) => {
-      settings.domains.list.splice(index, 1);
-    });
+  // 域名完全由 settings.domains.list 驱动（后端 getDomains 已去部署配置 fallback）；
+  // 域名的增删在独立的 /admin/domains 页面管理。
+  const domains = draft.domains.list;
 
   return (
     <div className="mx-auto max-w-3xl pb-16">
@@ -145,47 +117,6 @@ export function SettingsPage() {
             checked={draft.api.enabled}
             onChange={(value) => patch((s) => void (s.api.enabled = value))}
           />
-        </Section>
-
-        <Section
-          title="收件域名"
-          description="新增域名需先在 Cloudflare 为该域开启 Email Routing 并把 catch-all 指向本 Worker；此列表控制前端展示、地址认领与发件白名单；留空则使用部署配置的默认域名。"
-        >
-          {draft.domains.list.length > 0 ? (
-            <ul className="flex flex-col gap-2">
-              {draft.domains.list.map((domain, index) => (
-                <li
-                  key={domain}
-                  className="flex items-center justify-between gap-3 rounded-md border border-line px-3 py-2 text-sm"
-                >
-                  <span className="font-mono text-ink">{domain}</span>
-                  <IconButton size="sm" aria-label={`删除 ${domain}`} onClick={() => removeDomain(index)}>
-                    <Trash2 className="size-4 text-critical" />
-                  </IconButton>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-sm text-ink-tertiary">当前使用部署配置的域名：{(config?.domains ?? []).join('、') || '（无）'}</p>
-          )}
-          <form onSubmit={addDomain} className="flex items-start gap-2">
-            <div className="flex-1">
-              <Input
-                placeholder="example.com"
-                value={newDomain}
-                invalid={domainError !== null}
-                onChange={(event) => {
-                  setNewDomain(event.target.value);
-                  if (domainError) setDomainError(null);
-                }}
-              />
-              {domainError && <p className="mt-1 text-xs text-critical">{domainError}</p>}
-            </div>
-            <Button type="submit" variant="secondary">
-              <Plus className="size-4" />
-              添加
-            </Button>
-          </form>
         </Section>
 
         <Section title="注册模式" description="控制新用户如何注册平台账户。">
@@ -268,7 +199,7 @@ export function SettingsPage() {
 
         <Section title="Resend 外发" description="按发件域名配置 Resend API Token，用于站外投递。">
           {domains.length === 0 ? (
-            <p className="text-sm text-ink-tertiary">未配置任何系统域名。</p>
+            <p className="text-sm text-ink-tertiary">请先在“域名”页添加收件域名。</p>
           ) : (
             domains.map((domain) => {
               const current = draft.resend.tokens[domain] ?? '';

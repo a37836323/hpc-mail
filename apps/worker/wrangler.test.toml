@@ -6,14 +6,7 @@ main = "src/index.ts"
 compatibility_date = "2025-06-04"
 
 [vars]
-domain = [
-  "hpc.email",
-  "happyclaw.cc",
-  "riba2534.cn",
-  "tiktok-row.cn",
-  "option.red",
-  "claude-router.cc",
-]
+# 域名由 settings.domains.list 维护，测试在 setup 里 updateSettings 设置
 ai_model = "@cf/meta/llama-3.1-8b-instruct"
 
 [[d1_databases]]

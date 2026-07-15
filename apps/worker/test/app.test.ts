@@ -4,6 +4,7 @@ import { createApp } from '../src/app.js';
 import { createDb } from '../src/db/client.js';
 import { users } from '../src/db/schema.js';
 import { hashPassword } from '../src/lib/password.js';
+import { updateSettings } from '../src/services/setting.js';
 
 const app = createApp();
 
@@ -29,7 +30,8 @@ async function seedAdmin(): Promise<void> {
 }
 
 describe('信封与鉴权链路', () => {
-  it('GET /api/config 返回公开配置信封', async () => {
+  it('GET /api/config 返回公开配置信封（域名来自 settings）', async () => {
+    await updateSettings(env, { domains: { list: ['hpc.email', 'claude-router.cc'] } });
     const res = await request('/api/config');
     expect(res.status).toBe(200);
     const body = (await res.json()) as { data: { registrationMode: string; domains: string[] } };

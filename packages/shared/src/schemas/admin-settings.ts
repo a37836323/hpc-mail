@@ -40,7 +40,7 @@ export const apiSettingSchema = z.object({
   enabled: z.boolean(),
 });
 
-/** 收件域名列表：空数组表示回退到部署配置（env.domain） */
+/** 系统域名列表：管理端维护，空数组表示未配置任何域名（认领/发件将被拒） */
 export const domainsSettingSchema = z.object({
   list: z.array(domainSchema).max(64),
 });

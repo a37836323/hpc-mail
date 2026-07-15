@@ -30,7 +30,7 @@
 - **通知与转发**——收件推送飞书 Webhook 卡片（HMAC 签名 + 防 SSRF），可自动转发到 Gmail 等已验证邮箱
 - **开放 REST API**——`/v1` 全套接口（收件箱 / 详情 / 附件 / 发件 / 邮箱管理），API Key 支持 scope、每分钟限流、IP 白名单、过期时间与调用审计
 - **注册模式可配**——关闭（默认）/ 邀请码 / 开放注册，管理后台一键切换
-- **动态域名管理**——收件域名列表后台增删，加域名无需重新部署
+- **动态域名管理**——收件域名完全由管理员在后台「域名」页维护（增删即时生效），不写死在部署配置里，加域名无需重新部署
 - **浅色现代 UI**——Graphite + Indigo 设计系统，桌面 / 平板 / 移动三档响应式
 
 ## 🏗 架构
@@ -109,7 +109,7 @@ apps/worker/scripts/dev-send-mail.sh otp-plain hello@hpc.email
 
 ### 部署到 Cloudflare
 
-1. 准备资源：D1 数据库、KV 命名空间、R2 存储桶、各域名开启 Email Routing 并把 catch-all 指向 Worker，改 `apps/worker/wrangler.toml` 中的资源 ID 与默认域名
+1. 准备资源：D1 数据库、KV 命名空间、R2 存储桶，改 `apps/worker/wrangler.toml` 中的资源 ID。域名**不写死在配置里**——部署上线后，管理员在后台「域名」页把已开启 Email Routing catch-all 的域名逐个添加即可（见下方「动态域名管理」）
 2. 配置 GitHub 仓库 Secrets / Variables：
 
    | 类型 | 名称 | 说明 |
