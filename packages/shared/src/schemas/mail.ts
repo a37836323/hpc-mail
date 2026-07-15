@@ -77,6 +77,8 @@ export const sendMailRequestSchema = z
     attachments: z.array(sendAttachmentSchema).max(MAX_ATTACHMENTS).default([]),
     /** 回复的站内邮件 id：后端据此注入 In-Reply-To / References 头 */
     replyToMessageId: z.number().int().positive().optional(),
+    /** 转发来源邮件 id：后端据此把原邮件附件带入本次发送（发件人需对该邮件可见） */
+    forwardAttachmentsFrom: z.number().int().positive().optional(),
   })
   .refine((v) => v.to.length + v.cc.length + v.bcc.length <= MAX_RECIPIENTS, {
     message: `收件人合计不能超过 ${MAX_RECIPIENTS} 个`,

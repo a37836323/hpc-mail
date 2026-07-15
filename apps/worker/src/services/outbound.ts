@@ -1,4 +1,10 @@
-import type { MessageSummary, Role, SendMailRequest } from '@hpc-mail/shared';
+import {
+  MAX_ATTACHMENTS,
+  MAX_ATTACHMENT_TOTAL_BYTES,
+  type MessageSummary,
+  type Role,
+  type SendMailRequest,
+} from '@hpc-mail/shared';
 import { and, eq } from 'drizzle-orm';
 import { createDb, type Db } from '../db/client.js';
 import { attachments as attachmentsTable, mailboxes, messages } from '../db/schema.js';
@@ -130,6 +136,56 @@ async function resolveFrom(
   const displayName = (req.from.displayName || req.from.localPart!).trim();
   assertNoHeaderInjection(displayName);
   return { address, domain, displayName };
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
+}
+
+/** 转发时把原邮件的附件带入本次发送：校验可见性后从 R2 读回，转成 DecodedAttachment */
+async function loadForwardedAttachments(
+  env: Env,
+  db: Db,
+  sender: Sender,
+  sourceMessageId: number,
+  alreadyCount: number,
+): Promise<DecodedAttachment[]> {
+  const source = await db.select().from(messages).where(eq(messages.id, sourceMessageId)).get();
+  if (!source) return [];
+  if (sender.role !== 'admin') {
+    const owned = await db
+      .select({ id: mailboxes.id })
+      .from(mailboxes)
+      .where(and(eq(mailboxes.address, source.address), eq(mailboxes.userId, sender.userId)))
+      .get();
+    if (!owned) throw new AppError('forbidden', '无权转发该邮件的附件');
+  }
+  const rows = await db
+    .select()
+    .from(attachmentsTable)
+    .where(eq(attachmentsTable.messageId, sourceMessageId))
+    .all();
+  const out: DecodedAttachment[] = [];
+  for (const a of rows) {
+    if (alreadyCount + out.length >= MAX_ATTACHMENTS) break;
+    const obj = await env.r2.get(a.r2Key);
+    if (!obj) continue;
+    const bytes = new Uint8Array(await obj.arrayBuffer());
+    out.push({
+      filename: a.filename,
+      mimeType: a.mimeType,
+      contentId: '',
+      disposition: 'attachment',
+      bytes,
+      base64: bytesToBase64(bytes),
+    });
+  }
+  return out;
 }
 
 async function persistAttachments(
@@ -298,6 +354,22 @@ export async function sendMail(
     bytes: decodeBase64(a.content),
     base64: a.content,
   }));
+
+  // 转发携带原附件：从来源邮件读回（校验可见性），追加到本次发送
+  if (req.forwardAttachmentsFrom) {
+    const forwarded = await loadForwardedAttachments(
+      env,
+      db,
+      sender,
+      req.forwardAttachmentsFrom,
+      decoded.length,
+    );
+    decoded.push(...forwarded);
+    const totalBytes = decoded.reduce((sum, a) => sum + a.bytes.byteLength, 0);
+    if (totalBytes > MAX_ATTACHMENT_TOTAL_BYTES) {
+      throw new AppError('payload_too_large', '附件合计超过 25MB 上限');
+    }
+  }
 
   const allRecipients = [...req.to, ...req.cc, ...req.bcc].map(normalizeEmail);
   const isInternal = (addr: string) => domains.includes(getEmailDomain(addr));

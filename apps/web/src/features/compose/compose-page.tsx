@@ -201,6 +201,7 @@ export function ComposePage() {
       ...(isHtml ? { html: body } : { text: body }),
       attachments: attachments.map(({ filename, contentType, content }) => ({ filename, contentType, content })),
       ...(replyToMessageId ? { replyToMessageId } : {}),
+      ...(initial.forwardAttachmentsFrom ? { forwardAttachmentsFrom: initial.forwardAttachmentsFrom } : {}),
     };
 
     const parsed = sendMailRequestSchema.safeParse(payload);

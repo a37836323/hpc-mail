@@ -12,6 +12,8 @@ export interface ComposeInitial {
   isHtml?: boolean;
   /** 回复的站内邮件 id，后端据此注入 In-Reply-To / References */
   replyToMessageId?: number;
+  /** 转发来源邮件 id：后端据此带上原附件 */
+  forwardAttachmentsFrom?: number;
   /** 页面标题用；不靠主题前缀猜测（中文「转发:」会误判） */
   mode?: 'reply' | 'forward' | 'resend';
 }
@@ -89,16 +91,17 @@ export function buildReplyAll(message: MessageDetail): ComposeInitial {
 }
 
 export function buildForward(message: MessageDetail): ComposeInitial {
-  const attachmentNote =
-    message.attachments.length > 0
-      ? `\n（原邮件含 ${message.attachments.length} 个附件，转发不含附件，如需请从原邮件下载）\n`
-      : '';
+  const hasAttachments = message.attachments.length > 0;
+  const attachmentNote = hasAttachments
+    ? `\n（原邮件的 ${message.attachments.length} 个附件将随本次转发一并发送）\n`
+    : '';
   return {
     fromAddress: message.address,
     to: [],
     subject: withPrefix(message.subject, 'Fwd'),
     body: attachmentNote + quotedBody(message),
     isHtml: false,
+    forwardAttachmentsFrom: hasAttachments ? message.id : undefined,
     mode: 'forward',
   };
 }
