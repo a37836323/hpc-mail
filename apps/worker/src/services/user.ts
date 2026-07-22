@@ -31,16 +31,16 @@ export async function getActiveAdminIds(env: Env): Promise<number[]> {
   return rows.map((r) => r.id);
 }
 
-const mailboxCountSql = sql<number>`(SELECT COUNT(*) FROM mailboxes WHERE mailboxes.user_id = users.id)`;
 const apiKeyCountSql = sql<number>`(SELECT COUNT(*) FROM api_keys WHERE api_keys.user_id = users.id)`;
 
-function serialize(row: UserRow, mailboxCount: number, apiKeyCount: number): AdminUser {
+function serialize(row: UserRow, mailboxAddresses: string[], apiKeyCount: number): AdminUser {
   return {
     id: row.id,
     username: row.username,
     role: row.role,
     status: row.status,
-    mailboxCount,
+    mailboxCount: mailboxAddresses.length,
+    mailboxes: mailboxAddresses,
     apiKeyCount,
     createdAt: row.createdAt.toISOString(),
     lastLoginAt: row.lastLoginAt ? row.lastLoginAt.toISOString() : null,
@@ -48,14 +48,35 @@ function serialize(row: UserRow, mailboxCount: number, apiKeyCount: number): Adm
   };
 }
 
+async function listMailboxAddresses(db: Db, userId: number): Promise<string[]> {
+  const rows = await db
+    .select({ address: mailboxes.address })
+    .from(mailboxes)
+    .where(eq(mailboxes.userId, userId))
+    .orderBy(mailboxes.address)
+    .all();
+  return rows.map((r) => r.address);
+}
+
 export async function listUsers(env: Env): Promise<AdminUser[]> {
   const db = createDb(env);
   const rows = await db
-    .select({ user: users, mailboxCount: mailboxCountSql, apiKeyCount: apiKeyCountSql })
+    .select({ user: users, apiKeyCount: apiKeyCountSql })
     .from(users)
     .orderBy(desc(users.id))
     .all();
-  return rows.map((r) => serialize(r.user, Number(r.mailboxCount), Number(r.apiKeyCount)));
+  const addressRows = await db
+    .select({ userId: mailboxes.userId, address: mailboxes.address })
+    .from(mailboxes)
+    .orderBy(mailboxes.address)
+    .all();
+  const byUser = new Map<number, string[]>();
+  for (const r of addressRows) {
+    const list = byUser.get(r.userId);
+    if (list) list.push(r.address);
+    else byUser.set(r.userId, [r.address]);
+  }
+  return rows.map((r) => serialize(r.user, byUser.get(r.user.id) ?? [], Number(r.apiKeyCount)));
 }
 
 export async function createUser(env: Env, req: CreateUserRequest): Promise<AdminUser> {
@@ -67,7 +88,7 @@ export async function createUser(env: Env, req: CreateUserRequest): Promise<Admi
     .insert(users)
     .values({ username: req.username, passwordHash, role: req.role, status: 'active' })
     .returning();
-  return serialize(row!, 0, 0);
+  return serialize(row!, [], 0);
 }
 
 export async function updateUser(
@@ -110,11 +131,11 @@ export async function updateUser(
   if (bumpEpoch) await bumpUserEpoch(env, id);
 
   const count = await db
-    .select({ mailboxCount: mailboxCountSql, apiKeyCount: apiKeyCountSql })
+    .select({ apiKeyCount: apiKeyCountSql })
     .from(users)
     .where(eq(users.id, id))
     .get();
-  return serialize(row!, Number(count?.mailboxCount ?? 0), Number(count?.apiKeyCount ?? 0));
+  return serialize(row!, await listMailboxAddresses(db, id), Number(count?.apiKeyCount ?? 0));
 }
 
 /**

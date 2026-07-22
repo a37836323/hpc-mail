@@ -121,6 +121,8 @@ export interface AdminUser {
   role: Role;
   status: UserStatus;
   mailboxCount: number;
+  /** 名下已认领的邮箱地址列表（与 mailboxCount 对应） */
+  mailboxes: string[];
   /** 名下 API Key 数（删除用户前确认后果用） */
   apiKeyCount: number;
   createdAt: string;

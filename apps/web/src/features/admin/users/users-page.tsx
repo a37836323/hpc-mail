@@ -75,12 +75,43 @@ function ResetPasswordDialog({ target, onClose }: { target: AdminUser | null; on
   );
 }
 
+function MailboxListDialog({ target, onClose }: { target: AdminUser | null; onClose: () => void }) {
+  return (
+    <Dialog open={target !== null} onOpenChange={(next) => !next && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader
+          title="已绑定邮箱"
+          description={target ? `${target.username} 名下共 ${target.mailboxCount} 个地址` : undefined}
+        />
+        <DialogBody className="flex max-h-80 flex-col gap-2 overflow-y-auto">
+          {target && target.mailboxes.length > 0 ? (
+            target.mailboxes.map((address) => (
+              <div key={address} className="flex items-center gap-2 rounded-md border border-line bg-canvas px-3 py-2">
+                <code className="min-w-0 flex-1 break-all font-mono text-sm text-ink">{address}</code>
+                <CopyButton value={address} size="sm" />
+              </div>
+            ))
+          ) : (
+            <p className="text-sm text-ink-secondary">该用户尚未绑定任何邮箱地址。</p>
+          )}
+        </DialogBody>
+        <DialogFooter>
+          <Button variant="secondary" onClick={onClose}>
+            关闭
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function UsersPage() {
   const currentUser = useCurrentUser();
   const queryClient = useQueryClient();
   const { data, isLoading } = useQuery({ queryKey: queryKeys.admin.users, queryFn: () => adminApi.listUsers() });
   const [resetting, setResetting] = useState<AdminUser | null>(null);
   const [deleting, setDeleting] = useState<AdminUser | null>(null);
+  const [viewingMailboxes, setViewingMailboxes] = useState<AdminUser | null>(null);
 
   const update = useMutation({
     mutationFn: ({ id, patch }: { id: number; patch: Parameters<typeof adminApi.updateUser>[1] }) =>
@@ -155,7 +186,20 @@ export function UsersPage() {
                       {user.status === 'active' ? '正常' : '已禁用'}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-ink-secondary">{user.mailboxCount}</TableCell>
+                  <TableCell>
+                    {user.mailboxCount > 0 ? (
+                      <button
+                        type="button"
+                        className="text-ink-secondary underline decoration-line underline-offset-4 transition-colors hover:text-ink hover:decoration-ink"
+                        title="查看绑定邮箱"
+                        onClick={() => setViewingMailboxes(user)}
+                      >
+                        {user.mailboxCount}
+                      </button>
+                    ) : (
+                      <span className="text-ink-secondary">0</span>
+                    )}
+                  </TableCell>
                   <TableCell className="text-ink-tertiary" title={user.lastLoginAt ? formatDateTime(user.lastLoginAt) : ''}>
                     {user.lastLoginAt ? formatRelativeTime(user.lastLoginAt) : '从未'}
                   </TableCell>
@@ -168,6 +212,8 @@ export function UsersPage() {
                           </IconButton>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent>
+                          <DropdownMenuItem onSelect={() => setViewingMailboxes(user)}>查看绑定邮箱</DropdownMenuItem>
+                          <DropdownMenuSeparator />
                           <DropdownMenuItem
                             disabled={isSelf}
                             onSelect={() =>
@@ -203,6 +249,7 @@ export function UsersPage() {
         </Table>
       )}
 
+      <MailboxListDialog target={viewingMailboxes} onClose={() => setViewingMailboxes(null)} />
       <ResetPasswordDialog target={resetting} onClose={() => setResetting(null)} />
       <ConfirmDialog
         open={deleting !== null}
