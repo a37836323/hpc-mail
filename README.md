@@ -145,9 +145,51 @@ apps/worker/scripts/dev-send-mail.sh otp-plain hello@example.com
 
 ### 部署到 Cloudflare
 
-两种方式：**一键部署**（最快见效，先跑在 workers.dev）或 **GitHub Actions**（推荐，push 即自动持续部署）。两种方式都**不需要改仓库里的任何文件**。
+三种方式：**让 AI Agent 帮你部署**（推荐，动嘴不动手）、**一键部署按钮**（最快见效，先跑在 workers.dev）、或**手动配置 GitHub Actions**。三种方式都**不需要改仓库里的任何文件**。
 
-#### 方式一：一键部署（试验性）
+#### 方式一：让 AI Agent 帮你部署（推荐）
+
+把下面整段提示词复制给你的 AI 编程助手（Claude Code、Codex、Cursor 等，需要能执行终端命令），它会替你完成 fork、建资源、配置到上线的全过程，只在关键节点（域名、管理员账号、API Token）向你要输入：
+
+```text
+请帮我把开源邮箱系统 HPC Mail（https://github.com/riba2534/hpc-mail）部署到我自己的
+Cloudflare 账号，走 GitHub Actions 持续部署。逐步执行，每步验证成功再继续：
+
+1. 环境检查：gh auth status 确认 GitHub CLI 已登录；wrangler whoami 确认 wrangler
+   已安装并登录（缺哪个就先引导我装好/登录）。
+2. Fork 并克隆：gh repo fork riba2534/hpc-mail --clone，进入仓库目录。
+3. 通读 README「方式三：手动配置 GitHub Actions」一节并照做——那里有完整的资源创建
+   命令、8 项 Secrets/Variables 清单和 API Token 权限配方，以下步骤是它的执行摘要。
+4. 创建资源并记录输出的 ID：
+   wrangler d1 create hpc-cloud-mail-db
+   wrangler kv namespace create kv
+   wrangler r2 bucket create hpc-cloud-mail-r2
+   （R2 未激活会失败——提示我去 Cloudflare 控制台激活 R2 后重试。）
+5. 向我收集三样东西：站点域名 CUSTOM_DOMAIN（必须已托管在我的 Cloudflare 账号且
+   Active）、管理员用户名（3-32 位小写字母/数字）、管理员密码（12 位以上）。
+   JWT_SECRET 不用问我，用 openssl rand -base64 32 | tr '+/' '-_' | tr -d '=' 生成。
+6. 引导我创建 CLOUDFLARE_API_TOKEN：控制台用「Edit Cloudflare Workers」模板，再手动
+   加 Account→D1:Edit 和 Zone→Workers Routes:Edit（Zone Resources 勾选 CUSTOM_DOMAIN
+   所在 zone），创建后我把 token 粘给你。
+7. 写入配置（在 fork 出的仓库上执行）：gh secret set 三项（CLOUDFLARE_API_TOKEN /
+   JWT_SECRET / ADMIN_PASSWORD），gh variable set 五项（CLOUDFLARE_ACCOUNT_ID 用
+   wrangler whoami 查、D1_DATABASE_ID / KV_NAMESPACE_ID 用第 4 步的输出、
+   CUSTOM_DOMAIN / ADMIN_USERNAME 用第 5 步收集的值）。
+8. 启用 fork 仓库的 Actions（gh workflow enable deploy.yml，不行就引导我在仓库
+   Actions 页点启用），然后 gh workflow run "Deploy HPC Mail" 触发首次部署
+   （全新数据库不要开 reset_database）。
+9. gh run watch 盯到全部步骤通过。若「线上冒烟」超时，多半是 custom domain 证书
+   还在签发，等一分钟重跑（不要勾 reset_database）。
+10. 部署成功后：指导我在 Cloudflare 控制台给收件域名开 Email Routing 并把 catch-all
+    指向 hpc-cloud-mail Worker；然后让我登录 https://<CUSTOM_DOMAIN>，用管理员账号
+    进「管理后台 → 域名」添加域名；最后往任意前缀@该域名发一封测试邮件，确认收件箱
+    能收到才算完成。
+
+要求：密码和 token 不要回显到输出里；任何一步失败，按 README FAQ 的「部署失败怎么
+排查」给出具体原因和修复建议后再重试。
+```
+
+#### 方式二：一键部署（试验性）
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/riba2534/hpc-mail)
 
@@ -157,12 +199,12 @@ apps/worker/scripts/dev-send-mail.sh otp-plain hello@example.com
 
 1. **创建管理员**：克隆你的新仓库，`wrangler login` 后执行
    `ADMIN_USERNAME=admin ADMIN_PASSWORD=你的密码 node apps/worker/scripts/seed-admin.mjs`
-2. **接入收件域名**：照方式二的第 4 步「接入收件域名」操作（两种方式此步相同）
+2. **接入收件域名**：照方式三的第 4 步「接入收件域名」操作（各方式此步相同）
 3. （可选）**绑定自有域名**：Workers 控制台 → 你的 Worker → Settings → Domains & Routes
 
-> 标注试验性的原因：官方按钮对 monorepo 支持有限。若流程中要求填构建配置，构建命令填 `pnpm build`、部署命令填 `pnpm run deploy`；走不通就用方式二。克隆出的仓库自带方式二的 Actions 工作流，未配置 Variables 时会自动跳过，不会红叉。
+> 标注试验性的原因：官方按钮对 monorepo 支持有限。若流程中要求填构建配置，构建命令填 `pnpm build`、部署命令填 `pnpm run deploy`；走不通就用方式一或方式三。克隆出的仓库自带方式三的 Actions 工作流，未配置 Variables 时会自动跳过，不会红叉。
 
-#### 方式二：GitHub Actions（推荐）
+#### 方式三：手动配置 GitHub Actions
 
 fork 后全部账户差异通过 GitHub Secrets / Variables 注入。
 
