@@ -11,6 +11,7 @@ import { queryKeys } from '@/api/query-keys';
 import { authApi } from '@/api/resources';
 import { Button } from '@/components/ui/button';
 import { FormField } from '@/components/ui/form-field';
+import { GITHUB_REPO_URL, GithubIcon } from '@/components/ui/github-link';
 import { Input } from '@/components/ui/input';
 import { PasswordInput } from '@/components/ui/password-input';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -192,6 +193,16 @@ export function LoginPage() {
             </Button>
           </form>
         </div>
+
+        <a
+          href={GITHUB_REPO_URL}
+          target="_blank"
+          rel="noreferrer"
+          className="mt-4 flex items-center justify-center gap-1.5 text-xs text-ink-tertiary transition-colors hover:text-ink"
+        >
+          <GithubIcon className="size-3.5" />
+          开源于 GitHub
+        </a>
       </div>
     </div>
   );

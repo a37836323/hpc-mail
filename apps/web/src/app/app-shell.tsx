@@ -32,6 +32,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Avatar } from '@/components/ui/avatar';
+import { GithubIconLink } from '@/components/ui/github-link';
 import { IconButton } from '@/components/ui/icon-button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { useUnreadCount } from '@/features/inbox/use-unread-count';
@@ -290,7 +291,8 @@ export function AppShell() {
           </Sheet>
           <img src="/logo.png" alt="" className="size-7 shrink-0 rounded-md md:hidden" />
           <span className="truncate text-sm font-semibold text-ink md:hidden">{siteTitle}</span>
-          <div className="ml-auto">
+          <div className="ml-auto flex items-center gap-1">
+            <GithubIconLink />
             <UserMenu />
           </div>
         </header>
