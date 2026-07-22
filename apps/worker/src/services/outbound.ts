@@ -218,7 +218,7 @@ async function persistAttachments(
   await db.insert(attachmentsTable).values(rows);
 }
 
-/** Cloudflare 原生发信：逐个已验证 destination 发送（send_email binding） */
+/** Cloudflare 原生发信（send_email binding），逐收件人发送 */
 async function sendViaCloudflare(
   env: Env,
   from: ResolvedFrom,
@@ -350,7 +350,7 @@ export async function sendMail(
   const size = new TextEncoder().encode(text + html).length;
   const code = settings.code_extract.enabled ? extractCodeByRegex(req.subject, text) : '';
 
-  // 站外发送：Cloudflare send_email binding（仅能发到 Email Routing 已验证的 destination）
+  // 站外发送：Cloudflare send_email binding
   let status = hasExternal ? 'sent' : 'delivered';
   let errorDetail = '';
   const sendChannel = hasExternal ? 'cloudflare' : 'internal';
@@ -363,7 +363,7 @@ export async function sendMail(
         await sendViaCloudflare(env, from, addr, req, decoded, reply);
       } catch (cfErr) {
         const cfMsg = cfErr instanceof Error ? cfErr.message : String(cfErr);
-        failures.push(`${addr}: ${cfMsg}（Cloudflare 仅能发到 Email Routing 已验证的目标地址）`);
+        failures.push(`${addr}: ${cfMsg}`);
       }
     }
     if (failures.length === externalTargets.length) {

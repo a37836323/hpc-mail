@@ -32,7 +32,7 @@ id = "740790d8a32f4286833f17940358f1bb"
 binding = "r2"
 bucket_name = "hpc-cloud-mail-r2"
 
-# Cloudflare 原生发信（send_email binding）：仅能发到 Email Routing 已验证的 destination
+# Cloudflare 原生发信（send_email binding）
 [[send_email]]
 name = "email"
 

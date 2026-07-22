@@ -304,14 +304,13 @@ export function DomainsPage() {
             </p>
           </GuideStep>
 
-          <GuideStep n={4} title="（可选）开启对该域名的对外发信">
+          <GuideStep n={4} title="（可选）把常用外部邮箱加为已验证目标">
             <p>
-              若要用该域名向<b>外部</b>邮箱发信：在 Email Routing → <b>Destination addresses</b>{' '}
-              添加目标外部邮箱，对方点击验证邮件确认后方可送达。
+              对外发信与转发默认即可送达任意外部邮箱。若额外在 Email Routing →{' '}
+              <b>Destination addresses</b> 验证目标邮箱，邮箱转发将走 Cloudflare 原生通道、
+              原样保留邮件头与签名（保真度更高）。
             </p>
-            <p className="text-ink-tertiary">
-              这是 Cloudflare 的硬限制：<b>只能发到已验证的目标地址</b>。站内地址之间互发不受此限、即时送达。
-            </p>
+            <p className="text-ink-tertiary">站内地址之间互发直接落库、即时送达。</p>
           </GuideStep>
         </ol>
       </section>

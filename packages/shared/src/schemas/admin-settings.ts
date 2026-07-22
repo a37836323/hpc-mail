@@ -10,7 +10,7 @@ export const registerModeSchema = z.enum(REGISTRATION_MODES);
 
 export const gmailForwardSettingSchema = z.object({
   enabled: z.boolean(),
-  /** 目标必须是 Cloudflare Email Routing 已验证的 destination address */
+  /** 转发目标邮箱；已验证 destination 走原生 forward，其余走 no-reply 中转 */
   addresses: z.array(emailAddressSchema).max(5),
 });
 

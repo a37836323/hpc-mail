@@ -32,9 +32,81 @@ interface ParsedAttachment {
   size: number;
 }
 
+function uint8ToBase64(bytes: Uint8Array): string {
+  let bin = '';
+  const CHUNK = 0x8000;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    bin += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(bin);
+}
+
+const HTML_ESCAPES: Record<string, string> = {
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  "'": '&#39;',
+};
+const escapeHtml = (s: string): string => s.replace(/[&<>"']/g, (ch) => HTML_ESCAPES[ch]!);
+
+interface RelayMail {
+  fromAddress: string;
+  fromName: string;
+  toAddress: string;
+  domain: string;
+  subject: string;
+  text: string;
+  html: string;
+  attachments: ParsedAttachment[];
+}
+
 /**
- * 收件链路：解析 → 提码 → 正文分层/附件落 R2 → 落库 → 同步 Gmail 转发
- * → waitUntil(AI 兜底 + 飞书)。仅落库失败 throw（触发 SMTP 重试）。
+ * 中转转发：原生 forward() 仅对 Email Routing 已验证 destination 生效，目标未验证时
+ * 降级为 send_email binding 以 no-reply@收件域名 重新打包发送——保留原始标题/正文/附件，
+ * Reply-To 指回原发件人，正文顶部加转发元信息块。
+ */
+async function relayForward(env: Env, target: string, mail: RelayMail): Promise<void> {
+  // 动态 import：`cloudflare:email`/`mimetext` 静态加载会让 vitest 的 workerd 崩（同 outbound.ts）
+  const [{ EmailMessage }, { createMimeMessage }] = await Promise.all([
+    import('cloudflare:email'),
+    import('mimetext/browser'),
+  ]);
+  const sender = `no-reply@${mail.domain}`;
+  const origin = mail.fromName ? `${mail.fromName} <${mail.fromAddress}>` : mail.fromAddress;
+  const metaLines = [
+    `原始发件人: ${origin}`,
+    `原收件地址: ${mail.toAddress}`,
+    '直接回复本邮件将发送给原始发件人。',
+  ];
+
+  const msg = createMimeMessage();
+  msg.setSender({ name: `${mail.fromName || mail.fromAddress} (via HPC Mail)`, addr: sender });
+  msg.setRecipient(target);
+  msg.setSubject(mail.subject || '(无主题)');
+  msg.setHeader('X-HPC-Mail-Relay', '1');
+  if (mail.fromAddress) msg.setHeader('Reply-To', mail.fromAddress);
+  msg.addMessage({
+    contentType: 'text/plain',
+    data: `———— HPC Mail 转发 ————\n${metaLines.join('\n')}\n————————————————\n\n${mail.text || htmlToText(mail.html)}`,
+  });
+  if (mail.html) {
+    const metaHtml =
+      '<div style="margin:0 0 16px;padding:10px 14px;border-left:3px solid #8b8fa3;background:#f5f6f8;color:#4b4f5c;font-size:12px;line-height:1.9">' +
+      '<div style="font-weight:600">HPC Mail 转发</div>' +
+      metaLines.map((l) => `<div>${escapeHtml(l)}</div>`).join('') +
+      '</div>';
+    msg.addMessage({ contentType: 'text/html', data: metaHtml + mail.html });
+  }
+  for (const a of mail.attachments) {
+    msg.addAttachment({ filename: a.filename, contentType: a.mimeType, data: uint8ToBase64(a.content) });
+  }
+  await env.email.send(new EmailMessage(sender, target, msg.asRaw()));
+}
+
+/**
+ * 收件链路：解析 → 提码 → 正文分层/附件落 R2 → 落库 → 同步邮箱转发（原生 forward 优先，
+ * 未验证目标降级中转）→ waitUntil(AI 兜底 + 飞书)。仅落库失败 throw（触发 SMTP 重试）。
  */
 export async function handleInbound(
   message: ForwardableEmailMessage,
@@ -173,15 +245,33 @@ export async function handleInbound(
   const ownerPrefs = await Promise.all(ownerIds.map((id) => getUserNotifyPrefs(env, id)));
 
   // 同步邮箱转发（按 owner 的个人转发目标，去重；逐地址 try/catch）
-  // 注意：目标须为 Cloudflare Email Routing 已验证 destination，否则 forward() 抛错——静默记录。
-  const forwardTargets = [
-    ...new Set(ownerPrefs.filter((p) => p.forward.enabled).flatMap((p) => p.forward.addresses)),
-  ];
+  // 已验证 destination 走原生 forward()（原样转发，保留原始邮件头/签名）；
+  // 未验证目标 forward() 会抛错，降级 relayForward 中转重发，任意外部邮箱均可送达。
+  // 防环路：中转副本带 X-HPC-Mail-Relay 头，再次入站不重复转发；目标为收件地址自身时跳过。
+  const isRelayedCopy = message.headers.get('x-hpc-mail-relay') !== null;
+  const forwardTargets = isRelayedCopy
+    ? []
+    : [
+        ...new Set(ownerPrefs.filter((p) => p.forward.enabled).flatMap((p) => p.forward.addresses)),
+      ].filter((t) => normalizeEmail(t) !== toAddress);
   for (const target of forwardTargets) {
     try {
       await message.forward(target);
-    } catch (e) {
-      console.error(`转发到 ${target} 失败（需为已验证 destination）:`, e);
+    } catch (forwardErr) {
+      try {
+        await relayForward(env, target, {
+          fromAddress,
+          fromName,
+          toAddress,
+          domain,
+          subject,
+          text,
+          html,
+          attachments: parsedAttachments,
+        });
+      } catch (relayErr) {
+        console.error(`转发到 ${target} 失败（原生 forward 与中转均未成功）:`, forwardErr, relayErr);
+      }
     }
   }
 

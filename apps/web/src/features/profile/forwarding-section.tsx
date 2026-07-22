@@ -113,9 +113,9 @@ export function ForwardingSection() {
           onChange={(addresses) => patch((d) => void (d.forward.addresses = addresses))}
           placeholder="输入目标邮箱地址后回车"
         />
-        <p className="text-xs text-caution">
-          ⚠️ 目标邮箱须是 Cloudflare Email Routing 中<b>已验证</b>的地址，否则邮件不会送达。请联系管理员在
-          Cloudflare 后台把它加为已验证 destination。
+        <p className="text-xs text-ink-tertiary">
+          任意邮箱均可转发。已在 Cloudflare Email Routing 验证过的地址走原生转发（原样保留邮件）；
+          未验证的地址由系统以 no-reply@收件域名 中转重发（标注原始发件人，直接回复即回给对方）。
         </p>
       </div>
 
