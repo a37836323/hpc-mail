@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm';
 import { createDb } from '../db/client.js';
 import { attachments as attachmentsTable, messages } from '../db/schema.js';
 import { getEmailDomain, getNameFromEmail, normalizeEmail } from '../lib/email-address.js';
+import { foldBase64 } from '../lib/mime.js';
 import { htmlToText, makePreview } from '../lib/text.js';
 import type { Env, ExecCtx } from '../types.js';
 import { extractCodeByAi, extractCodeByRegex } from './code-extract.js';
@@ -100,7 +101,12 @@ async function relayForward(env: Env, target: string, mail: RelayMail): Promise<
     msg.addMessage({ contentType: 'text/html', data: metaHtml + mail.html });
   }
   for (const a of mail.attachments) {
-    msg.addAttachment({ filename: a.filename, contentType: a.mimeType, data: uint8ToBase64(a.content) });
+    // 折行成 76 字符/行：不折行时整个附件是一整行，超 SMTP 998 字节行限会被下游 MTA 拒收
+    msg.addAttachment({
+      filename: a.filename,
+      contentType: a.mimeType,
+      data: foldBase64(uint8ToBase64(a.content)),
+    });
   }
   await env.email.send(new EmailMessage(sender, target, msg.asRaw()));
 }

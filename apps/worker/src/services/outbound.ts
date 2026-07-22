@@ -14,6 +14,7 @@ import {
   normalizeEmail,
 } from '../lib/email-address.js';
 import { AppError } from '../lib/errors.js';
+import { foldBase64 } from '../lib/mime.js';
 import { makePreview } from '../lib/text.js';
 import type { Env, ExecCtx } from '../types.js';
 import { extractCodeByRegex } from './code-extract.js';
@@ -244,7 +245,8 @@ async function sendViaCloudflare(
   if (req.text) msg.addMessage({ contentType: 'text/plain', data: req.text });
   if (req.html) msg.addMessage({ contentType: 'text/html', data: req.html });
   for (const a of atts) {
-    msg.addAttachment({ filename: a.filename, contentType: a.mimeType, data: a.base64 });
+    // 折行成 76 字符/行：不折行时整个附件是一整行，超 SMTP 998 字节行限会被下游 MTA 拒收
+    msg.addAttachment({ filename: a.filename, contentType: a.mimeType, data: foldBase64(a.base64) });
   }
   const message = new EmailMessage(from.address, toAddr, msg.asRaw());
   await env.email.send(message);

@@ -10,6 +10,7 @@ import {
 } from '../src/lib/email-address.js';
 import { extractCodeByRegex } from '../src/services/code-extract.js';
 import { ipInAllowList } from '../src/lib/ip-allowlist.js';
+import { foldBase64 } from '../src/lib/mime.js';
 import { generateCode, generateTotpSecret, verifyTotp } from '../src/lib/totp.js';
 import { AppError } from '../src/lib/errors.js';
 
@@ -153,5 +154,23 @@ describe('totp', () => {
     expect(await verifyTotp(secret, '000000')).toBe(false);
     expect(await verifyTotp(secret, 'abc')).toBe(false);
     expect(await verifyTotp(secret, '')).toBe(false);
+  });
+});
+
+describe('foldBase64', () => {
+  it('短串（≤76）原样返回', () => {
+    expect(foldBase64('QUJD')).toBe('QUJD');
+    expect(foldBase64('A'.repeat(76))).toBe('A'.repeat(76));
+  });
+  it('长串按 76 字符 CRLF 折行，每行不超限', () => {
+    const b64 = btoa(String.fromCharCode(...new Uint8Array(10000).fill(7)));
+    const folded = foldBase64(b64);
+    const lines = folded.split('\r\n');
+    expect(Math.max(...lines.map((l) => l.length))).toBeLessThanOrEqual(76);
+    expect(lines.slice(0, -1).every((l) => l.length === 76)).toBe(true);
+  });
+  it('折行后去掉 CRLF 与原串一致（内容无损）', () => {
+    const b64 = btoa(String.fromCharCode(...new Uint8Array(5000).map((_, i) => i % 251)));
+    expect(foldBase64(b64).replace(/\r\n/g, '')).toBe(b64);
   });
 });
