@@ -68,7 +68,7 @@ interface RelayMail {
  */
 async function relayForward(env: Env, target: string, mail: RelayMail): Promise<void> {
   // 动态 import：`cloudflare:email`/`mimetext` 静态加载会让 vitest 的 workerd 崩（同 outbound.ts）
-  const [{ EmailMessage }, { createMimeMessage }] = await Promise.all([
+  const [{ EmailMessage }, { createMimeMessage, Mailbox }] = await Promise.all([
     import('cloudflare:email'),
     import('mimetext/browser'),
   ]);
@@ -85,7 +85,8 @@ async function relayForward(env: Env, target: string, mail: RelayMail): Promise<
   msg.setRecipient(target);
   msg.setSubject(mail.subject || '(无主题)');
   msg.setHeader('X-HPC-Mail-Relay', '1');
-  if (mail.fromAddress) msg.setHeader('Reply-To', mail.fromAddress);
+  // mimetext 对 Reply-To 这类已知头校验值类型，必须传 Mailbox 对象（传字符串会抛错）
+  if (mail.fromAddress) msg.setHeader('Reply-To', new Mailbox(mail.fromAddress));
   msg.addMessage({
     contentType: 'text/plain',
     data: `———— HPC Mail 转发 ————\n${metaLines.join('\n')}\n————————————————\n\n${mail.text || htmlToText(mail.html)}`,
