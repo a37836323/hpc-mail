@@ -12,6 +12,8 @@ export interface FilterBarProps {
   domains: string[];
   addressOptions: ComboboxOption[];
   addressLabel?: string;
+  /** 未读筛选开关；outbound 视图下已读状态无意义，隐藏之 */
+  showUnread?: boolean;
   onDomainChange: (domain: string | null) => void;
   onAddressChange: (address: string | null) => void;
   onUnreadChange: (unread: boolean) => void;
@@ -28,6 +30,7 @@ export function FilterBar({
   domains,
   addressOptions,
   addressLabel = '选择邮箱地址',
+  showUnread = true,
   onDomainChange,
   onAddressChange,
   onUnreadChange,
@@ -70,12 +73,14 @@ export function FilterBar({
             searchPlaceholder="搜索地址…"
           />
         </div>
-        <SegmentedControl
-          aria-label="已读状态"
-          value={filters.unread ? 'unread' : 'all'}
-          onValueChange={(value) => onUnreadChange(value === 'unread')}
-          options={UNREAD_OPTIONS}
-        />
+        {showUnread && (
+          <SegmentedControl
+            aria-label="已读状态"
+            value={filters.unread ? 'unread' : 'all'}
+            onValueChange={(value) => onUnreadChange(value === 'unread')}
+            options={UNREAD_OPTIONS}
+          />
+        )}
         <div className="relative flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-tertiary" />
           <input
