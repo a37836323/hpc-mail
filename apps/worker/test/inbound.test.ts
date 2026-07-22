@@ -41,6 +41,7 @@ function rawEmail(to: string, subject: string, body: string): ReadableStream {
 function mockMessage(to: string, subject: string, body: string, forward: () => Promise<void>) {
   return {
     raw: rawEmail(to, subject, body),
+    headers: new Headers(),
     to,
     from: 'sender@example.com',
     forward: vi.fn(forward),
@@ -65,6 +66,7 @@ describe('收件链路 handleInbound', () => {
     const forward = vi.fn(async () => {});
     const msg = {
       raw: rawEmail('test1@claude-router.cc', 'Login code', 'Your verification code is 123456.'),
+      headers: new Headers(),
       to: 'test1@claude-router.cc',
       from: 'sender@example.com',
       forward,
@@ -106,6 +108,49 @@ describe('收件链路 handleInbound', () => {
 
     expect(forward).toHaveBeenCalledWith('user-box@gmail.com');
     expect(forward).not.toHaveBeenCalledWith('admin-box@gmail.com');
+  });
+
+  it('中转副本（带 X-HPC-Mail-Relay 头）不再触发转发，防环路', async () => {
+    await updateSettings(env, { code_extract: { enabled: true, aiEnabled: false } });
+    const userId = await seedUser('inb-relay', 'user');
+    await claim(userId, 'relayed@happyclaw.cc');
+    await updateUserNotifyPrefs(env, userId, {
+      forward: { enabled: true, addresses: ['target@gmail.com'] },
+    });
+
+    const forward = vi.fn(async () => {});
+    const msg = mockMessage('relayed@happyclaw.cc', 'Hi', 'body', async () => {});
+    msg.forward = forward;
+    msg.headers = new Headers({ 'X-HPC-Mail-Relay': '1' });
+    await run(msg);
+
+    expect(forward).not.toHaveBeenCalled();
+  });
+
+  it('原生 forward 失败时尝试中转降级，且不阻断收件落库', async () => {
+    await updateSettings(env, { code_extract: { enabled: true, aiEnabled: false } });
+    const userId = await seedUser('inb-fallback', 'user');
+    await claim(userId, 'fallback@happyclaw.cc');
+    await updateUserNotifyPrefs(env, userId, {
+      forward: { enabled: true, addresses: ['unverified@example.com'] },
+    });
+
+    const forward = vi.fn(async () => {
+      throw new Error('destination address not verified');
+    });
+    const msg = mockMessage('fallback@happyclaw.cc', 'Hello', 'plain body', async () => {});
+    msg.forward = forward;
+    // 测试环境无 send_email binding，中转发送本身会失败并被吞掉；收件不受影响
+    await run(msg);
+
+    expect(forward).toHaveBeenCalledWith('unverified@example.com');
+    const db = createDb(env);
+    const row = await db
+      .select()
+      .from(messages)
+      .where(eq(messages.address, 'fallback@happyclaw.cc'))
+      .get();
+    expect(row).toBeTruthy();
   });
 
   it('owner 未开启转发时不调用 forward', async () => {
