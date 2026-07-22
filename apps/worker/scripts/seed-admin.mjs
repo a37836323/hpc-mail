@@ -6,6 +6,11 @@ import { webcrypto as crypto } from 'node:crypto';
 
 const username = (process.env.ADMIN_USERNAME ?? '').trim().toLowerCase();
 const password = process.env.ADMIN_PASSWORD ?? '';
+// --if-env：一键部署等无凭据场景下静默跳过（可稍后手动执行本脚本引导管理员）
+if (process.argv.includes('--if-env') && (!username || !password)) {
+  console.log('未提供 ADMIN_USERNAME/ADMIN_PASSWORD，跳过管理员引导；稍后可手动执行本脚本创建管理员');
+  process.exit(0);
+}
 if (!/^[a-z0-9][a-z0-9_-]{2,31}$/.test(username)) {
   console.error('ADMIN_USERNAME 非法（3-32 位小写字母/数字/-_）');
   process.exit(1);
@@ -41,7 +46,8 @@ WHERE NOT EXISTS (SELECT 1 FROM users WHERE role = 'admin');`;
 const target = process.argv.includes('--local') ? '--local' : '--remote';
 execFileSync(
   'npx',
-  ['wrangler', 'd1', 'execute', 'hpc-cloud-mail-db', target, '--command', sql],
+  // 'db' 是 wrangler.toml 里的 D1 binding 名——按 binding 解析对一键部署（资源名可能不同）与 CI 都成立
+  ['wrangler', 'd1', 'execute', 'db', target, '--command', sql],
   { stdio: 'inherit', cwd: new URL('..', import.meta.url).pathname },
 );
 console.log(`admin 引导完成（已存在则跳过）：${username}`);

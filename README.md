@@ -27,6 +27,7 @@
   <a href="#快速开始">快速开始</a> ·
   <a href="#部署到-cloudflare">部署</a> ·
   <a href="#开放-api">开放 API</a> ·
+  <a href="#运维">运维</a> ·
   <a href="#faq">FAQ</a>
 </p>
 
@@ -58,7 +59,7 @@ HPC Mail 是一个完全跑在 Cloudflare 上的邮箱系统。它用 **Email Ro
 | **验证码** | 正则同步提取 + Workers AI 兜底（可开关），角标展示与一键复制 |
 | **发件** | 回复 / 转发 / CC / BCC / 附件，站内互投即时落库，外发配额可配 |
 | **转发通知** | 按「收件地址归属人」分流的个人偏好：邮箱转发（含中转降级）、飞书 Webhook 卡片（HMAC 签名 + 防 SSRF）、通用 Webhook |
-| **多用户** | admin / user 两角色；地址认领制；域名可设「仅管理员」或开放认领，可按域名限制每人认领数 |
+| **多用户** | admin / user 两角色；注册模式默认关闭（可开邀请码/开放）；地址认领制；域名可设「仅管理员」或开放认领，可按域名限制每人认领数 |
 | **开放 API** | `/v1` 全套接口，API Key 支持 scope、每分钟限流、IP 白名单、过期时间与调用审计 |
 | **账户安全** | JWT + KV 会话、改密 / 禁用即时踢线、TOTP 两步验证（可全局强制）、新 IP 登录飞书告警 |
 | **管理后台** | 注册模式（关闭 / 邀请码 / 开放）、域名管理、保留策略、外发配额、用户管理（含查看每人绑定邮箱） |
@@ -78,6 +79,8 @@ TOKEN=$(curl -s -X POST $BASE/api/auth/login -H 'Content-Type: application/json'
 curl -s "$BASE/api/messages?limit=1" -H "Authorization: Bearer $TOKEN" \
   | jq -r '.data.items[0].verificationCode'
 ```
+
+用法很简单：**把 `https://你的域名/skill.md` 这个链接直接丢给你的 AI Agent**（Claude、GPT 等），再给它一个账号的用户名密码，它就会照着文档自己完成收发邮件、读验证码的全部操作。
 
 ## 系统架构
 
@@ -135,20 +138,46 @@ pnpm dev                                                 # worker :8787 + web :3
 本地无需真实收信，用内置脚本注入一封测试邮件（域名先在后台「域名」页添加）：
 
 ```bash
-apps/worker/scripts/dev-send-mail.sh otp-plain hello@your-domain.example
+apps/worker/scripts/dev-send-mail.sh otp-plain hello@example.com
 ```
 
 > `wrangler dev` 依赖 workerd，宿主机需要 glibc ≥ 2.32（Ubuntu 22.04+）。worker 集成测试同理，本地跑不了时以 CI 结果为准，详见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 ### 部署到 Cloudflare
 
-仓库不含任何账户专属信息，fork 后**不需要改任何代码文件**，全部差异通过 GitHub Secrets / Variables 注入：
+两种方式：**一键部署**（最快见效，先跑在 workers.dev）或 **GitHub Actions**（推荐，push 即自动持续部署）。两种方式都**不需要改仓库里的任何文件**。
 
-**1. 创建 Cloudflare 资源**（资源名固定，ID 各不相同）：
+#### 方式一：一键部署（试验性）
+
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/riba2534/hpc-mail)
+
+点击按钮后 Cloudflare 会：把仓库克隆到你的 GitHub → 自动创建 D1 / KV / R2 / Workers AI 资源并写入配置 → 引导你填入 `jwt_secret` → 构建并部署到 `*.workers.dev`，之后 push 到你的克隆仓库即由 Workers Builds 持续部署。
+
+部署完成后还差三步：
+
+1. **创建管理员**：克隆你的新仓库，`wrangler login` 后执行
+   `ADMIN_USERNAME=admin ADMIN_PASSWORD=你的密码 node apps/worker/scripts/seed-admin.mjs`
+2. **接入收件域名**：照方式二的第 4 步「接入收件域名」操作（两种方式此步相同）
+3. （可选）**绑定自有域名**：Workers 控制台 → 你的 Worker → Settings → Domains & Routes
+
+> 标注试验性的原因：官方按钮对 monorepo 支持有限。若流程中要求填构建配置，构建命令填 `pnpm build`、部署命令填 `pnpm run deploy`；走不通就用方式二。克隆出的仓库自带方式二的 Actions 工作流，未配置 Variables 时会自动跳过，不会红叉。
+
+#### 方式二：GitHub Actions（推荐）
+
+fork 后全部账户差异通过 GitHub Secrets / Variables 注入。
+
+**前置条件**（README 之外不需要再摸索别的）：
+
+- 本地安装并登录 wrangler：`npm i -g wrangler && wrangler login`
+- `CUSTOM_DOMAIN` 要用的域名已**添加进你的 Cloudflare 账号且状态为 Active**——CI 部署会关闭 `workers_dev`，这个域名就是站点唯一入口
+- R2 已在控制台激活（首次开通可能需要绑定支付方式）
+- 账户 ID 的位置：Cloudflare 控制台任意域名的概览页右侧「Account ID」
+
+**1. 创建资源**（D1/R2 名字必须与命令完全一致；KV 的名字随意，起作用的是输出的 id）：
 
 ```bash
-wrangler d1 create hpc-cloud-mail-db      # 记下 database_id
-wrangler kv namespace create kv           # 记下 namespace id
+wrangler d1 create hpc-cloud-mail-db      # 记下输出的 database_id
+wrangler kv namespace create kv           # 记下输出的 namespace id
 wrangler r2 bucket create hpc-cloud-mail-r2
 ```
 
@@ -156,18 +185,28 @@ wrangler r2 bucket create hpc-cloud-mail-r2
 
 | 类型 | 名称 | 说明 |
 | --- | --- | --- |
-| Secret | `CLOUDFLARE_API_TOKEN` | 具备 Workers / D1 / KV 权限 |
-| Secret | `JWT_SECRET` | ≥43 位 URL-safe 随机串 |
+| Secret | `CLOUDFLARE_API_TOKEN` | 权限见下方说明 |
+| Secret | `JWT_SECRET` | 生成：`openssl rand -base64 32 \| tr '+/' '-_' \| tr -d '='` |
 | Secret | `ADMIN_PASSWORD` | 管理员密码（12–128 位） |
 | Variable | `CLOUDFLARE_ACCOUNT_ID` | Cloudflare 账户 ID |
-| Variable | `D1_DATABASE_ID` | 第 1 步创建的 D1 ID |
-| Variable | `KV_NAMESPACE_ID` | 第 1 步创建的 KV ID |
-| Variable | `CUSTOM_DOMAIN` | 控制台域名（Worker custom domain） |
-| Variable | `ADMIN_USERNAME` | 管理员用户名 |
+| Variable | `D1_DATABASE_ID` | 第 1 步输出的 D1 ID |
+| Variable | `KV_NAMESPACE_ID` | 第 1 步输出的 KV ID |
+| Variable | `CUSTOM_DOMAIN` | 站点域名（Worker custom domain，不含 `https://`） |
+| Variable | `ADMIN_USERNAME` | 管理员用户名（3–32 位小写字母/数字/`-`/`_`） |
 
-**3. push 到 `main` 自动部署**。首次上线用 workflow_dispatch 勾选 `reset_database` 清库初始化。
+> **API Token 权限**：用「Edit Cloudflare Workers」模板创建，再手动补两条——**Account → D1:Edit**（模板不含）、**Zone → Workers Routes:Edit** 且 Zone Resources 勾选 `CUSTOM_DOMAIN` 所在 zone（缺这条会在「部署 Worker」步骤失败）。
 
-**4. 接入收件域名**：在 Cloudflare 给每个要收件的域名开启 Email Routing，把 catch-all 规则指向 `hpc-cloud-mail` Worker；然后在管理后台「域名」页把它加进域名列表。**加域名不需要重新部署**，增删即时生效。
+**3. 首次部署**：fork 仓库的 **Actions 默认是禁用的**——先进仓库 Actions 页点击启用，然后在 `Deploy HPC Mail` workflow 手动 **Run workflow**（刚 fork 没有新提交，push 不会自动触发）。全新空 D1 **不需要**勾 `reset_database`，迁移会自动从零建表；只有复用了含旧表的数据库才勾它（危险：会清空数据）。此后每次 push 到 `main` 自动部署。
+
+> 首次部署若在「线上冒烟」步骤超时，通常是 custom domain 边缘证书还在签发——等一分钟重跑 workflow 即可（各步骤幂等；重跑时不要勾 `reset_database`）。
+
+**4. 接入收件域名**：对每个要收件的域名（与 `CUSTOM_DOMAIN` 可同可不同——后者是站点入口，前者只管收信）：
+
+1. Cloudflare 控制台 → 该域名 zone → **Email → Email Routing → 启用**（自动配置 MX/TXT 记录）
+2. **Routing rules → Catch-all → 动作选「Send to a Worker」→ 选 `hpc-cloud-mail`**（下拉里要求 Worker 已部署，所以先完成第 3 步）
+3. 登录站点，在管理后台「域名」页把该域名加入列表——**两头都配齐才能收件**；域名页自带 MX/SPF 接入自检可核对状态。加域名不需要重新部署，增删即时生效
+
+**5. 初始化**：打开 `https://<CUSTOM_DOMAIN>`，用 `ADMIN_USERNAME` / `ADMIN_PASSWORD` 登录，进管理后台「域名」页（`/admin/domains`）添加第一个域名。加域名之前站点可以登录，但普通用户没有任何地址可认领、也无法发信。
 
 ## 开放 API
 
@@ -186,7 +225,7 @@ curl -s -X POST "$BASE/v1/messages" \
   -d '{"from":{"localPart":"noreply","domain":"your-domain.example"},"to":["someone@example.org"],"subject":"Hello","text":"来自 HPC Mail 的邮件"}'
 ```
 
-全部端点：`GET /v1/status` · `GET /v1/domains` · `GET|POST /v1/mailboxes` · `GET|POST /v1/messages` · `GET /v1/messages/:id` · `GET /v1/messages/:id/attachments/:attId` · `GET /v1/openapi.json`。scope 粒度：`mail.read` / `mail.send` / `mailbox.read` / `mailbox.write`。
+全部端点：`GET /v1/status` · `GET /v1/domains` · `GET|POST /v1/mailboxes` · `GET|POST /v1/messages` · `GET /v1/messages/:id` · `GET /v1/messages/:id/attachments/:attId` · `GET /v1/openapi.json`。scope 粒度：`mail.read` / `mail.write` / `mail.send` / `mailbox.read` / `mailbox.write`。
 
 ## 设置模型：系统级 vs 个人级
 
@@ -194,6 +233,24 @@ curl -s -X POST "$BASE/v1/messages" \
 
 - **系统设置**（管理后台，全局生效）：注册模式、收件域名列表（公开开关 + 每域每人认领上限）、验证码提取开关、邮件保留策略、外发配额、认领策略、强制 2FA、站点标题、开放 API 总开关
 - **个人设置**（`/profile`，每人一份）：头像、密码、两步验证，以及转发与通知——把自己认领地址收到的邮件转发到外部邮箱、推送到飞书 Webhook 或通用 Webhook。管理员的这份配置还作用于未认领地址与系统通知
+
+## 运维
+
+### 同步上游更新
+
+```bash
+git remote add upstream https://github.com/riba2534/hpc-mail.git   # 一次性
+git fetch upstream && git merge upstream/main && git push          # push 即触发重新部署
+```
+
+数据库迁移随部署自动执行（增量、幂等），历史数据保留。
+
+### 备份与恢复
+
+- **D1（核心数据，必备）**：`wrangler d1 export hpc-cloud-mail-db --remote --output backup.sql`
+- **R2（附件与超大正文）**：用 `wrangler r2 object get` 或 rclone 按需同步
+- **KV**：只存会话与缓存，无需备份（丢失只是全员重新登录）
+- **换 Cloudflare 账号搬迁**：新账号照部署步骤建资源 → 更新 GitHub Variables 里的账户/资源 ID → `wrangler d1 execute hpc-cloud-mail-db --remote --file backup.sql` 导入 → 部署后在管理后台把域名列表写回
 
 ## FAQ
 
@@ -207,7 +264,28 @@ curl -s -X POST "$BASE/v1/messages" \
 <details>
 <summary><b>要花多少钱？</b></summary>
 
-个人用量通常落在 Cloudflare 免费额度内：Workers 免费版每天 10 万请求，D1 / KV / R2 免费层对邮箱场景都很充裕。域名本身的费用除外。
+个人用量通常落在 Cloudflare 免费额度内：Workers 免费版每天 10 万请求，D1 / KV / R2 免费层对邮箱场景都很充裕。两点注意：**Workers AI 验证码兜底默认开启**，超出免费日额度后按量计费（可在管理后台关闭，正则提取不受影响）；R2 首次开通需要绑定支付方式。域名本身的费用除外。相关限额：收件正文超过 256KB 时完整正文落 R2，附件总大小上限 25MB / 单封最多 10 个。
+
+</details>
+
+<details>
+<summary><b>收不到邮件怎么排查？</b></summary>
+
+按顺序检查三处：① 该域名的 Email Routing 已启用、catch-all 指向本 Worker；② 管理后台「域名」页已添加该域名——域名页自带 MX/SPF 接入自检，两项就绪才算接通；③ Cloudflare 控制台 → Worker → Logs 看 email 事件是否进来。
+
+</details>
+
+<details>
+<summary><b>发不出邮件怎么排查？</b></summary>
+
+外发经 `send_email` binding，要求**发件地址所在域名已开启 Email Routing**；再检查发件域名在后台域名列表中、外发配额未用尽（管理后台可调）。
+
+</details>
+
+<details>
+<summary><b>部署失败怎么排查？</b></summary>
+
+看 GitHub Actions 日志定位失败步骤。高频原因：API Token 缺 `D1:Edit` 或 `Zone → Workers Routes:Edit` 权限；`CUSTOM_DOMAIN` 的域名不在该 Cloudflare 账号内或未 Active；8 项 Secrets/Variables 有遗漏。首次部署「线上冒烟」超时通常是证书未就绪，重跑即可。
 
 </details>
 

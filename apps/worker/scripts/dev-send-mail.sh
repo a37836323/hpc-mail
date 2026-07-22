@@ -5,7 +5,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 FIXTURE="${1:-otp-plain}"
-TO="${2:-hello@hpc.email}"
+TO="${2:-hello@example.com}"
 FROM="${3:-tester@external.example.com}"
 FILE="fixtures/${FIXTURE}.eml"
 [ -f "$FILE" ] || { echo "fixture 不存在: $FILE（可选: otp-plain / html-marketing / with-attachment）"; exit 1; }

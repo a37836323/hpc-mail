@@ -8,6 +8,7 @@
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json",
     "build:assets": "rm -rf dist && cp -R ../web/dist ./dist",
+    "deploy": "wrangler d1 migrations apply db --remote && node scripts/seed-admin.mjs --if-env && wrangler deploy",
     "db:generate": "drizzle-kit generate",
     "db:migrate:local": "wrangler d1 migrations apply hpc-cloud-mail-db --local",
     "db:migrate:remote": "wrangler d1 migrations apply hpc-cloud-mail-db --remote",

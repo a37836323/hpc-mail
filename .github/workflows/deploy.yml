@@ -32,6 +32,8 @@ env:
 
 jobs:
   deploy:
+    # 一键部署克隆出的仓库不配 Variables，自动跳过本工作流（不产生失败标记）
+    if: vars.CLOUDFLARE_ACCOUNT_ID != ''
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -105,11 +107,12 @@ jobs:
         run: |
           set -euo pipefail
           sed -i \
-            -e "s/__CUSTOM_DOMAIN__/${CUSTOM_DOMAIN}/" \
             -e "s/__D1_DATABASE_ID__/${D1_DATABASE_ID}/" \
             -e "s/__KV_NAMESPACE_ID__/${KV_NAMESPACE_ID}/" \
+            -e "s|^workers_dev = true$|workers_dev = false\nroutes = [ { pattern = \"${CUSTOM_DOMAIN}\", custom_domain = true } ]|" \
             wrangler.toml
           grep -qE '__[A-Z0-9_]+__' wrangler.toml && { echo '::error::wrangler.toml 仍有未注入占位符'; exit 1; } || true
+          grep -q 'workers_dev = false' wrangler.toml || { echo '::error::routes/workers_dev 注入失败'; exit 1; }
 
       - name: 部署预演（dry-run）
         working-directory: apps/worker

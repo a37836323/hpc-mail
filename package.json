@@ -16,6 +16,7 @@
   "scripts": {
     "dev": "concurrently -n worker,web -c yellow,cyan \"pnpm --filter @hpc-mail/worker dev\" \"pnpm --filter @hpc-mail/web dev\"",
     "build": "pnpm --filter @hpc-mail/web build && pnpm --filter @hpc-mail/worker build:assets",
+    "deploy": "pnpm build && pnpm --filter @hpc-mail/worker run deploy",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck"
   },
