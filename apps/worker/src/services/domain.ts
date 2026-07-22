@@ -12,6 +12,12 @@ export async function getDomains(env: Env, settings?: Settings): Promise<string[
   return s.domains.list.map((e) => e.domain);
 }
 
+/** 系统通知（登录告警/测试卡片等）展示用的发件地址：取首个已配域名，未配置时回退 localhost。 */
+export async function getSystemFromAddress(env: Env): Promise<string> {
+  const [first] = await getDomains(env);
+  return `system@${first ?? 'localhost'}`;
+}
+
 /** 对普通用户公开的域名子集（可见 + 可认领）；管理员不受此限。 */
 export async function getPublicDomains(env: Env, settings?: Settings): Promise<string[]> {
   const s = settings ?? (await getSettings(env));

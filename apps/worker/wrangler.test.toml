@@ -12,12 +12,13 @@ ai_model = "@cf/meta/llama-3.1-8b-instruct"
 [[d1_databases]]
 binding = "db"
 database_name = "hpc-cloud-mail-db"
-database_id = "4888de56-5d04-4ccf-b0ab-44d309306d23"
+# miniflare 全程本地模拟，ID 只需占位
+database_id = "00000000-0000-0000-0000-000000000000"
 migrations_dir = "migrations"
 
 [[kv_namespaces]]
 binding = "kv"
-id = "740790d8a32f4286833f17940358f1bb"
+id = "00000000000000000000000000000000"
 
 [[r2_buckets]]
 binding = "r2"

@@ -1,3 +1,2 @@
 # 拷贝为 .dev.vars（gitignore）供本地 wrangler dev 使用
 jwt_secret = "local-dev-jwt-secret-change-me-0000000000000"
-# resend_webhook_secret = "whsec_xxx"

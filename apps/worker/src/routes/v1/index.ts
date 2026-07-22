@@ -6,7 +6,7 @@ import { getDomains } from '../../services/domain.js';
 import type { AppContext } from '../../types.js';
 import v1Mailboxes from './mailboxes.js';
 import v1Messages from './messages.js';
-import { OPENAPI_SPEC } from './openapi.js';
+import { buildOpenApiSpec } from './openapi.js';
 
 const app = new Hono<AppContext>();
 
@@ -29,7 +29,7 @@ app.get('/status', apiKeyAuth, (c) => {
 app.get('/domains', apiKeyAuth, async (c) => ok(c, { domains: await getDomains(c.env) }));
 
 /** OpenAPI 描述（公开，无需 key） */
-app.get('/openapi.json', (c) => c.json(OPENAPI_SPEC));
+app.get('/openapi.json', (c) => c.json(buildOpenApiSpec(new URL(c.req.url).origin)));
 
 app.route('/mailboxes', v1Mailboxes);
 app.route('/messages', v1Messages);

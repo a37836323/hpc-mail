@@ -65,7 +65,7 @@ pnpm --filter @hpc-mail/worker db:migrate:local  # 应用到本地 D1
 单 workflow `.github/workflows/deploy.yml`，**push 到 `main` 自动触发**（改 `apps/**`/`packages/**`/workflow）。流程：参数校验 → 全量 test+typecheck+audit → web 构建（禁 sourcemap）→ 拷进 worker → wrangler dry-run →（仅 workflow_dispatch 勾 `reset_database`）清库 → `d1 migrations apply` → deploy → `wrangler secret put` → 迁移完整性校验 → `seed-admin.mjs`（幂等引导 admin）→ 线上冒烟。
 
 - **`seed-admin.mjs` 不写死域名**（保持「不假定域名」）。清库重建后需**运维层用 API 把现有域名写回 `settings.domains`**，否则站点无可用域名。
-- Cloudflare 资源 ID（D1/KV/R2）在 `apps/worker/wrangler.toml`；secrets（jwt_secret 等）经 CI `wrangler secret put` 注入，GitHub secrets/vars 沿用现有命名。
+- **Cloudflare 资源 ID 不入库**（开源要求）：`wrangler.toml` 用 `__D1_DATABASE_ID__`/`__KV_NAMESPACE_ID__`/`__CUSTOM_DOMAIN__` 占位符，CI 部署前从 GitHub Variables（另有 `CLOUDFLARE_ACCOUNT_ID` 走环境变量）注入真实值；`wrangler.test.toml` 用全零假 ID（miniflare 纯本地模拟）。secrets（jwt_secret 等）经 CI `wrangler secret put` 注入。别把真实 ID 写回任何被追踪文件。
 - 部署验证优先用真实 API / 真实浏览器 / 真实邮件（`~/.claude/skills/send-email` 发外部信、agent-browser 驱动 UI），别只靠单测——交付标准是线上成品可用。
 
 ## AI Agent 操作指南 `/skill.md`

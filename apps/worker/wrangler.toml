@@ -1,11 +1,13 @@
 name = "hpc-cloud-mail"
 main = "src/index.ts"
 compatibility_date = "2025-06-04"
-account_id = "040ebe2037a4dc5209ceb96980020515"
+# account_id 不入库：wrangler 从 CLOUDFLARE_ACCOUNT_ID 环境变量读取（CI 由 GitHub Variables 提供）
 workers_dev = false
 
+# 双下划线占位符由 CI 在部署前注入真实值（deploy.yml「注入 Cloudflare 资源配置」步骤）；
+# 本地 wrangler dev 跑本地模拟，不需要真实 ID
 routes = [
-  { pattern = "hpc.email", custom_domain = true },
+  { pattern = "__CUSTOM_DOMAIN__", custom_domain = true },
 ]
 
 [observability]
@@ -21,12 +23,12 @@ ai_model = "@cf/meta/llama-3.1-8b-instruct"
 [[d1_databases]]
 binding = "db"
 database_name = "hpc-cloud-mail-db"
-database_id = "4888de56-5d04-4ccf-b0ab-44d309306d23"
+database_id = "__D1_DATABASE_ID__"
 migrations_dir = "migrations"
 
 [[kv_namespaces]]
 binding = "kv"
-id = "740790d8a32f4286833f17940358f1bb"
+id = "__KV_NAMESPACE_ID__"
 
 [[r2_buckets]]
 binding = "r2"

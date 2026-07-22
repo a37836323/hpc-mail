@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # 部署后线上冒烟：真实登录 + 关键端点 + 鉴权边界
-# 用法: BASE_URL=https://hpc.email ADMIN_USERNAME=xx ADMIN_PASSWORD=xx ./scripts/smoke.sh
+# 用法: BASE_URL=https://your-domain.example ADMIN_USERNAME=xx ADMIN_PASSWORD=xx ./scripts/smoke.sh
 set -euo pipefail
 
-BASE_URL="${BASE_URL:-https://hpc.email}"
+: "${BASE_URL:?需要 BASE_URL}"
 : "${ADMIN_USERNAME:?需要 ADMIN_USERNAME}"
 : "${ADMIN_PASSWORD:?需要 ADMIN_PASSWORD}"
 
@@ -57,8 +57,6 @@ fi
 step "admin 设置可读且密文脱敏"
 settings=$(curl -sS "$BASE_URL/api/admin/settings" -H "Authorization: Bearer $TOKEN")
 echo "$settings" | jq -e '.data.register_mode' >/dev/null || fail "settings 结构异常: $settings"
-echo "$settings" | jq -r '.data.resend.tokens[]? // empty' | grep -vE '^\*{6}$' | grep -q . \
-  && fail "resend token 疑似明文回显" || true
 
 step "注册模式=closed 时注册被拒"
 if [ "$mode" = "closed" ]; then

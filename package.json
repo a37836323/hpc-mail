@@ -1,5 +1,11 @@
 {
   "name": "hpc-mail",
+  "description": "基于 Cloudflare Workers 的多域名多用户邮箱系统",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/riba2534/hpc-mail.git"
+  },
   "private": true,
   "type": "module",
   "engines": {

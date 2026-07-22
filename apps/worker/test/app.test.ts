@@ -35,7 +35,7 @@ describe('信封与鉴权链路', () => {
       domains: {
         list: [
           { domain: 'hpc.email', public: true, perUserLimit: 0 },
-          { domain: 'claude-router.cc', public: true, perUserLimit: 0 },
+          { domain: 'inbox.test', public: true, perUserLimit: 0 },
         ],
       },
     });

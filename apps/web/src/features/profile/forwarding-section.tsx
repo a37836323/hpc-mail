@@ -19,7 +19,7 @@ const WEBHOOK_SAMPLE = `{
   "event": "mail.received",
   "message": {
     "id": 123,
-    "address": "you@happyclaw.cc",
+    "address": "you@example.com",
     "fromAddress": "sender@example.com",
     "fromName": "发件人名称",
     "subject": "邮件主题",

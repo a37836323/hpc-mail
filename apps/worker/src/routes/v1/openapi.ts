@@ -1,12 +1,15 @@
-/** /v1 的 OpenAPI 3.1 描述（公开，供工具/人类开发者导入） */
-export const OPENAPI_SPEC = {
+/** /v1 的 OpenAPI 3.1 描述（公开，供工具/人类开发者导入）；server 地址按请求来源生成 */
+export function buildOpenApiSpec(origin: string) {
+  return { ...OPENAPI_SPEC, servers: [{ url: `${origin}/v1` }] };
+}
+
+const OPENAPI_SPEC = {
   openapi: '3.1.0',
   info: {
     title: 'HPC Mail Open API',
     version: '1.0.0',
     description: '多域名邮箱系统的开放 API。用 API Key（Bearer hpcm_...）鉴权。',
   },
-  servers: [{ url: 'https://hpc.email/v1' }],
   security: [{ apiKey: [] }],
   components: {
     securitySchemes: {

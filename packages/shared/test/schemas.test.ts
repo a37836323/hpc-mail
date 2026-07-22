@@ -16,7 +16,7 @@ import {
 
 describe('usernameSchema', () => {
   it('接受合法用户名并小写化', () => {
-    expect(usernameSchema.parse('  Riba2534 ')).toBe('riba2534');
+    expect(usernameSchema.parse('  Alice42 ')).toBe('alice42');
     expect(usernameSchema.parse('a_b-c1')).toBe('a_b-c1');
   });
   it('拒绝非法用户名', () => {

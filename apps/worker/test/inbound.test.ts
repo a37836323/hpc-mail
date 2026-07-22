@@ -60,14 +60,14 @@ describe('收件链路 handleInbound', () => {
     // 未认领地址归管理员；用管理员的个人转发目标
     const adminId = await seedUser('inb-admin', 'admin');
     await updateUserNotifyPrefs(env, adminId, {
-      forward: { enabled: true, addresses: ['riba2534.me@gmail.com'] },
+      forward: { enabled: true, addresses: ['admin-forward@example.com'] },
     });
 
     const forward = vi.fn(async () => {});
     const msg = {
-      raw: rawEmail('test1@claude-router.cc', 'Login code', 'Your verification code is 123456.'),
+      raw: rawEmail('test1@inbox.test', 'Login code', 'Your verification code is 123456.'),
       headers: new Headers(),
-      to: 'test1@claude-router.cc',
+      to: 'test1@inbox.test',
       from: 'sender@example.com',
       forward,
       setReject: vi.fn(),
@@ -78,14 +78,14 @@ describe('收件链路 handleInbound', () => {
     const row = await db
       .select()
       .from(messages)
-      .where(eq(messages.address, 'test1@claude-router.cc'))
+      .where(eq(messages.address, 'test1@inbox.test'))
       .get();
     expect(row).toBeTruthy();
     expect(row!.direction).toBe('inbound');
     expect(row!.subject).toBe('Login code');
     expect(row!.verificationCode).toBe('123456');
     expect(row!.preview).toContain('verification code');
-    expect(forward).toHaveBeenCalledWith('riba2534.me@gmail.com');
+    expect(forward).toHaveBeenCalledWith('admin-forward@example.com');
   });
 
   it('已认领地址按认领用户的个人转发，不外溢到管理员', async () => {
@@ -96,13 +96,13 @@ describe('收件链路 handleInbound', () => {
       forward: { enabled: true, addresses: ['admin-box@gmail.com'] },
     });
     const userId = await seedUser('inb-user', 'user');
-    await claim(userId, 'claimed@happyclaw.cc');
+    await claim(userId, 'claimed@example.com');
     await updateUserNotifyPrefs(env, userId, {
       forward: { enabled: true, addresses: ['user-box@gmail.com'] },
     });
 
     const forward = vi.fn(async () => {});
-    const msg = mockMessage('claimed@happyclaw.cc', 'Hi', 'no code here', async () => {});
+    const msg = mockMessage('claimed@example.com', 'Hi', 'no code here', async () => {});
     msg.forward = forward;
     await run(msg);
 
@@ -113,13 +113,13 @@ describe('收件链路 handleInbound', () => {
   it('中转副本（带 X-HPC-Mail-Relay 头）不再触发转发，防环路', async () => {
     await updateSettings(env, { code_extract: { enabled: true, aiEnabled: false } });
     const userId = await seedUser('inb-relay', 'user');
-    await claim(userId, 'relayed@happyclaw.cc');
+    await claim(userId, 'relayed@example.com');
     await updateUserNotifyPrefs(env, userId, {
       forward: { enabled: true, addresses: ['target@gmail.com'] },
     });
 
     const forward = vi.fn(async () => {});
-    const msg = mockMessage('relayed@happyclaw.cc', 'Hi', 'body', async () => {});
+    const msg = mockMessage('relayed@example.com', 'Hi', 'body', async () => {});
     msg.forward = forward;
     msg.headers = new Headers({ 'X-HPC-Mail-Relay': '1' });
     await run(msg);
@@ -130,7 +130,7 @@ describe('收件链路 handleInbound', () => {
   it('原生 forward 失败时尝试中转降级，且不阻断收件落库', async () => {
     await updateSettings(env, { code_extract: { enabled: true, aiEnabled: false } });
     const userId = await seedUser('inb-fallback', 'user');
-    await claim(userId, 'fallback@happyclaw.cc');
+    await claim(userId, 'fallback@example.com');
     await updateUserNotifyPrefs(env, userId, {
       forward: { enabled: true, addresses: ['unverified@example.com'] },
     });
@@ -138,7 +138,7 @@ describe('收件链路 handleInbound', () => {
     const forward = vi.fn(async () => {
       throw new Error('destination address not verified');
     });
-    const msg = mockMessage('fallback@happyclaw.cc', 'Hello', 'plain body', async () => {});
+    const msg = mockMessage('fallback@example.com', 'Hello', 'plain body', async () => {});
     msg.forward = forward;
     // 测试环境无 send_email binding，中转发送本身会失败并被吞掉；收件不受影响
     await run(msg);
@@ -148,7 +148,7 @@ describe('收件链路 handleInbound', () => {
     const row = await db
       .select()
       .from(messages)
-      .where(eq(messages.address, 'fallback@happyclaw.cc'))
+      .where(eq(messages.address, 'fallback@example.com'))
       .get();
     expect(row).toBeTruthy();
   });
@@ -156,10 +156,10 @@ describe('收件链路 handleInbound', () => {
   it('owner 未开启转发时不调用 forward', async () => {
     await updateSettings(env, { code_extract: { enabled: true, aiEnabled: false } });
     const userId = await seedUser('inb-noforward', 'user');
-    await claim(userId, 'noforward@happyclaw.cc'); // 无个人偏好 → 转发默认关闭
+    await claim(userId, 'noforward@example.com'); // 无个人偏好 → 转发默认关闭
 
     const forward = vi.fn(async () => {});
-    const msg = mockMessage('noforward@happyclaw.cc', 'Hi there', 'no codes here', async () => {});
+    const msg = mockMessage('noforward@example.com', 'Hi there', 'no codes here', async () => {});
     msg.forward = forward;
     await run(msg);
 
@@ -167,7 +167,7 @@ describe('收件链路 handleInbound', () => {
     const row = await db
       .select()
       .from(messages)
-      .where(eq(messages.address, 'noforward@happyclaw.cc'))
+      .where(eq(messages.address, 'noforward@example.com'))
       .get();
     expect(row).toBeTruthy();
     expect(row!.verificationCode).toBe('');

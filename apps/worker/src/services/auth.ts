@@ -15,6 +15,7 @@ import { hashPassword, verifyPassword } from '../lib/password.js';
 import { hashRecoveryCode, verifyTotp } from '../lib/totp.js';
 import type { AuthUser, Env, ExecCtx } from '../types.js';
 import { avatarUrl } from './avatar.js';
+import { getSystemFromAddress } from './domain.js';
 import { sendFeishuNotification } from './feishu.js';
 import { consumeInvite } from './invite.js';
 import { getUserNotifyPrefs } from './notify-prefs.js';
@@ -177,7 +178,7 @@ export async function login(
           const prefs = await getUserNotifyPrefs(env, user.id);
           await sendFeishuNotification(prefs.feishu, {
             subject: `⚠ 账号 ${user.username} 新 IP 登录`,
-            fromAddress: 'system@hpc.email',
+            fromAddress: await getSystemFromAddress(env),
             fromName: 'HPC Mail',
             toAddress: user.username,
             code: '',

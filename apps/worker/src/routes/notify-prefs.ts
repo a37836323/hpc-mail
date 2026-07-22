@@ -2,6 +2,7 @@ import { updateNotifyPrefsRequestSchema } from '@hpc-mail/shared';
 import { Hono } from 'hono';
 import { ok, parseBody } from '../lib/http.js';
 import { requireAuth } from '../middleware/auth.js';
+import { getSystemFromAddress } from '../services/domain.js';
 import { sendFeishuNotification } from '../services/feishu.js';
 import {
   getUserNotifyPrefs,
@@ -36,7 +37,7 @@ app.post('/feishu-test', async (c) => {
     prefs.feishu,
     {
       subject: 'HPC Mail 飞书机器人测试',
-      fromAddress: 'system@hpc.email',
+      fromAddress: await getSystemFromAddress(c.env),
       fromName: 'HPC Mail',
       toAddress: user.username,
       code: '',

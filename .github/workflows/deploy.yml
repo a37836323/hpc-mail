@@ -26,7 +26,8 @@ permissions:
   contents: read
 
 env:
-  KV_NAMESPACE_ID: 740790d8a32f4286833f17940358f1bb
+  CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+  KV_NAMESPACE_ID: ${{ vars.KV_NAMESPACE_ID }}
   D1_NAME: hpc-cloud-mail-db
 
 jobs:
@@ -42,9 +43,15 @@ jobs:
           ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
           ADMIN_USERNAME: ${{ vars.ADMIN_USERNAME }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          D1_DATABASE_ID: ${{ vars.D1_DATABASE_ID }}
+          CUSTOM_DOMAIN: ${{ vars.CUSTOM_DOMAIN }}
         run: |
           set -euo pipefail
           [ -n "$CLOUDFLARE_API_TOKEN" ] || { echo '::error::缺 CLOUDFLARE_API_TOKEN'; exit 1; }
+          [ -n "$CLOUDFLARE_ACCOUNT_ID" ] || { echo '::error::缺 Variable CLOUDFLARE_ACCOUNT_ID'; exit 1; }
+          [ -n "$D1_DATABASE_ID" ] || { echo '::error::缺 Variable D1_DATABASE_ID'; exit 1; }
+          [ -n "$KV_NAMESPACE_ID" ] || { echo '::error::缺 Variable KV_NAMESPACE_ID'; exit 1; }
+          [ -n "$CUSTOM_DOMAIN" ] || { echo '::error::缺 Variable CUSTOM_DOMAIN'; exit 1; }
           echo "$JWT_SECRET" | grep -qE '^[A-Za-z0-9_-]{43,}$' || { echo '::error::JWT_SECRET 需为 43+ 位 URL-safe 字符串'; exit 1; }
           plen=${#ADMIN_PASSWORD}
           [ "$plen" -ge 12 ] && [ "$plen" -le 128 ] || { echo '::error::ADMIN_PASSWORD 需 12-128 位'; exit 1; }
@@ -89,6 +96,20 @@ jobs:
       - name: 依赖安全审计（尽力而为）
         # npm 旧 audit endpoint 已退役（410），该门控不再可靠，仅告警不阻断部署
         run: pnpm audit --prod || echo "::warning::pnpm audit 端点不可用或报告漏洞，请人工复核"
+
+      - name: 注入 Cloudflare 资源配置
+        working-directory: apps/worker
+        env:
+          D1_DATABASE_ID: ${{ vars.D1_DATABASE_ID }}
+          CUSTOM_DOMAIN: ${{ vars.CUSTOM_DOMAIN }}
+        run: |
+          set -euo pipefail
+          sed -i \
+            -e "s/__CUSTOM_DOMAIN__/${CUSTOM_DOMAIN}/" \
+            -e "s/__D1_DATABASE_ID__/${D1_DATABASE_ID}/" \
+            -e "s/__KV_NAMESPACE_ID__/${KV_NAMESPACE_ID}/" \
+            wrangler.toml
+          grep -qE '__[A-Z0-9_]+__' wrangler.toml && { echo '::error::wrangler.toml 仍有未注入占位符'; exit 1; } || true
 
       - name: 部署预演（dry-run）
         working-directory: apps/worker
