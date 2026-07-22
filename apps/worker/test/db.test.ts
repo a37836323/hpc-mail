@@ -7,7 +7,7 @@ import { messages, settings as settingsTable, users } from '../src/db/schema.js'
 import { AppError } from '../src/lib/errors.js';
 import { getDomains, getPublicDomains, getVisibleDomains } from '../src/services/domain.js';
 import { claimMailbox } from '../src/services/mailbox.js';
-import { countUnread, listMessages, markMessages, starMessages } from '../src/services/message.js';
+import { countUnread, listMessages, markAllRead, markMessages, starMessages } from '../src/services/message.js';
 import {
   getUserNotifyPrefs,
   maskUserNotifyPrefs,
@@ -352,6 +352,37 @@ describe('收件箱未读数 countUnread', () => {
     const uid = await seedUser('no-mailbox-user', 'user');
     await seedInbound('random@hpc.email', 'x');
     expect(await countUnread(env, uid, 'user')).toBe(0);
+  });
+});
+
+describe('一键全读 markAllRead', () => {
+  it('user 只标自己认领地址的未读 inbound，他人邮件不动', async () => {
+    await setDomains();
+    const uid = await seedUser('readall-user', 'user');
+    await claimMailbox(env, uid, 'user', { localPart: 'ra', domain: 'hpc.email' });
+
+    await seedInbound('ra@hpc.email', 'ra unread 1');
+    await seedInbound('ra@hpc.email', 'ra unread 2');
+    const otherId = await seedInbound('ra-other@hpc.email', 'not mine');
+
+    expect(await markAllRead(env, { userId: uid, role: 'user' })).toBe(2);
+    expect(await countUnread(env, uid, 'user')).toBe(0);
+    // 他人地址的邮件保持未读
+    const db = createDb(env);
+    const other = await db.select().from(messages).where(eq(messages.id, otherId)).get();
+    expect(other!.isRead).toBe(false);
+  });
+
+  it('admin 默认 scope=mine 只标自己，显式 scope=all 才作用全站', async () => {
+    await setDomains();
+    const adminId = await seedUser('readall-admin', 'admin');
+    await claimMailbox(env, adminId, 'admin', { localPart: 'ra-boss', domain: 'hpc.email' });
+
+    await seedInbound('ra-boss@hpc.email', 'mine unread');
+    await seedInbound('ra-elsewhere@hpc.email', 'site unread');
+
+    expect(await markAllRead(env, { userId: adminId, role: 'admin' })).toBe(1);
+    expect(await markAllRead(env, { userId: adminId, role: 'admin', scope: 'all' })).toBe(1);
   });
 });
 

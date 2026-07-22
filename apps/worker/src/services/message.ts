@@ -375,6 +375,25 @@ export async function markMessages(
   return result.meta.changes ?? 0;
 }
 
+/** 收件箱一键全读：可见范围内全部未读 inbound 标为已读（不含回收站） */
+export async function markAllRead(env: Env, viewer: Viewer): Promise<number> {
+  const db = createDb(env);
+  const scope = await resolveMutationScope(env, viewer);
+  const result = await db
+    .update(messages)
+    .set({ isRead: true })
+    .where(
+      and(
+        scopeCondition(scope),
+        eq(messages.direction, 'inbound'),
+        eq(messages.isRead, false),
+        isNull(messages.deletedAt),
+      ),
+    )
+    .run();
+  return result.meta.changes ?? 0;
+}
+
 /** 批量星标/取消（每用户独立；限可见范围） */
 export async function starMessages(
   env: Env,

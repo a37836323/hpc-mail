@@ -98,6 +98,7 @@ export const messageApi = {
   unreadCount: () => api.get<{ unread: number }>('/messages/unread-count'),
   markRead: (ids: number[], isRead: boolean, scope?: 'mine' | 'all') =>
     api.post<void, { ids: number[]; isRead: boolean }>('/messages/read', { ids, isRead }, { query: { scope } }),
+  markAllRead: () => api.post<{ changed: number }, Record<string, never>>('/messages/read-all', {}),
   star: (ids: number[], starred: boolean, scope?: 'mine' | 'all') =>
     api.post<void, { ids: number[]; starred: boolean }>('/messages/star', { ids, starred }, { query: { scope } }),
   remove: (ids: number[], scope?: 'mine' | 'all') =>

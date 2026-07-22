@@ -16,6 +16,7 @@ import {
   getRecentContacts,
   getThread,
   listMessages,
+  markAllRead,
   markMessages,
   purgeMessages,
   restoreMessages,
@@ -53,6 +54,12 @@ app.post('/send', async (c) => {
 app.post('/read', async (c) => {
   const req = await parseBody(c, markReadRequestSchema);
   const changed = await markMessages(c.env, viewerOf(c), req.ids, req.isRead);
+  return ok(c, { changed });
+});
+
+/** 一键全读：可见范围内全部未读收件标为已读（admin 需显式 scope=all 才作用全站） */
+app.post('/read-all', async (c) => {
+  const changed = await markAllRead(c.env, viewerOf(c));
   return ok(c, { changed });
 });
 

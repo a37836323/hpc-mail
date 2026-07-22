@@ -1,20 +1,36 @@
-import { AtSign } from 'lucide-react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { AtSign, MailOpen } from 'lucide-react';
 import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
+import { queryKeys } from '@/api/query-keys';
+import { messageApi } from '@/api/resources';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import type { ComboboxOption } from '@/components/ui/combobox';
 import { EmptyState } from '@/components/ui/empty-state';
+import { toast } from '@/components/ui/toast';
 import { useMailboxesQuery } from '@/features/mailboxes/use-mailboxes';
 import { useDomains } from '@/lib/use-config';
 import { FilterBar } from './filter-bar';
 import { MailList } from './mail-list';
 import { useInboxFilters } from './use-inbox-filters';
+import { useUnreadCount } from './use-unread-count';
 
 export function InboxPage() {
   const { filters, setDomain, setAddress, setUnread, setQuery, reset } = useInboxFilters();
   const { data: visibleDomains } = useDomains();
   const { data: mailboxes } = useMailboxesQuery(false);
+  const { data: unreadData } = useUnreadCount();
+  const queryClient = useQueryClient();
+
+  const readAll = useMutation({
+    mutationFn: () => messageApi.markAllRead(),
+    onSuccess: ({ changed }) => {
+      toast({ title: changed > 0 ? `已将 ${changed} 封邮件标为已读` : '没有未读邮件', variant: 'success' });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.messages.root });
+    },
+    onError: () => toast({ title: '操作失败，请重试', variant: 'error' }),
+  });
 
   const addressOptions = useMemo<ComboboxOption[]>(
     () =>
@@ -41,7 +57,17 @@ export function InboxPage() {
 
   return (
     <div className="mx-auto max-w-4xl">
-      <PageHeader title="收件箱" />
+      <PageHeader
+        title="收件箱"
+        actions={
+          (unreadData?.unread ?? 0) > 0 && (
+            <Button variant="secondary" size="sm" disabled={readAll.isPending} onClick={() => readAll.mutate()}>
+              <MailOpen className="size-4" />
+              全部已读
+            </Button>
+          )
+        }
+      />
       {noMailbox ? (
         <div className="rounded-lg border border-line bg-surface">
           <EmptyState
