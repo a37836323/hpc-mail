@@ -379,10 +379,16 @@ describe('一键全读 markAllRead', () => {
     await claimMailbox(env, adminId, 'admin', { localPart: 'ra-boss', domain: 'hpc.email' });
 
     await seedInbound('ra-boss@hpc.email', 'mine unread');
-    await seedInbound('ra-elsewhere@hpc.email', 'site unread');
+    const elsewhereId = await seedInbound('ra-elsewhere@hpc.email', 'site unread');
 
     expect(await markAllRead(env, { userId: adminId, role: 'admin' })).toBe(1);
-    expect(await markAllRead(env, { userId: adminId, role: 'admin', scope: 'all' })).toBe(1);
+    const db = createDb(env);
+    const before = await db.select().from(messages).where(eq(messages.id, elsewhereId)).get();
+    expect(before!.isRead).toBe(false);
+    // scope=all 作用全站；同文件其他用例会遗留未读行，不断言总数、只验证目标行为
+    await markAllRead(env, { userId: adminId, role: 'admin', scope: 'all' });
+    const after = await db.select().from(messages).where(eq(messages.id, elsewhereId)).get();
+    expect(after!.isRead).toBe(true);
   });
 });
 
