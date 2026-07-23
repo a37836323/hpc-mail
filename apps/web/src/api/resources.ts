@@ -5,16 +5,15 @@ import type {
   ApiRequestLogEntry,
   ChangePasswordRequest,
   ClaimMailboxRequest,
+  CompleteMultipartUploadRequest,
   CreateApiKeyRequest,
   CreatedApiKey,
   CreateInviteRequest,
   CreateUserRequest,
   DisableTwoFactorRequest,
   DomainOnboardingStatus,
-  UpdateNotifyPrefsRequest,
-  UserNotifyPrefs,
-  TwoFactorEnabled,
-  TwoFactorSetup,
+  InitMultipartUploadRequest,
+  InternalSendMailRequest,
   Invite,
   ListMessagesQuery,
   LoginRequest,
@@ -23,19 +22,28 @@ import type {
   MailboxAvailability,
   MessageDetail,
   MessageSummary,
+  MultipartCompleteResult,
+  MultipartInitResult,
+  MultipartPartResult,
   Page,
   PublicConfig,
   RegisterRequest,
-  SendMailRequest,
   SessionUser,
   Settings,
+  SingleUploadResult,
   UpdateApiKeyRequest,
   UpdateMailboxRequest,
+  UpdateNotifyPrefsRequest,
   UpdateSettingsRequest,
   UpdateUserRequest,
   UploadAvatarRequest,
+  UploadedPart,
+  UserNotifyPrefs,
+  TwoFactorEnabled,
+  TwoFactorSetup,
 } from '@hpc-mail/shared';
 import { api, type QueryParams } from './client';
+import { xhrSend, type UploadProgress } from './upload-client';
 
 // ---- auth ----
 export const authApi = {
@@ -94,7 +102,8 @@ export const messageApi = {
   detail: (id: number) => api.get<MessageDetail>(`/messages/${id}`),
   thread: (id: number) => api.get<{ items: MessageSummary[] }>(`/messages/${id}/thread`),
   contacts: () => api.get<{ contacts: string[] }>('/messages/contacts'),
-  send: (body: SendMailRequest) => api.post<MessageSummary, SendMailRequest>('/messages/send', body),
+  send: (body: InternalSendMailRequest) =>
+    api.post<MessageSummary, InternalSendMailRequest>('/messages/send', body),
   unreadCount: () => api.get<{ unread: number }>('/messages/unread-count'),
   markRead: (ids: number[], isRead: boolean, scope?: 'mine' | 'all') =>
     api.post<void, { ids: number[]; isRead: boolean }>('/messages/read', { ids, isRead }, { query: { scope } }),
@@ -107,6 +116,52 @@ export const messageApi = {
     api.post<void, { ids: number[] }>('/messages/restore', { ids }, { query: { scope } }),
   purge: (ids: number[], scope?: 'mine' | 'all') =>
     api.post<void, { ids: number[] }>('/messages/purge', { ids }, { query: { scope } }),
+};
+
+// ---- 附件上传（先落 R2 草稿区，发送时引用 token）----
+export const uploadsApi = {
+  /** 单片直传（< 阈值）：二进制流式上传，带真实进度 */
+  single: (
+    file: Blob,
+    filename: string,
+    mimeType: string,
+    onProgress?: (p: UploadProgress) => void,
+    signal?: AbortSignal,
+  ) =>
+    xhrSend<SingleUploadResult>({
+      method: 'POST',
+      path: '/uploads',
+      query: { filename, mimeType },
+      body: file,
+      onProgress,
+      signal,
+    }),
+  /** 大文件分片：初始化 R2 multipart upload */
+  initMultipart: (req: InitMultipartUploadRequest) =>
+    api.post<MultipartInitResult, InitMultipartUploadRequest>('/uploads/multipart', req),
+  /** 上传一个分片：带真实进度 */
+  uploadPart: (
+    token: string,
+    partNumber: number,
+    blob: Blob,
+    onProgress?: (p: UploadProgress) => void,
+    signal?: AbortSignal,
+  ) =>
+    xhrSend<MultipartPartResult>({
+      method: 'PUT',
+      path: `/uploads/multipart/${token}/parts/${partNumber}`,
+      body: blob,
+      onProgress,
+      signal,
+    }),
+  /** 完成分片：提交所有 parts 触发 R2 complete */
+  completeMultipart: (token: string, parts: UploadedPart[]) =>
+    api.post<MultipartCompleteResult, CompleteMultipartUploadRequest>(
+      `/uploads/multipart/${token}/complete`,
+      { parts },
+    ),
+  /** 删除草稿附件（取消上传 / 移除已上传） */
+  remove: (token: string) => api.delete<{ success: boolean }>(`/uploads/${token}`),
 };
 
 // ---- API Keys（自助） ----

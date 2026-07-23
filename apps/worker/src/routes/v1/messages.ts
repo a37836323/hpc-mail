@@ -19,7 +19,7 @@ import {
   markMessages,
   type Viewer,
 } from '../../services/message.js';
-import { sendMail } from '../../services/outbound.js';
+import { decodeInlineAttachments, sendMail } from '../../services/outbound.js';
 import { getObject } from '../../services/storage.js';
 import type { AppContext } from '../../types.js';
 
@@ -45,7 +45,14 @@ app.post('/', async (c) => {
     const cached = await c.env.kv.get(cacheKey, { type: 'json' });
     if (cached) return ok(c, cached as MessageSummary, 201);
   }
-  const summary = await sendMail(c.env, c.executionCtx, { userId: key.userId, role: key.role }, req);
+  const attachments = decodeInlineAttachments(req.attachments);
+  const summary = await sendMail(
+    c.env,
+    c.executionCtx,
+    { userId: key.userId, role: key.role },
+    req,
+    attachments,
+  );
   if (cacheKey) {
     try {
       await c.env.kv.put(cacheKey, JSON.stringify(summary), { expirationTtl: 24 * 3600 });

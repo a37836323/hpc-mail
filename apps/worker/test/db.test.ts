@@ -413,16 +413,21 @@ describe('回复头 replyToMessageId', () => {
       .returning({ id: messages.id });
 
     const ctx = { waitUntil: () => {} };
-    await sendMail(env, ctx, { userId: uid, role: 'user' }, {
-      from: { localPart: 'me', domain: 'hpc.email' },
-      to: ['friend@hpc.email'],
-      cc: [],
-      bcc: [],
-      subject: 'Re: Original',
-      text: '回复内容',
-      attachments: [],
-      replyToMessageId: orig!.id,
-    } as never);
+    await sendMail(
+      env,
+      ctx,
+      { userId: uid, role: 'user' },
+      {
+        from: { localPart: 'me', domain: 'hpc.email' },
+        to: ['friend@hpc.email'],
+        cc: [],
+        bcc: [],
+        subject: 'Re: Original',
+        text: '回复内容',
+        replyToMessageId: orig!.id,
+      } as never,
+      [],
+    );
 
     const outbound = await db
       .select()

@@ -1,9 +1,11 @@
+import { DRAFT_ATTACHMENT_TTL_HOURS } from '@hpc-mail/shared';
 import { and, eq, inArray, isNotNull, lt, notInArray, type SQL } from 'drizzle-orm';
 import { createDb } from '../db/client.js';
 import {
   apiRateLimits,
   apiRequestLogs,
   attachments as attachmentsTable,
+  draftAttachments,
   mailboxes,
   messages,
   stars,
@@ -82,6 +84,41 @@ async function runRetention(env: Env): Promise<void> {
   }
 }
 
+/** 草稿附件孤儿清理：上传后未发送、超过 TTL 的 draft（含未完成 multipart）→ 回收 R2 + 删行 */
+async function runDraftAttachmentCleanup(env: Env): Promise<void> {
+  const db = createDb(env);
+  const cutoff = new Date(Date.now() - DRAFT_ATTACHMENT_TTL_HOURS * 3600 * 1000);
+  const stale = await db
+    .select({
+      id: draftAttachments.id,
+      r2Key: draftAttachments.r2Key,
+      uploadId: draftAttachments.uploadId,
+      status: draftAttachments.status,
+    })
+    .from(draftAttachments)
+    .where(lt(draftAttachments.createdAt, cutoff))
+    .limit(RETENTION_BATCH)
+    .all();
+  if (stale.length === 0) return;
+  for (const s of stale) {
+    if (s.uploadId && s.status === 'uploading') {
+      try {
+        await env.r2.resumeMultipartUpload(s.r2Key, s.uploadId).abort();
+      } catch (e) {
+        console.error('清理：abort multipart 失败:', e);
+      }
+    } else {
+      try {
+        await env.r2.delete(s.r2Key);
+      } catch (e) {
+        console.error('清理：删草稿 R2 失败:', e);
+      }
+    }
+  }
+  await db.delete(draftAttachments).where(inArray(draftAttachments.id, stale.map((s) => s.id)));
+  console.log(`草稿附件清理：删除 ${stale.length} 个过期草稿`);
+}
+
 /** 每日清理：审计日志 90 天 + 过期限流窗口 + 邮件保留策略 */
 export async function runScheduled(env: Env): Promise<void> {
   const db = createDb(env);
@@ -113,5 +150,11 @@ export async function runScheduled(env: Env): Promise<void> {
     if (n > 0) console.log(`回收站清理：硬删 ${n} 封`);
   } catch (e) {
     console.error('回收站清理失败:', e);
+  }
+  // 草稿附件：超过 TTL 未发送的孤儿（上传未完成或未点发送）→ 回收 R2 + 删行
+  try {
+    await runDraftAttachmentCleanup(env);
+  } catch (e) {
+    console.error('草稿附件清理失败:', e);
   }
 }

@@ -1,9 +1,9 @@
 import {
+  EXTERNAL_MESSAGE_MAX_BYTES,
   MAX_ATTACHMENTS,
   MAX_ATTACHMENT_TOTAL_BYTES,
   type MessageSummary,
   type Role,
-  type SendMailRequest,
 } from '@hpc-mail/shared';
 import { and, eq } from 'drizzle-orm';
 import { createDb, type Db } from '../db/client.js';
@@ -32,13 +32,26 @@ export interface Sender {
   role: Role;
 }
 
-interface DecodedAttachment {
+export interface DecodedAttachment {
   filename: string;
   mimeType: string;
   contentId: string;
   disposition: string;
   bytes: Uint8Array;
   base64: string;
+}
+
+/** sendMail 所需请求字段（base64 内联与 token 引用两种发送的共有子集） */
+export interface SendMailInput {
+  from: { mailboxId?: number; localPart?: string; domain?: string; displayName?: string };
+  to: string[];
+  cc: string[];
+  bcc: string[];
+  subject: string;
+  text?: string;
+  html?: string;
+  replyToMessageId?: number;
+  forwardAttachmentsFrom?: number;
 }
 
 interface ResolvedFrom {
@@ -55,6 +68,20 @@ interface ReplyContext {
 
 function decodeBase64(b64: string): Uint8Array {
   return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+}
+
+/** 把 /v1 的 base64 内联附件解码为 DecodedAttachment[]（供 route 层调用） */
+export function decodeInlineAttachments(
+  atts: { filename: string; contentType: string; content: string }[],
+): DecodedAttachment[] {
+  return atts.map((a) => ({
+    filename: a.filename,
+    mimeType: a.contentType,
+    contentId: '',
+    disposition: 'attachment',
+    bytes: decodeBase64(a.content),
+    base64: a.content,
+  }));
 }
 
 interface QuotaCounter {
@@ -106,7 +133,7 @@ async function bumpOutboundQuota(env: Env, sender: Sender, externalCount: number
 async function resolveFrom(
   env: Env,
   sender: Sender,
-  req: SendMailRequest,
+  req: SendMailInput,
   domains: string[],
 ): Promise<ResolvedFrom> {
   const db = createDb(env);
@@ -143,7 +170,7 @@ async function resolveFrom(
   return { address, domain, displayName };
 }
 
-function bytesToBase64(bytes: Uint8Array): string {
+export function bytesToBase64(bytes: Uint8Array): string {
   let binary = '';
   const chunk = 0x8000;
   for (let i = 0; i < bytes.length; i += chunk) {
@@ -224,7 +251,7 @@ async function sendViaCloudflare(
   env: Env,
   from: ResolvedFrom,
   toAddr: string,
-  req: SendMailRequest,
+  req: SendMailInput,
   atts: DecodedAttachment[],
   reply: ReplyContext | null,
 ): Promise<void> {
@@ -305,22 +332,14 @@ export async function sendMail(
   env: Env,
   ctx: ExecCtx,
   sender: Sender,
-  req: SendMailRequest,
+  req: SendMailInput,
+  attachments: DecodedAttachment[],
 ): Promise<MessageSummary> {
   assertNoHeaderInjection(req.subject);
   const settings = await getSettings(env);
   const db = createDb(env);
   const domains = await getDomains(env, settings);
   const from = await resolveFrom(env, sender, req, domains);
-
-  const decoded: DecodedAttachment[] = req.attachments.map((a) => ({
-    filename: a.filename,
-    mimeType: a.contentType,
-    contentId: '',
-    disposition: 'attachment',
-    bytes: decodeBase64(a.content),
-    base64: a.content,
-  }));
 
   // 转发携带原附件：从来源邮件读回（校验可见性），追加到本次发送
   if (req.forwardAttachmentsFrom) {
@@ -329,12 +348,15 @@ export async function sendMail(
       db,
       sender,
       req.forwardAttachmentsFrom,
-      decoded.length,
+      attachments.length,
     );
-    decoded.push(...forwarded);
-    const totalBytes = decoded.reduce((sum, a) => sum + a.bytes.byteLength, 0);
+    attachments = [...attachments, ...forwarded];
+    const totalBytes = attachments.reduce((sum, a) => sum + a.bytes.byteLength, 0);
     if (totalBytes > MAX_ATTACHMENT_TOTAL_BYTES) {
-      throw new AppError('payload_too_large', '附件合计超过 25MB 上限');
+      throw new AppError(
+        'payload_too_large',
+        `附件合计超过 ${Math.floor(MAX_ATTACHMENT_TOTAL_BYTES / 1024 / 1024)}MB 上限`,
+      );
     }
   }
 
@@ -357,12 +379,23 @@ export async function sendMail(
   let errorDetail = '';
   const sendChannel = hasExternal ? 'cloudflare' : 'internal';
   if (hasExternal) {
+    // Cloudflare send_email 单封邮件（含附件、base64 编码后）硬限 5 MiB：含外部收件人时
+    // 预校验「正文 + Σ(base64 附件)」近似大小，超限直接拒绝并给出可读提示（不烧配额）
+    const approxBytes =
+      new TextEncoder().encode(`${text}${html}`).length +
+      attachments.reduce((sum, a) => sum + Math.ceil((a.bytes.byteLength * 4) / 3), 0);
+    if (approxBytes > EXTERNAL_MESSAGE_MAX_BYTES) {
+      throw new AppError(
+        'payload_too_large',
+        '外发单封邮件不能超过 5MB（含附件），请改用站内地址或网盘链接',
+      );
+    }
     // 外发日配额（普通用户）：发送前校验，防被盗账号脚本化群发
     await assertOutboundQuota(env, settings.quota, sender, externalTargets.length);
     const failures: string[] = [];
     for (const addr of externalTargets) {
       try {
-        await sendViaCloudflare(env, from, addr, req, decoded, reply);
+        await sendViaCloudflare(env, from, addr, req, attachments, reply);
       } catch (cfErr) {
         const cfMsg = cfErr instanceof Error ? cfErr.message : String(cfErr);
         failures.push(`${addr}: ${cfMsg}`);
@@ -407,7 +440,7 @@ export async function sendMail(
     })
     .returning()
     .get();
-  await persistAttachments(env, db, outbound!.id, decoded);
+  await persistAttachments(env, db, outbound!.id, attachments);
 
   if (status === 'failed') {
     throw new AppError('internal', errorDetail || '发送失败');
@@ -441,7 +474,7 @@ export async function sendMail(
       .returning({ id: messages.id })
       .get();
     internalRows.push(inbound!.id);
-    await persistAttachments(env, db, inbound!.id, decoded);
+    await persistAttachments(env, db, inbound!.id, attachments);
   }
 
   // 站内互投通知（异步）：按每个收件地址所属用户的个人偏好推送飞书 + 通用 webhook
@@ -490,5 +523,5 @@ export async function sendMail(
     );
   }
 
-  return summarize(outbound!, decoded.length > 0, false);
+  return summarize(outbound!, attachments.length > 0, false);
 }

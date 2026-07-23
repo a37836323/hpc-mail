@@ -1,8 +1,8 @@
 import {
   deleteMessagesRequestSchema,
+  internalSendMailSchema,
   listMessagesQuerySchema,
   markReadRequestSchema,
-  sendMailRequestSchema,
   starMessagesRequestSchema,
 } from '@hpc-mail/shared';
 import { Hono, type Context } from 'hono';
@@ -25,6 +25,7 @@ import {
 } from '../services/message.js';
 import { AppError } from '../lib/errors.js';
 import { sendMail } from '../services/outbound.js';
+import { consumeDraftAttachments, resolveDraftAttachments } from '../services/upload.js';
 import type { AppContext } from '../types.js';
 
 const app = new Hono<AppContext>();
@@ -46,8 +47,17 @@ app.get('/', async (c) => {
 
 app.post('/send', async (c) => {
   const user = c.get('user')!;
-  const req = await parseBody(c, sendMailRequestSchema);
-  const summary = await sendMail(c.env, c.executionCtx, { userId: user.id, role: user.role }, req);
+  const req = await parseBody(c, internalSendMailSchema);
+  const attachments = await resolveDraftAttachments(c.env, user.id, req.attachmentTokens);
+  const summary = await sendMail(
+    c.env,
+    c.executionCtx,
+    { userId: user.id, role: user.role },
+    req,
+    attachments,
+  );
+  // 发送成功后回收草稿附件（内容已复制到 att/{messageId}/，删 draft/ 对象 + 行）
+  await consumeDraftAttachments(c.env, user.id, req.attachmentTokens);
   return ok(c, summary, 201);
 });
 

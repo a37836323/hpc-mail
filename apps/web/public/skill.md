@@ -114,7 +114,8 @@ curl -s -X POST $BASE/api/messages/send \
 
 - `from` 二选一：`{"localPart":"bot","domain":"hpc.email"}` 或 `{"mailboxId":5}`（用你认领的地址）。
 - 正文 `text`（纯文本）和 `html` 至少给一个；可选 `cc` / `bcc` 数组、`attachments`。
-- **附件结构**：`attachments` 是数组，每项 `{"filename":"a.pdf","contentType":"application/pdf","content":"<base64>"}`，`content` 为不含 `data:` 前缀的 base64；单次 ≤10 个、合计 ≤25MB。
+- **附件结构**：`attachments` 是数组，每项 `{"filename":"a.pdf","contentType":"application/pdf","content":"<base64>"}`，`content` 为不含 `data:` 前缀的 base64；单次 ≤10 个、单文件 ≤50MB、合计 ≤50MB。
+- **外发大小限制**：发到本系统域名之外的邮箱（外部地址）走 Cloudflare 发信通道，单封邮件（含附件、base64 编码后）硬限 5MB，附件原始大小约 ≤3.5MB；超出会被拒（`payload_too_large`）。大附件请发到站内 `@<系统域名>` 地址（走站内存储，不受此限）。
 - 收件人若也是本站域名，即时站内投递；站外地址经 Cloudflare 发送到任意外部邮箱，个别收件人失败会在 `errorDetail` 里注明。
 - **判断是否真的发出去了**：成功响应的 `data` 是一封 outbound 邮件，看它的 `status` 与 `errorDetail`——`status:"failed"` 表示全部失败（此时 HTTP 也是错误码）；`status:"sent"` 但 `errorDetail` 非空表示**部分收件人失败**（`errorDetail` 里列出失败地址与原因），别把它当作全部送达。
 

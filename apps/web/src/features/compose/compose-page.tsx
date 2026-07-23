@@ -3,14 +3,18 @@ import { Paperclip, X } from 'lucide-react';
 import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
+  MAX_ATTACHMENT_FILE_BYTES,
   MAX_ATTACHMENTS,
   MAX_ATTACHMENT_TOTAL_BYTES,
-  type SendMailRequest,
-  sendMailRequestSchema,
+  SINGLE_UPLOAD_THRESHOLD_BYTES,
+  type InternalSendMailRequest,
+  type UploadedPart,
+  internalSendMailSchema,
 } from '@hpc-mail/shared';
 import { ApiError } from '@/api/errors';
 import { queryKeys } from '@/api/query-keys';
-import { messageApi } from '@/api/resources';
+import { messageApi, uploadsApi } from '@/api/resources';
+import { Progress } from '@/components/ui/progress';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { FormField } from '@/components/ui/form-field';
@@ -23,29 +27,22 @@ import { useDomains } from '@/lib/use-config';
 import { useCurrentUser } from '@/lib/use-session';
 import { useMailboxesQuery } from '@/features/mailboxes/use-mailboxes';
 import type { ComposeInitial } from './compose-init';
+import { exceedsExternalLimit, hasExternalRecipient } from './compose-attachments';
 import { IdentityPicker } from './identity-picker';
 import { RecipientInput } from './recipient-input';
 
-interface LocalAttachment {
+interface AttachmentUpload {
+  key: string;
+  file: File;
   filename: string;
-  contentType: string;
-  content: string;
+  mimeType: string;
   size: number;
-}
-
-async function fileToAttachment(file: File): Promise<LocalAttachment> {
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  let binary = '';
-  const chunk = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunk) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
-  }
-  return {
-    filename: file.name,
-    contentType: file.type || 'application/octet-stream',
-    content: btoa(binary),
-    size: file.size,
-  };
+  status: 'uploading' | 'ready' | 'error';
+  loaded: number;
+  total: number;
+  token?: string;
+  error?: string;
+  abort?: AbortController;
 }
 
 function splitLocalPart(address: string | undefined): { localPart: string; domain: string } {
@@ -113,7 +110,7 @@ export function ComposePage() {
   const [subject, setSubject] = useState(initial.subject ?? savedDraft?.subject ?? '');
   const [isHtml, setIsHtml] = useState(initial.isHtml ?? savedDraft?.isHtml ?? false);
   const [body, setBody] = useState(initial.body ?? savedDraft?.body ?? '');
-  const [attachments, setAttachments] = useState<LocalAttachment[]>([]);
+  const [attachments, setAttachments] = useState<AttachmentUpload[]>([]);
   const [error, setError] = useState<string | null>(null);
   const replyToMessageId = initial.replyToMessageId;
 
@@ -157,7 +154,7 @@ export function ComposePage() {
   }, [to.length, subject, body]);
 
   const sendMutation = useMutation({
-    mutationFn: (payload: SendMailRequest) => messageApi.send(payload),
+    mutationFn: (payload: InternalSendMailRequest) => messageApi.send(payload),
     onSuccess: () => {
       toast({ title: '邮件已发送', variant: 'success' });
       clearDraft();
@@ -167,21 +164,122 @@ export function ComposePage() {
     onError: (err) => setError(err instanceof ApiError ? err.message : '发送失败，请重试'),
   });
 
+  const updateAttachment = (
+    key: string,
+    patch: Partial<AttachmentUpload> | ((a: AttachmentUpload) => Partial<AttachmentUpload>),
+  ) =>
+    setAttachments((prev) =>
+      prev.map((a) => {
+        if (a.key !== key) return a;
+        const p = typeof patch === 'function' ? patch(a) : patch;
+        return { ...a, ...p };
+      }),
+    );
+
+  // 单个文件上传：< 阈值单片直传，否则分片（每片带真实进度，累加显示）
+  const uploadOne = async (file: File) => {
+    const key = crypto.randomUUID();
+    const mimeType = file.type || 'application/octet-stream';
+    const abort = new AbortController();
+    setAttachments((prev) => [
+      ...prev,
+      {
+        key,
+        file,
+        filename: file.name,
+        mimeType,
+        size: file.size,
+        status: 'uploading',
+        loaded: 0,
+        total: file.size,
+        abort,
+      },
+    ]);
+    try {
+      let token: string;
+      if (file.size < SINGLE_UPLOAD_THRESHOLD_BYTES) {
+        const res = await uploadsApi.single(
+          file,
+          file.name,
+          mimeType,
+          (p) => updateAttachment(key, { loaded: p.loaded, total: p.total }),
+          abort.signal,
+        );
+        token = res.token;
+      } else {
+        const init = await uploadsApi.initMultipart({
+          filename: file.name,
+          mimeType,
+          size: file.size,
+        });
+        // 记录 token：上传中取消也能调 DELETE 回收（abort multipart + 删行）
+        updateAttachment(key, { token: init.token });
+        const parts: UploadedPart[] = [];
+        for (let i = 0; i < init.partCount; i++) {
+          const start = i * init.partBytes;
+          const blob = file.slice(start, Math.min(start + init.partBytes, file.size));
+          const part = await uploadsApi.uploadPart(
+            init.token,
+            i + 1,
+            blob,
+            (p) => updateAttachment(key, { loaded: i * init.partBytes + p.loaded }),
+            abort.signal,
+          );
+          parts.push({ partNumber: i + 1, etag: part.etag });
+        }
+        const done = await uploadsApi.completeMultipart(init.token, parts);
+        token = done.token;
+      }
+      updateAttachment(key, { status: 'ready', token, loaded: file.size, total: file.size });
+    } catch (e) {
+      // 用户主动取消：removeAttachment 已移除列表，此处不置错
+      if (abort.signal.aborted) return;
+      updateAttachment(key, {
+        status: 'error',
+        error: e instanceof ApiError ? e.message : '上传失败，点击重试',
+      });
+    }
+  };
+
   const handleFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
-    const incoming = await Promise.all(Array.from(files).map(fileToAttachment));
-    const next = [...attachments, ...incoming];
-    if (next.length > MAX_ATTACHMENTS) {
+    const incoming = Array.from(files);
+    if (attachments.length + incoming.length > MAX_ATTACHMENTS) {
       toast({ title: `最多添加 ${MAX_ATTACHMENTS} 个附件`, variant: 'error' });
       return;
     }
-    const total = next.reduce((sum, item) => sum + item.size, 0);
-    if (total > MAX_ATTACHMENT_TOTAL_BYTES) {
-      toast({ title: '附件合计超过 25MB 上限', variant: 'error' });
+    const prospectiveTotal =
+      attachments.reduce((s, a) => s + a.size, 0) + incoming.reduce((s, f) => s + f.size, 0);
+    if (prospectiveTotal > MAX_ATTACHMENT_TOTAL_BYTES) {
+      toast({
+        title: `附件合计超过 ${Math.floor(MAX_ATTACHMENT_TOTAL_BYTES / 1024 / 1024)}MB 上限`,
+        variant: 'error',
+      });
       return;
     }
-    setAttachments(next);
+    for (const f of incoming) {
+      if (f.size > MAX_ATTACHMENT_FILE_BYTES) {
+        toast({
+          title: `${f.name} 超过单文件 ${Math.floor(MAX_ATTACHMENT_FILE_BYTES / 1024 / 1024)}MB 上限`,
+          variant: 'error',
+        });
+        continue;
+      }
+      void uploadOne(f);
+    }
     if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const retryAttachment = (att: AttachmentUpload) => {
+    void uploadOne(att.file);
+    setAttachments((prev) => prev.filter((a) => a.key !== att.key));
+  };
+
+  const removeAttachment = (key: string) => {
+    const att = attachments.find((a) => a.key === key);
+    att?.abort?.abort();
+    if (att?.token) void uploadsApi.remove(att.token).catch(() => {});
+    setAttachments((prev) => prev.filter((a) => a.key !== key));
   };
 
   const handleSubmit = (event: FormEvent) => {
@@ -198,6 +296,23 @@ export function ComposePage() {
       return;
     }
 
+    // 有附件仍在上传 → 阻止发送
+    if (attachments.some((a) => a.status === 'uploading')) {
+      toast({ title: '附件仍在上传，请稍候', variant: 'error' });
+      return;
+    }
+    const ready = attachments.filter((a) => a.status === 'ready' && a.token);
+    const attachmentTokens = ready.map((a) => a.token!);
+
+    // 外发（含外部收件人）单封邮件 ≤ 5MB（含附件）：前端按域名预检，避免请求白跑
+    const domains = visibleDomains ?? [];
+    if (hasExternalRecipient([...to, ...cc, ...bcc], domains)) {
+      if (exceedsExternalLimit(ready.reduce((s, a) => s + a.size, 0), new Blob([body]).size)) {
+        setError('外发单封邮件不能超过 5MB（含附件），请改用站内地址或网盘链接');
+        return;
+      }
+    }
+
     const payload = {
       from: isAdmin ? { localPart, domain: adminDomain } : { mailboxId: mailboxId ?? undefined },
       to,
@@ -205,12 +320,12 @@ export function ComposePage() {
       bcc,
       subject,
       ...(isHtml ? { html: body } : { text: body }),
-      attachments: attachments.map(({ filename, contentType, content }) => ({ filename, contentType, content })),
+      attachmentTokens,
       ...(replyToMessageId ? { replyToMessageId } : {}),
       ...(initial.forwardAttachmentsFrom ? { forwardAttachmentsFrom: initial.forwardAttachmentsFrom } : {}),
     };
 
-    const parsed = sendMailRequestSchema.safeParse(payload);
+    const parsed = internalSendMailSchema.safeParse(payload);
     if (!parsed.success) {
       setError(parsed.error.issues[0]?.message ?? '请检查输入');
       return;
@@ -319,7 +434,8 @@ export function ComposePage() {
               添加附件
             </Button>
             <span className="text-xs text-ink-tertiary">
-              最多 {MAX_ATTACHMENTS} 个，合计 25MB；已用 {formatBytes(attachmentTotal)}
+              最多 {MAX_ATTACHMENTS} 个，单文件 {Math.floor(MAX_ATTACHMENT_FILE_BYTES / 1024 / 1024)}MB，
+              合计 {Math.floor(MAX_ATTACHMENT_TOTAL_BYTES / 1024 / 1024)}MB；已用 {formatBytes(attachmentTotal)}
             </span>
             <input
               ref={fileInputRef}
@@ -331,23 +447,49 @@ export function ComposePage() {
           </div>
           {attachments.length > 0 && (
             <ul className="flex flex-col gap-1.5">
-              {attachments.map((attachment, index) => (
-                <li
-                  key={`${attachment.filename}-${index}`}
-                  className="flex items-center gap-3 rounded-md border border-line px-3 py-2 text-sm"
-                >
-                  <span className="min-w-0 flex-1 truncate text-ink">{attachment.filename}</span>
-                  <span className="shrink-0 text-xs text-ink-tertiary">{formatBytes(attachment.size)}</span>
-                  <button
-                    type="button"
-                    aria-label={`移除 ${attachment.filename}`}
-                    onClick={() => setAttachments((prev) => prev.filter((_, i) => i !== index))}
-                    className="shrink-0 text-ink-tertiary hover:text-ink"
+              {attachments.map((attachment) => {
+                const pct =
+                  attachment.total > 0 ? Math.round((attachment.loaded / attachment.total) * 100) : 0;
+                return (
+                  <li
+                    key={attachment.key}
+                    className="flex flex-col gap-1.5 rounded-md border border-line px-3 py-2 text-sm"
                   >
-                    <X className="size-4" />
-                  </button>
-                </li>
-              ))}
+                    <div className="flex items-center gap-3">
+                      <span className="min-w-0 flex-1 truncate text-ink">{attachment.filename}</span>
+                      <span className="shrink-0 text-xs text-ink-tertiary">
+                        {formatBytes(attachment.size)}
+                      </span>
+                      {attachment.status === 'uploading' && (
+                        <span className="shrink-0 text-xs text-ink-tertiary">{pct}%</span>
+                      )}
+                      {attachment.status === 'ready' && (
+                        <span className="shrink-0 text-xs text-accent">已上传</span>
+                      )}
+                      <button
+                        type="button"
+                        aria-label={`移除 ${attachment.filename}`}
+                        onClick={() => removeAttachment(attachment.key)}
+                        className="shrink-0 text-ink-tertiary hover:text-ink"
+                      >
+                        <X className="size-4" />
+                      </button>
+                    </div>
+                    {attachment.status === 'uploading' && (
+                      <Progress value={attachment.loaded} max={attachment.total} />
+                    )}
+                    {attachment.status === 'error' && (
+                      <button
+                        type="button"
+                        onClick={() => retryAttachment(attachment)}
+                        className="self-start text-left text-xs text-critical hover:underline"
+                      >
+                        {attachment.error ?? '上传失败，点击重试'}
+                      </button>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>

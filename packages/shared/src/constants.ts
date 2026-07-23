@@ -37,8 +37,29 @@ export const MAX_PAGE_SIZE = 100;
 
 export const MAX_RECIPIENTS = 100;
 export const MAX_ATTACHMENTS = 10;
-export const MAX_ATTACHMENT_TOTAL_BYTES = 25 * 1024 * 1024;
+/** 单个附件上限（站内互投走 R2，可放大；外发另受 EXTERNAL_MESSAGE_MAX_BYTES 约束） */
+export const MAX_ATTACHMENT_FILE_BYTES = 50 * 1024 * 1024;
+/** 单封邮件附件合计上限 */
+export const MAX_ATTACHMENT_TOTAL_BYTES = 50 * 1024 * 1024;
+/** 单封正文上限 */
 export const MAX_BODY_BYTES = 1024 * 1024;
+
+/**
+ * 附件独立上传到 R2（前端先上传拿 token，发送时引用 token）
+ */
+/** 草稿附件未发送保留时长：超时由 scheduled 清理（孤儿） */
+export const DRAFT_ATTACHMENT_TTL_HOURS = 24;
+/** 小于此阈值单片流式直传；否则走 R2 multipart 分片 */
+export const SINGLE_UPLOAD_THRESHOLD_BYTES = 10 * 1024 * 1024;
+/** R2 multipart 每片大小（R2 要求每片 ≥ 5MB，末片除外） */
+export const MULTIPART_PART_BYTES = 5 * 1024 * 1024;
+
+/**
+ * 外发约束：Cloudflare send_email 单封邮件（含附件、base64 编码后）硬限 5 MiB。
+ * 取 4 MiB 作为「正文 + Σ(base64 附件字节)」近似上限，留余量给 MIME 头/边界。
+ * 仅对含外部收件人的发送生效；站内互投走 R2 不受此限。
+ */
+export const EXTERNAL_MESSAGE_MAX_BYTES = 4 * 1024 * 1024;
 
 export const API_KEY_PREFIX = 'hpcm_';
 export const DEFAULT_API_RATE_LIMIT = 120;

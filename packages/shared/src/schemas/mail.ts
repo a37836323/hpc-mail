@@ -2,6 +2,7 @@ import { z } from 'zod';
 import {
   DEFAULT_PAGE_SIZE,
   MAX_ATTACHMENTS,
+  MAX_ATTACHMENT_FILE_BYTES,
   MAX_ATTACHMENT_TOTAL_BYTES,
   MAX_BODY_BYTES,
   MAX_PAGE_SIZE,
@@ -46,58 +47,156 @@ export const listMessagesQuerySchema = z.object({
 });
 export type ListMessagesQuery = z.infer<typeof listMessagesQuerySchema>;
 
+/** 附件文件名：禁路径分隔符与 .. 遍历 */
+export const attachmentFilenameSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(255)
+  .refine((v) => !/[/\\]/.test(v) && !v.includes('..'), '文件名非法');
+
 export const sendAttachmentSchema = z.object({
-  filename: z
-    .string()
-    .trim()
-    .min(1)
-    .max(255)
-    .refine((v) => !/[/\\]/.test(v) && !v.includes('..'), '文件名非法'),
+  filename: attachmentFilenameSchema,
   contentType: z.string().trim().min(3).max(128),
   /** base64 编码内容 */
   content: z.string().min(1).regex(/^[A-Za-z0-9+/]+={0,2}$/, '附件需为合法 base64'),
 });
 
-export const sendMailRequestSchema = z
+/** 发件人身份：mailboxId 或 localPart+domain 二选一 */
+const fromSchema = z
   .object({
-    from: z
-      .object({
-        mailboxId: z.number().int().positive().optional(),
-        localPart: localPartSchema.optional(),
-        domain: domainSchema.optional(),
-        displayName: z.string().trim().max(64).optional(),
-      })
-      .refine(
-        (f) =>
-          (f.mailboxId !== undefined && f.localPart === undefined && f.domain === undefined) ||
-          (f.mailboxId === undefined && f.localPart !== undefined && f.domain !== undefined),
-        'from 需为 mailboxId 或 localPart+domain 二选一',
-      ),
-    to: z.array(emailAddressSchema).min(1),
-    cc: z.array(emailAddressSchema).default([]),
-    bcc: z.array(emailAddressSchema).default([]),
-    subject: z.string().trim().min(1).max(998),
-    text: z.string().max(MAX_BODY_BYTES).optional(),
-    html: z.string().max(MAX_BODY_BYTES).optional(),
-    attachments: z.array(sendAttachmentSchema).max(MAX_ATTACHMENTS).default([]),
-    /** 回复的站内邮件 id：后端据此注入 In-Reply-To / References 头 */
-    replyToMessageId: z.number().int().positive().optional(),
-    /** 转发来源邮件 id：后端据此把原邮件附件带入本次发送（发件人需对该邮件可见） */
-    forwardAttachmentsFrom: z.number().int().positive().optional(),
-  })
-  .refine((v) => v.to.length + v.cc.length + v.bcc.length <= MAX_RECIPIENTS, {
-    message: `收件人合计不能超过 ${MAX_RECIPIENTS} 个`,
-  })
-  .refine((v) => (v.text ?? '').length > 0 || (v.html ?? '').length > 0, {
-    message: '正文不能为空',
+    mailboxId: z.number().int().positive().optional(),
+    localPart: localPartSchema.optional(),
+    domain: domainSchema.optional(),
+    displayName: z.string().trim().max(64).optional(),
   })
   .refine(
-    (v) =>
-      v.attachments.reduce((sum, a) => sum + Math.ceil((a.content.length * 3) / 4), 0) <=
-      MAX_ATTACHMENT_TOTAL_BYTES,
-    { message: '附件合计超过 25MB 上限' },
+    (f) =>
+      (f.mailboxId !== undefined && f.localPart === undefined && f.domain === undefined) ||
+      (f.mailboxId === undefined && f.localPart !== undefined && f.domain !== undefined),
+    'from 需为 mailboxId 或 localPart+domain 二选一',
   );
+
+/** 发送邮件共用字段（附件载体由各 schema 各自定义：base64 内联 或 token 引用） */
+const sendMailBaseShape = {
+  from: fromSchema,
+  to: z.array(emailAddressSchema).min(1),
+  cc: z.array(emailAddressSchema).default([]),
+  bcc: z.array(emailAddressSchema).default([]),
+  subject: z.string().trim().min(1).max(998),
+  text: z.string().max(MAX_BODY_BYTES).optional(),
+  html: z.string().max(MAX_BODY_BYTES).optional(),
+  /** 回复的站内邮件 id：后端据此注入 In-Reply-To / References 头 */
+  replyToMessageId: z.number().int().positive().optional(),
+  /** 转发来源邮件 id：后端据此把原邮件附件带入本次发送（发件人需对该邮件可见） */
+  forwardAttachmentsFrom: z.number().int().positive().optional(),
+};
+
+/** 收件人上限 + 正文非空（base64 与 token 两种发送共用） */
+function validateSendCommon(
+  v: { to: unknown[]; cc: unknown[]; bcc: unknown[]; text?: string; html?: string },
+  ctx: z.RefinementCtx,
+): void {
+  if (v.to.length + v.cc.length + v.bcc.length > MAX_RECIPIENTS) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: `收件人合计不能超过 ${MAX_RECIPIENTS} 个`,
+      path: ['to'],
+    });
+  }
+  if ((v.text ?? '').length === 0 && (v.html ?? '').length === 0) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: '正文不能为空', path: ['body'] });
+  }
+}
+
+/**
+ * /v1 开放 API：附件以 base64 内联（AI/脚本一步发送，一般不带大附件）。
+ * 保留原契约不破坏；附件合计按 base64 解码后字节数估 ≤ MAX_ATTACHMENT_TOTAL_BYTES。
+ */
+export const sendMailRequestSchema = z
+  .object({
+    ...sendMailBaseShape,
+    attachments: z.array(sendAttachmentSchema).max(MAX_ATTACHMENTS).default([]),
+  })
+  .superRefine((v, ctx) => {
+    validateSendCommon(v, ctx);
+    const total = v.attachments.reduce((sum, a) => sum + Math.ceil((a.content.length * 3) / 4), 0);
+    if (total > MAX_ATTACHMENT_TOTAL_BYTES) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `附件合计超过 ${Math.floor(MAX_ATTACHMENT_TOTAL_BYTES / 1024 / 1024)}MB 上限`,
+        path: ['attachments'],
+      });
+    }
+  });
 export type SendMailRequest = z.infer<typeof sendMailRequestSchema>;
+
+/**
+ * 内部 /api：附件改为先独立上传到 R2、发送时只引用 token（治本：请求体极小，
+ * 不卡 UI、不超时）。token 真实性 / 大小 / 归属由后端 resolveDraftAttachments 校验。
+ */
+export const internalSendMailSchema = z
+  .object({
+    ...sendMailBaseShape,
+    attachmentTokens: z.array(z.string().min(1)).max(MAX_ATTACHMENTS).default([]),
+  })
+  .superRefine(validateSendCommon);
+export type InternalSendMailRequest = z.infer<typeof internalSendMailSchema>;
+
+/**
+ * 附件独立上传（先落 R2 草稿区，发送时引用 token）
+ */
+/** 大文件分片上传：初始化（创建 R2 multipart upload） */
+export const initMultipartUploadSchema = z.object({
+  filename: attachmentFilenameSchema,
+  mimeType: z.string().trim().min(3).max(128),
+  size: z.number().int().positive().max(MAX_ATTACHMENT_FILE_BYTES, '单文件超过上限'),
+});
+export type InitMultipartUploadRequest = z.infer<typeof initMultipartUploadSchema>;
+
+/** R2 multipart 单个分片（uploadPart 返回、complete 时按 partNumber 升序回传） */
+export const uploadedPartSchema = z.object({
+  partNumber: z.number().int().min(1).max(10000),
+  etag: z.string().min(1),
+});
+export type UploadedPart = z.infer<typeof uploadedPartSchema>;
+
+/** 大文件分片上传：完成（提交所有 parts 触发 R2 complete） */
+export const completeMultipartUploadSchema = z.object({
+  parts: z.array(uploadedPartSchema).min(1),
+});
+export type CompleteMultipartUploadRequest = z.infer<typeof completeMultipartUploadSchema>;
+
+/** 单片直传响应（{data} 信封内） */
+export interface SingleUploadResult {
+  token: string;
+  filename: string;
+  size: number;
+  mimeType: string;
+}
+/** 分片初始化响应：前端据此切片 */
+export interface MultipartInitResult {
+  token: string;
+  uploadId: string;
+  /** 每片大小（字节） */
+  partBytes: number;
+  /** 预计分片总数 */
+  partCount: number;
+}
+export interface MultipartPartResult {
+  partNumber: number;
+  etag: string;
+}
+export interface MultipartCompleteResult {
+  token: string;
+  size: number;
+}
+export interface DraftAttachmentMeta {
+  token: string;
+  filename: string;
+  mimeType: string;
+  size: number;
+}
 
 export const markReadRequestSchema = z.object({
   ids: z.array(z.number().int().positive()).min(1).max(500),

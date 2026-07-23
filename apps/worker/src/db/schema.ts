@@ -105,6 +105,34 @@ export const attachments = sqliteTable(
   (t) => [index('idx_attachments_message').on(t.messageId)],
 );
 
+/**
+ * 草稿附件：前端先独立上传到 R2、拿到 token，发送时引用 token。
+ * 发送成功后内容迁移到 att/{messageId}/ 并删行；24h 未发送由 scheduled 清理（孤儿）。
+ */
+export const draftAttachments = sqliteTable(
+  'draft_attachments',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    userId: integer('user_id').notNull(),
+    /** 对外引用 token（前端持有，发送时回传） */
+    token: text('token').notNull().unique(),
+    filename: text('filename').notNull(),
+    mimeType: text('mime_type').notNull().default('application/octet-stream'),
+    size: integer('size').notNull().default(0),
+    r2Key: text('r2_key').notNull(),
+    /** R2 multipart upload id；null = 单片直传已完成 */
+    uploadId: text('upload_id'),
+    /** 已上传分片 [{partNumber, etag}]（JSON，单片直传为 null） */
+    parts: text('parts', { mode: 'json' }).$type<{ partNumber: number; etag: string }[]>(),
+    status: text('status', { enum: ['uploading', 'ready'] }).notNull().default('uploading'),
+    createdAt: createdAtColumn(),
+  },
+  (t) => [
+    index('idx_draft_user').on(t.userId),
+    index('idx_draft_status').on(t.status, t.createdAt),
+  ],
+);
+
 /** 星标：每用户对某封邮件的标记（messages 不含 user_id，星标独立表关联） */
 export const stars = sqliteTable(
   'stars',

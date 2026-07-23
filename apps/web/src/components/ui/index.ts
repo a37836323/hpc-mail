@@ -28,6 +28,7 @@ export { FormField } from './form-field';
 export { IconButton } from './icon-button';
 export { Input, inputClassName } from './input';
 export { PasswordInput } from './password-input';
+export { Progress, type ProgressProps } from './progress';
 export { SegmentedControl, type SegmentedOption } from './segmented-control';
 export { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from './select';
 export { Sheet, SheetClose, SheetContent, SheetTrigger } from './sheet';
