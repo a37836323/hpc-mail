@@ -49,12 +49,14 @@ app.post('/send', async (c) => {
   const user = c.get('user')!;
   const req = await parseBody(c, internalSendMailSchema);
   const attachments = await resolveDraftAttachments(c.env, user.id, req.attachmentTokens);
+  const origin = new URL(c.req.url).origin;
   const summary = await sendMail(
     c.env,
     c.executionCtx,
     { userId: user.id, role: user.role },
     req,
     attachments,
+    origin,
   );
   // 发送成功后回收草稿附件（内容已复制到 att/{messageId}/，删 draft/ 对象 + 行）
   await consumeDraftAttachments(c.env, user.id, req.attachmentTokens);

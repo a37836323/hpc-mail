@@ -304,13 +304,13 @@ export function ComposePage() {
     const ready = attachments.filter((a) => a.status === 'ready' && a.token);
     const attachmentTokens = ready.map((a) => a.token!);
 
-    // 外发（含外部收件人）单封邮件 ≤ 5MB（含附件）：前端按域名预检，避免请求白跑
-    const domains = visibleDomains ?? [];
-    if (hasExternalRecipient([...to, ...cc, ...bcc], domains)) {
-      if (exceedsExternalLimit(ready.reduce((s, a) => s + a.size, 0), new Blob([body]).size)) {
-        setError('外发单封邮件不能超过 5MB（含附件），请改用站内地址或网盘链接');
-        return;
-      }
+    // 外发超大附件：后端会自动转成下载链接注入正文（绕过 send_email 5MiB 硬限）。
+    // 这里只提示用户，不阻止发送。
+    if (
+      hasExternalRecipient([...to, ...cc, ...bcc], visibleDomains ?? []) &&
+      exceedsExternalLimit(ready.reduce((s, a) => s + a.size, 0), new Blob([body]).size)
+    ) {
+      toast({ title: '附件较大，将以下载链接形式发给外部收件人' });
     }
 
     const payload = {

@@ -25,7 +25,11 @@ import { getUserNotifyPrefs } from './notify-prefs.js';
 import { getSettings } from './setting.js';
 import { getActiveAdminIds } from './user.js';
 import { sendNotifyWebhook } from './webhook-notify.js';
+import { signAttachment } from '../lib/crypto.js';
 import { attachmentKey, getExt, sha256Hex16 } from './storage.js';
+
+/** 外发转链接的附件下载有效期：90 天（外部收件人无登录态，给长有效期） */
+const EXTERNAL_LINK_TTL_SECONDS = 90 * 24 * 3600;
 
 export interface Sender {
   userId: number;
@@ -225,8 +229,8 @@ async function persistAttachments(
   db: Db,
   messageId: number,
   atts: DecodedAttachment[],
-): Promise<void> {
-  if (!atts.length) return;
+): Promise<{ id: number; filename: string; size: number }[]> {
+  if (!atts.length) return [];
   const rows = [];
   for (let seq = 0; seq < atts.length; seq++) {
     const att = atts[seq]!;
@@ -243,7 +247,15 @@ async function persistAttachments(
       disposition: att.disposition,
     });
   }
-  await db.insert(attachmentsTable).values(rows);
+  const inserted = await db
+    .insert(attachmentsTable)
+    .values(rows)
+    .returning({
+      id: attachmentsTable.id,
+      filename: attachmentsTable.filename,
+      size: attachmentsTable.size,
+    });
+  return inserted;
 }
 
 /** Cloudflare 原生发信（send_email binding），逐收件人发送 */
@@ -254,6 +266,8 @@ async function sendViaCloudflare(
   req: SendMailInput,
   atts: DecodedAttachment[],
   reply: ReplyContext | null,
+  text: string,
+  html: string,
 ): Promise<void> {
   // 动态 import：`cloudflare:email` 在 vitest workerd 里静态加载会崩，
   // 且集成测试不发外部邮件，延迟到真实发送时才加载
@@ -269,8 +283,8 @@ async function sendViaCloudflare(
     msg.setHeader('In-Reply-To', reply.inReplyTo);
     msg.setHeader('References', reply.references);
   }
-  if (req.text) msg.addMessage({ contentType: 'text/plain', data: req.text });
-  if (req.html) msg.addMessage({ contentType: 'text/html', data: req.html });
+  if (text) msg.addMessage({ contentType: 'text/plain', data: text });
+  if (html) msg.addMessage({ contentType: 'text/html', data: html });
   for (const a of atts) {
     // 折行成 76 字符/行：不折行时整个附件是一整行，超 SMTP 998 字节行限会被下游 MTA 拒收
     msg.addAttachment({ filename: a.filename, contentType: a.mimeType, data: foldBase64(a.base64) });
@@ -327,13 +341,80 @@ async function resolveReply(
   return { reply: { inReplyTo: orig.messageId, references }, inReplyTo: orig.messageId };
 }
 
-/** 发件链路：身份校验 → 站外 Cloudflare send_email / 站内落库 → outbound 行落库 */
+function fmtBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(
+    /[&<>"']/g,
+    (c) => (c === '&' ? '&amp;' : c === '<' ? '&lt;' : c === '>' ? '&gt;' : c === '"' ? '&quot;' : '&#39;'),
+  );
+}
+
+interface AttachmentLink {
+  filename: string;
+  size: number;
+  url: string;
+}
+
+/** 把附件下载链接追加到正文末尾（text + html 各一份） */
+function injectAttachmentLinks(
+  text: string,
+  html: string,
+  links: AttachmentLink[],
+): { text: string; html: string } {
+  if (links.length === 0) return { text, html };
+  const textBlock =
+    `\n\n— 附件下载（链接有效期 90 天）—\n` +
+    links.map((l) => `· ${l.filename} (${fmtBytes(l.size)}): ${l.url}`).join('\n');
+  const htmlBlock =
+    `<br><p>— 附件下载（<em>链接有效期 90 天</em>）—</p><ul>` +
+    links.map((l) => `<li><a href="${l.url}">${escapeHtml(l.filename)}</a> (${fmtBytes(l.size)})</li>`).join('') +
+    `</ul>`;
+  return { text: text + textBlock, html: html + htmlBlock };
+}
+
+/**
+ * 决定外发邮件的实际负载：正文+附件 base64 ≤ 5MiB 时直发附件；超限则附件转下载链接
+ * 注入正文、MIME 不带附件（绕过 send_email 5MiB 硬限）。返回最终正文与附件列表。
+ */
+async function buildExternalPayload(
+  env: Env,
+  origin: string,
+  text: string,
+  html: string,
+  atts: DecodedAttachment[],
+  attRows: { id: number; filename: string; size: number }[],
+): Promise<{ text: string; html: string; atts: DecodedAttachment[] }> {
+  const bodyBytes = new TextEncoder().encode(`${text}${html}`).length;
+  const attBytes = atts.reduce((sum, a) => sum + Math.ceil((a.bytes.byteLength * 4) / 3), 0);
+  if (bodyBytes + attBytes <= EXTERNAL_MESSAGE_MAX_BYTES || attRows.length === 0) {
+    return { text, html, atts };
+  }
+  const links: AttachmentLink[] = [];
+  for (const r of attRows) {
+    const { exp, sig } = await signAttachment(env.jwt_secret, r.id, EXTERNAL_LINK_TTL_SECONDS);
+    links.push({
+      filename: r.filename,
+      size: r.size,
+      url: `${origin}/api/attachments/${r.id}?exp=${exp}&sig=${sig}`,
+    });
+  }
+  const injected = injectAttachmentLinks(text, html, links);
+  return { text: injected.text, html: injected.html, atts: [] };
+}
+
+/** 发件链路：身份校验 → 站外 Cloudflare send_email（超大附件转下载链接）/ 站内落库 → outbound 行落库 */
 export async function sendMail(
   env: Env,
   ctx: ExecCtx,
   sender: Sender,
   req: SendMailInput,
   attachments: DecodedAttachment[],
+  origin: string,
 ): Promise<MessageSummary> {
   assertNoHeaderInjection(req.subject);
   const settings = await getSettings(env);
@@ -374,48 +455,10 @@ export async function sendMail(
   const size = new TextEncoder().encode(text + html).length;
   const code = settings.code_extract.enabled ? extractCodeByRegex(req.subject, text) : '';
 
-  // 站外发送：Cloudflare send_email binding
-  let status = hasExternal ? 'sent' : 'delivered';
-  let errorDetail = '';
   const sendChannel = hasExternal ? 'cloudflare' : 'internal';
-  if (hasExternal) {
-    // Cloudflare send_email 单封邮件（含附件、base64 编码后）硬限 5 MiB：含外部收件人时
-    // 预校验「正文 + Σ(base64 附件)」近似大小，超限直接拒绝并给出可读提示（不烧配额）
-    const approxBytes =
-      new TextEncoder().encode(`${text}${html}`).length +
-      attachments.reduce((sum, a) => sum + Math.ceil((a.bytes.byteLength * 4) / 3), 0);
-    if (approxBytes > EXTERNAL_MESSAGE_MAX_BYTES) {
-      throw new AppError(
-        'payload_too_large',
-        '外发单封邮件不能超过 5MB（含附件），请改用站内地址或网盘链接',
-      );
-    }
-    // 外发日配额（普通用户）：发送前校验，防被盗账号脚本化群发
-    await assertOutboundQuota(env, settings.quota, sender, externalTargets.length);
-    const failures: string[] = [];
-    for (const addr of externalTargets) {
-      try {
-        await sendViaCloudflare(env, from, addr, req, attachments, reply);
-      } catch (cfErr) {
-        const cfMsg = cfErr instanceof Error ? cfErr.message : String(cfErr);
-        failures.push(`${addr}: ${cfMsg}`);
-      }
-    }
-    if (failures.length === externalTargets.length) {
-      status = 'failed';
-      errorDetail = failures.join('; ');
-    } else if (failures.length) {
-      status = 'sent';
-      errorDetail = `部分收件人失败: ${failures.join('; ')}`;
-    }
-  }
 
-  // 至少部分送达才计入配额（全失败不烧信誉，不计数）
-  if (hasExternal && status !== 'failed') {
-    await bumpOutboundQuota(env, sender, externalTargets.length);
-  }
-
-  // outbound 行落库
+  // outbound 行先落库（status 占位）：拿到 id 后持久化附件，再决定外发正文/附件。
+  // 外发超大附件需转为下载链接注入正文，而链接要附件 id、附件 id 要 message id。
   const outbound = await db
     .insert(messages)
     .values({
@@ -431,16 +474,55 @@ export async function sendMail(
       bodyHtml: html,
       verificationCode: code,
       inReplyTo,
-      status,
+      status: hasExternal ? 'sent' : 'delivered',
       sendChannel,
-      errorDetail,
+      errorDetail: '',
       isRead: true,
       size,
       createdAt: new Date(),
     })
     .returning()
     .get();
-  await persistAttachments(env, db, outbound!.id, attachments);
+  // 附件持久化到 outbound 行（发件人「已发送」可见、可下载）
+  const outboundAtts = await persistAttachments(env, db, outbound!.id, attachments);
+
+  let status = hasExternal ? 'sent' : 'delivered';
+  let errorDetail = '';
+  let bodyText = text;
+  let bodyHtml = html;
+  if (hasExternal) {
+    // 外发日配额（普通用户）：发送前校验，防被盗账号脚本化群发
+    await assertOutboundQuota(env, settings.quota, sender, externalTargets.length);
+    // 外发负载：正文+附件 ≤ 5MiB 直发附件；超限则附件转下载链接注入正文，MIME 不带附件
+    const payload = await buildExternalPayload(env, origin, text, html, attachments, outboundAtts);
+    const failures: string[] = [];
+    for (const addr of externalTargets) {
+      try {
+        await sendViaCloudflare(env, from, addr, req, payload.atts, reply, payload.text, payload.html);
+      } catch (cfErr) {
+        const cfMsg = cfErr instanceof Error ? cfErr.message : String(cfErr);
+        failures.push(`${addr}: ${cfMsg}`);
+      }
+    }
+    if (failures.length === externalTargets.length) {
+      status = 'failed';
+      errorDetail = failures.join('; ');
+    } else if (failures.length) {
+      status = 'sent';
+      errorDetail = `部分收件人失败: ${failures.join('; ')}`;
+    }
+    // 外发实际正文（可能含链接）回填，让发件人「已发送」看到真实发出内容
+    bodyText = payload.text;
+    bodyHtml = payload.html;
+  }
+
+  // 至少部分送达才计入配额（全失败不烧信誉，不计数）
+  if (hasExternal && status !== 'failed') {
+    await bumpOutboundQuota(env, sender, externalTargets.length);
+  }
+
+  // 回填 outbound 状态与（外发）正文
+  await db.update(messages).set({ status, errorDetail, bodyText, bodyHtml }).where(eq(messages.id, outbound!.id));
 
   if (status === 'failed') {
     throw new AppError('internal', errorDetail || '发送失败');
@@ -523,5 +605,5 @@ export async function sendMail(
     );
   }
 
-  return summarize(outbound!, attachments.length > 0, false);
+  return summarize({ ...outbound!, status, errorDetail }, attachments.length > 0, false);
 }

@@ -46,12 +46,14 @@ app.post('/', async (c) => {
     if (cached) return ok(c, cached as MessageSummary, 201);
   }
   const attachments = decodeInlineAttachments(req.attachments);
+  const origin = new URL(c.req.url).origin;
   const summary = await sendMail(
     c.env,
     c.executionCtx,
     { userId: key.userId, role: key.role },
     req,
     attachments,
+    origin,
   );
   if (cacheKey) {
     try {

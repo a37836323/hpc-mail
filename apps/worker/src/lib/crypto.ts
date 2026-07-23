@@ -52,12 +52,13 @@ export function timingSafeEqualStr(a: string, b: string): boolean {
 
 const ATTACHMENT_TTL_SECONDS = 5 * 60;
 
-/** 附件签名 URL：HMAC(jwt_secret, `att:{id}.{exp}`) */
+/** 附件签名 URL：HMAC(jwt_secret, `att:{id}.{exp}`)；ttlSeconds 默认 5 分钟（登录用户短期下载），外发转链接传长 TTL */
 export async function signAttachment(
   secret: string,
   attId: number,
+  ttlSeconds: number = ATTACHMENT_TTL_SECONDS,
 ): Promise<{ exp: number; sig: string }> {
-  const exp = Math.floor(Date.now() / 1000) + ATTACHMENT_TTL_SECONDS;
+  const exp = Math.floor(Date.now() / 1000) + ttlSeconds;
   const sig = await hmacSha256Hex(secret, `att:${attId}.${exp}`);
   return { exp, sig };
 }

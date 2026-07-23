@@ -427,6 +427,7 @@ describe('回复头 replyToMessageId', () => {
         replyToMessageId: orig!.id,
       } as never,
       [],
+      'https://hpc.email',
     );
 
     const outbound = await db
