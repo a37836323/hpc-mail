@@ -132,15 +132,28 @@ export const sendMailRequestSchema = z
 export type SendMailRequest = z.infer<typeof sendMailRequestSchema>;
 
 /**
- * 内部 /api：附件改为先独立上传到 R2、发送时只引用 token（治本：请求体极小，
- * 不卡 UI、不超时）。token 真实性 / 大小 / 归属由后端 resolveDraftAttachments 校验。
+ * 内部 /api：附件两种来源均可（向后兼容）——
+ *  · attachmentTokens：前端先分片上传到 R2 再引用（治本：请求体极小、不卡 UI、不超时）
+ *  · attachments(base64)：AI / 脚本 / 旧调用方直接内联（与 /v1 一致，skill.md 教的就是这种）
+ * 两者可混用，合并后送 sendMail。
  */
 export const internalSendMailSchema = z
   .object({
     ...sendMailBaseShape,
+    attachments: z.array(sendAttachmentSchema).max(MAX_ATTACHMENTS).default([]),
     attachmentTokens: z.array(z.string().min(1)).max(MAX_ATTACHMENTS).default([]),
   })
-  .superRefine(validateSendCommon);
+  .superRefine((v, ctx) => {
+    validateSendCommon(v, ctx);
+    const total = v.attachments.reduce((sum, a) => sum + Math.ceil((a.content.length * 3) / 4), 0);
+    if (total > MAX_ATTACHMENT_TOTAL_BYTES) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `附件合计超过 ${Math.floor(MAX_ATTACHMENT_TOTAL_BYTES / 1024 / 1024)}MB 上限`,
+        path: ['attachments'],
+      });
+    }
+  });
 export type InternalSendMailRequest = z.infer<typeof internalSendMailSchema>;
 
 /**

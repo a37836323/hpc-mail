@@ -24,7 +24,7 @@ import {
   type Viewer,
 } from '../services/message.js';
 import { AppError } from '../lib/errors.js';
-import { sendMail } from '../services/outbound.js';
+import { decodeInlineAttachments, sendMail } from '../services/outbound.js';
 import { consumeDraftAttachments, resolveDraftAttachments } from '../services/upload.js';
 import type { AppContext } from '../types.js';
 
@@ -48,7 +48,10 @@ app.get('/', async (c) => {
 app.post('/send', async (c) => {
   const user = c.get('user')!;
   const req = await parseBody(c, internalSendMailSchema);
-  const attachments = await resolveDraftAttachments(c.env, user.id, req.attachmentTokens);
+  // 兼容两种附件来源：base64 内联（AI/脚本）+ 上传 token（前端），合并后送 sendMail
+  const decoded = decodeInlineAttachments(req.attachments);
+  const fromTokens = await resolveDraftAttachments(c.env, user.id, req.attachmentTokens);
+  const attachments = [...decoded, ...fromTokens];
   const origin = new URL(c.req.url).origin;
   const summary = await sendMail(
     c.env,
@@ -58,7 +61,7 @@ app.post('/send', async (c) => {
     attachments,
     origin,
   );
-  // 发送成功后回收草稿附件（内容已复制到 att/{messageId}/，删 draft/ 对象 + 行）
+  // 发送成功后回收 token 引用的草稿附件（base64 内联的无草稿，跳过）
   await consumeDraftAttachments(c.env, user.id, req.attachmentTokens);
   return ok(c, summary, 201);
 });
