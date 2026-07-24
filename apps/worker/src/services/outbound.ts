@@ -360,8 +360,12 @@ interface AttachmentLink {
   url: string;
 }
 
-/** 把附件下载链接追加到正文末尾（text + html 各一份） */
-function injectAttachmentLinks(
+/**
+ * 把附件下载链接追加到正文末尾。
+ * 只追加到「原本就存在」的 part：纯文本邮件（html 为空）绝不能凭空造出一个 html part，
+ * 否则收件端（QQ/Gmail 等）与站内详情都优先渲染 html，正文会被只含链接的块整个盖掉。
+ */
+export function injectAttachmentLinks(
   text: string,
   html: string,
   links: AttachmentLink[],
@@ -374,7 +378,7 @@ function injectAttachmentLinks(
     `<br><p>— 附件下载（<em>链接有效期 90 天</em>）—</p><ul>` +
     links.map((l) => `<li><a href="${l.url}">${escapeHtml(l.filename)}</a> (${fmtBytes(l.size)})</li>`).join('') +
     `</ul>`;
-  return { text: text + textBlock, html: html + htmlBlock };
+  return { text: text ? text + textBlock : '', html: html ? html + htmlBlock : '' };
 }
 
 /**

@@ -9,6 +9,7 @@ import {
   validateLocalPart,
 } from '../src/lib/email-address.js';
 import { extractCodeByRegex } from '../src/services/code-extract.js';
+import { injectAttachmentLinks } from '../src/services/outbound.js';
 import { ipInAllowList } from '../src/lib/ip-allowlist.js';
 import { foldBase64 } from '../src/lib/mime.js';
 import { generateCode, generateTotpSecret, verifyTotp } from '../src/lib/totp.js';
@@ -172,5 +173,33 @@ describe('foldBase64', () => {
   it('折行后去掉 CRLF 与原串一致（内容无损）', () => {
     const b64 = btoa(String.fromCharCode(...new Uint8Array(5000).map((_, i) => i % 251)));
     expect(foldBase64(b64).replace(/\r\n/g, '')).toBe(b64);
+  });
+});
+
+describe('injectAttachmentLinks', () => {
+  const links = [{ filename: 'a.pdf', size: 9_500_000, url: 'https://hpc.email/api/attachments/1?exp=1&sig=x' }];
+
+  it('纯文本邮件不生成 html part（否则收件端优先渲染 html，正文被链接块盖掉）', () => {
+    const out = injectAttachmentLinks('很长的正文', '', links);
+    expect(out.html).toBe('');
+    expect(out.text).toContain('很长的正文');
+    expect(out.text).toContain('a.pdf');
+    expect(out.text).toContain('https://hpc.email/api/attachments/1?exp=1&sig=x');
+  });
+
+  it('HTML 邮件只追加到 html，不凭空造 text part', () => {
+    const out = injectAttachmentLinks('', '<p>很长的正文</p>', links);
+    expect(out.text).toBe('');
+    expect(out.html).toContain('<p>很长的正文</p>');
+    expect(out.html).toContain('<a href="https://hpc.email/api/attachments/1?exp=1&sig=x">a.pdf</a>');
+  });
+
+  it('text + html 都有时各追加一份；无链接时原样返回', () => {
+    const both = injectAttachmentLinks('文本', '<p>富文本</p>', links);
+    expect(both.text).toContain('文本');
+    expect(both.text).toContain('a.pdf');
+    expect(both.html).toContain('<p>富文本</p>');
+    expect(both.html).toContain('a.pdf');
+    expect(injectAttachmentLinks('文本', '', [])).toEqual({ text: '文本', html: '' });
   });
 });
