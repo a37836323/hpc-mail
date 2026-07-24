@@ -8,12 +8,12 @@ import type {
 } from '@hpc-mail/shared';
 import { and, asc, count, desc, eq, gt, inArray, isNotNull, isNull, lt, or, sql, type SQL } from 'drizzle-orm';
 import { createDb, type Db } from '../db/client.js';
-import { attachments as attachmentsTable, messages, stars } from '../db/schema.js';
+import { attachments as attachmentsTable, mailboxes, messages, stars } from '../db/schema.js';
 import { signAttachment } from '../lib/crypto.js';
+import { chunk, D1_PAIR_BATCH } from '../lib/d1.js';
 import { AppError } from '../lib/errors.js';
 import { decodeCursor, encodeCursor } from '../lib/pagination.js';
 import type { Env } from '../types.js';
-import { userAddresses } from './mailbox.js';
 import { deleteMessageObjects, getJson } from './storage.js';
 
 export interface Viewer {
@@ -24,25 +24,35 @@ export interface Viewer {
 
 type MessageRow = typeof messages.$inferSelect;
 
+/** 可见范围：全站，或限定为某用户认领的地址集合（以 mailboxes 子查询表达，不展开成数组） */
+type Scope = 'all' | { ownerId: number };
+
 /** 解析可见范围：admin 默认全站，scope=mine 或 user → 自己认领地址 */
-async function resolveScope(env: Env, viewer: Viewer): Promise<'all' | string[]> {
+function resolveScope(viewer: Viewer): Scope {
   if (viewer.role === 'admin' && viewer.scope !== 'mine') return 'all';
-  return userAddresses(env, viewer.userId);
+  return { ownerId: viewer.userId };
 }
 
 /**
  * 变更类操作（标记/星标/删除）的可见范围：与只读相反，admin 必须**显式** scope='all'
  * 才作用全站，否则默认只作用自己认领地址——防止 API 调用方漏传 scope 误删/误改他人邮件。
  */
-async function resolveMutationScope(env: Env, viewer: Viewer): Promise<'all' | string[]> {
+function resolveMutationScope(viewer: Viewer): Scope {
   if (viewer.role === 'admin' && viewer.scope === 'all') return 'all';
-  return userAddresses(env, viewer.userId);
+  return { ownerId: viewer.userId };
 }
 
-function scopeCondition(scope: 'all' | string[]): SQL | undefined {
+/**
+ * 可见范围 SQL 条件：用 mailboxes 子查询而非把地址展开成 IN (?,?,…)。
+ * D1 单条查询最多 100 个绑定参数，展开时认领地址一多就会整条语句被拒；
+ * 子查询无论认领多少地址都只占 1 个绑定值（ownerId），顺带省掉一次 userAddresses 查询。
+ */
+function scopeCondition(db: Db, scope: Scope): SQL | undefined {
   if (scope === 'all') return undefined;
-  if (scope.length === 0) return eq(messages.id, -1); // 匹配空集
-  return inArray(messages.address, scope);
+  return inArray(
+    messages.address,
+    db.select({ address: mailboxes.address }).from(mailboxes).where(eq(mailboxes.userId, scope.ownerId)),
+  );
 }
 
 function summarize(row: MessageRow, hasAttachments: boolean, isStarred: boolean): MessageSummary {
@@ -68,24 +78,31 @@ function summarize(row: MessageRow, hasAttachments: boolean, isStarred: boolean)
 }
 
 async function attachmentFlags(db: Db, ids: number[]): Promise<Set<number>> {
-  if (ids.length === 0) return new Set();
-  const rows = await db
-    .select({ messageId: attachmentsTable.messageId })
-    .from(attachmentsTable)
-    .where(inArray(attachmentsTable.messageId, ids))
-    .all();
-  return new Set(rows.map((r) => r.messageId));
+  const out = new Set<number>();
+  // 一页最多 MAX_PAGE_SIZE=100 个 id，正好顶到 D1 绑定参数上限，必须分批
+  for (const batch of chunk(ids)) {
+    const rows = await db
+      .select({ messageId: attachmentsTable.messageId })
+      .from(attachmentsTable)
+      .where(inArray(attachmentsTable.messageId, batch))
+      .all();
+    for (const r of rows) out.add(r.messageId);
+  }
+  return out;
 }
 
 /** 当前用户对给定邮件集合的星标标记 */
 async function starFlags(db: Db, userId: number, ids: number[]): Promise<Set<number>> {
-  if (ids.length === 0) return new Set();
-  const rows = await db
-    .select({ messageId: stars.messageId })
-    .from(stars)
-    .where(and(eq(stars.userId, userId), inArray(stars.messageId, ids)))
-    .all();
-  return new Set(rows.map((r) => r.messageId));
+  const out = new Set<number>();
+  for (const batch of chunk(ids)) {
+    const rows = await db
+      .select({ messageId: stars.messageId })
+      .from(stars)
+      .where(and(eq(stars.userId, userId), inArray(stars.messageId, batch)))
+      .all();
+    for (const r of rows) out.add(r.messageId);
+  }
+  return out;
 }
 
 export async function listMessages(
@@ -94,9 +111,9 @@ export async function listMessages(
   query: ListMessagesQuery,
 ): Promise<Page<MessageSummary>> {
   const db = createDb(env);
-  const scope = await resolveScope(env, viewer);
+  const scope = resolveScope(viewer);
 
-  const conds: (SQL | undefined)[] = [scopeCondition(scope)];
+  const conds: (SQL | undefined)[] = [scopeCondition(db, scope)];
   // 回收站视图看软删除的，普通视图排除软删除的
   conds.push(query.trash ? isNotNull(messages.deletedAt) : isNull(messages.deletedAt));
   if (query.direction) conds.push(eq(messages.direction, query.direction));
@@ -160,13 +177,13 @@ export async function listMessages(
  */
 export async function countUnread(env: Env, userId: number, role: Role): Promise<number> {
   const db = createDb(env);
-  const scope = await resolveScope(env, { userId, role, scope: 'mine' });
+  const scope = resolveScope({ userId, role, scope: 'mine' });
   const row = await db
     .select({ value: count() })
     .from(messages)
     .where(
       and(
-        scopeCondition(scope),
+        scopeCondition(db, scope),
         eq(messages.direction, 'inbound'),
         eq(messages.isRead, false),
         isNull(messages.deletedAt),
@@ -179,7 +196,7 @@ export async function countUnread(env: Env, userId: number, role: Role): Promise
 /** 近期联系人：从可见邮件聚合收件人(outbound)与发件人(inbound)地址，供写信自动补全 */
 export async function getRecentContacts(env: Env, viewer: Viewer, limit = 100): Promise<string[]> {
   const db = createDb(env);
-  const scope = await resolveScope(env, viewer);
+  const scope = resolveScope(viewer);
   const rows = await db
     .select({
       direction: messages.direction,
@@ -187,7 +204,7 @@ export async function getRecentContacts(env: Env, viewer: Viewer, limit = 100): 
       fromAddress: messages.fromAddress,
     })
     .from(messages)
-    .where(and(scopeCondition(scope), isNull(messages.deletedAt)))
+    .where(and(scopeCondition(db, scope), isNull(messages.deletedAt)))
     .orderBy(desc(messages.id))
     .limit(400)
     .all();
@@ -228,14 +245,14 @@ export async function getThread(env: Env, viewer: Viewer, id: number): Promise<M
   };
   if (!core) return summarizeRows([target]);
 
-  const scope = await resolveScope(env, viewer);
+  const scope = resolveScope(viewer);
   const escaped = core.replace(/[\\%_]/g, (ch) => `\\${ch}`);
   const rows = await db
     .select()
     .from(messages)
     .where(
       and(
-        scopeCondition(scope),
+        scopeCondition(db, scope),
         isNull(messages.deletedAt),
         sql`${messages.subject} LIKE ${`%${escaped}%`} ESCAPE '\\'`,
       ),
@@ -251,9 +268,15 @@ async function loadVisible(env: Env, viewer: Viewer, id: number): Promise<Messag
   const db = createDb(env);
   const row = await db.select().from(messages).where(eq(messages.id, id)).get();
   if (!row) throw new AppError('not_found', '邮件不存在');
-  const scope = await resolveScope(env, viewer);
-  if (scope !== 'all' && !scope.includes(row.address)) {
-    throw new AppError('not_found', '邮件不存在');
+  const scope = resolveScope(viewer);
+  if (scope !== 'all') {
+    // 单行归属校验直接查 mailboxes，不再把全部认领地址读进内存比对
+    const owned = await db
+      .select({ id: mailboxes.id })
+      .from(mailboxes)
+      .where(and(eq(mailboxes.userId, scope.ownerId), eq(mailboxes.address, row.address)))
+      .get();
+    if (!owned) throw new AppError('not_found', '邮件不存在');
   }
   return row;
 }
@@ -366,25 +389,27 @@ export async function markMessages(
   isRead: boolean,
 ): Promise<number> {
   const db = createDb(env);
-  const scope = await resolveMutationScope(env, viewer);
-  const cond =
-    scope === 'all'
-      ? inArray(messages.id, ids)
-      : and(inArray(messages.id, ids), scopeCondition(scope));
-  const result = await db.update(messages).set({ isRead }).where(cond).run();
-  return result.meta.changes ?? 0;
+  const scope = resolveMutationScope(viewer);
+  // ids 分批：D1 单条查询最多 100 个绑定参数，schema 允许一次传 500 个 id
+  let changed = 0;
+  for (const batch of chunk(ids)) {
+    const cond = and(inArray(messages.id, batch), scopeCondition(db, scope));
+    const result = await db.update(messages).set({ isRead }).where(cond).run();
+    changed += result.meta.changes ?? 0;
+  }
+  return changed;
 }
 
 /** 收件箱一键全读：可见范围内全部未读 inbound 标为已读（不含回收站） */
 export async function markAllRead(env: Env, viewer: Viewer): Promise<number> {
   const db = createDb(env);
-  const scope = await resolveMutationScope(env, viewer);
+  const scope = resolveMutationScope(viewer);
   const result = await db
     .update(messages)
     .set({ isRead: true })
     .where(
       and(
-        scopeCondition(scope),
+        scopeCondition(db, scope),
         eq(messages.direction, 'inbound'),
         eq(messages.isRead, false),
         isNull(messages.deletedAt),
@@ -403,66 +428,84 @@ export async function starMessages(
 ): Promise<number> {
   const db = createDb(env);
   // 星标是个人标记（独立 stars 表，不影响他人），用只读可见范围即可
-  const scope = await resolveScope(env, viewer);
-  const cond =
-    scope === 'all'
-      ? inArray(messages.id, ids)
-      : and(inArray(messages.id, ids), scopeCondition(scope));
-  const visible = await db.select({ id: messages.id }).from(messages).where(cond).all();
-  const visibleIds = visible.map((v) => v.id);
+  const scope = resolveScope(viewer);
+  const visibleIds: number[] = [];
+  for (const batch of chunk(ids)) {
+    const rows = await db
+      .select({ id: messages.id })
+      .from(messages)
+      .where(and(inArray(messages.id, batch), scopeCondition(db, scope)))
+      .all();
+    visibleIds.push(...rows.map((v) => v.id));
+  }
   if (visibleIds.length === 0) return 0;
 
   if (starred) {
-    await db
-      .insert(stars)
-      .values(visibleIds.map((id) => ({ userId: viewer.userId, messageId: id })))
-      .onConflictDoNothing();
+    // 每行 2 个绑定参数（userId + messageId），批次相应减半
+    for (const batch of chunk(visibleIds, D1_PAIR_BATCH)) {
+      await db
+        .insert(stars)
+        .values(batch.map((id) => ({ userId: viewer.userId, messageId: id })))
+        .onConflictDoNothing();
+    }
   } else {
-    await db
-      .delete(stars)
-      .where(and(eq(stars.userId, viewer.userId), inArray(stars.messageId, visibleIds)));
+    for (const batch of chunk(visibleIds)) {
+      await db
+        .delete(stars)
+        .where(and(eq(stars.userId, viewer.userId), inArray(stars.messageId, batch)));
+    }
   }
   return visibleIds.length;
 }
 
-function scopedIdsCondition(scope: 'all' | string[], ids: number[]): SQL {
-  return scope === 'all'
-    ? inArray(messages.id, ids)
-    : (and(inArray(messages.id, ids), scopeCondition(scope)) as SQL);
+function scopedIdsCondition(db: Db, scope: Scope, ids: number[]): SQL {
+  return and(inArray(messages.id, ids), scopeCondition(db, scope)) as SQL;
 }
 
 /** 批量软删除（移入回收站）：仅置 deletedAt，7 天后由 scheduled 硬删 */
 export async function deleteMessages(env: Env, viewer: Viewer, ids: number[]): Promise<number> {
   const db = createDb(env);
-  const scope = await resolveMutationScope(env, viewer);
-  const cond = and(scopedIdsCondition(scope, ids), isNull(messages.deletedAt)) as SQL;
-  const result = await db.update(messages).set({ deletedAt: new Date() }).where(cond).run();
-  return result.meta.changes ?? 0;
+  const scope = resolveMutationScope(viewer);
+  const deletedAt = new Date();
+  let changed = 0;
+  for (const batch of chunk(ids)) {
+    const cond = and(scopedIdsCondition(db, scope, batch), isNull(messages.deletedAt)) as SQL;
+    const result = await db.update(messages).set({ deletedAt }).where(cond).run();
+    changed += result.meta.changes ?? 0;
+  }
+  return changed;
 }
 
 /** 从回收站恢复：清空 deletedAt */
 export async function restoreMessages(env: Env, viewer: Viewer, ids: number[]): Promise<number> {
   const db = createDb(env);
-  const scope = await resolveMutationScope(env, viewer);
-  const cond = and(scopedIdsCondition(scope, ids), isNotNull(messages.deletedAt)) as SQL;
-  const result = await db.update(messages).set({ deletedAt: null }).where(cond).run();
-  return result.meta.changes ?? 0;
+  const scope = resolveMutationScope(viewer);
+  let changed = 0;
+  for (const batch of chunk(ids)) {
+    const cond = and(scopedIdsCondition(db, scope, batch), isNotNull(messages.deletedAt)) as SQL;
+    const result = await db.update(messages).set({ deletedAt: null }).where(cond).run();
+    changed += result.meta.changes ?? 0;
+  }
+  return changed;
 }
 
 /** 永久删除（可见范围内）：D1 行删 + R2 清理（正文/附件/原始 .eml） */
 export async function purgeMessages(env: Env, viewer: Viewer, ids: number[]): Promise<number> {
   const db = createDb(env);
-  const scope = await resolveMutationScope(env, viewer);
-  const targets = await db
-    .select({ id: messages.id, bodyR2Key: messages.bodyR2Key, rawR2Key: messages.rawR2Key })
-    .from(messages)
-    .where(scopedIdsCondition(scope, ids))
-    .all();
+  const scope = resolveMutationScope(viewer);
+  const targets: { id: number; bodyR2Key: string | null; rawR2Key: string | null }[] = [];
+  for (const batch of chunk(ids)) {
+    const rows = await db
+      .select({ id: messages.id, bodyR2Key: messages.bodyR2Key, rawR2Key: messages.rawR2Key })
+      .from(messages)
+      .where(scopedIdsCondition(db, scope, batch))
+      .all();
+    targets.push(...rows);
+  }
   if (targets.length === 0) return 0;
   const targetIds = targets.map((t) => t.id);
-  await db.delete(attachmentsTable).where(inArray(attachmentsTable.messageId, targetIds));
-  await db.delete(stars).where(inArray(stars.messageId, targetIds));
-  await db.delete(messages).where(inArray(messages.id, targetIds));
+  // 先删 R2 再删 D1：反过来的话，删除中途中断（CPU 超时等）就留下一批没有任何行指向的
+  // R2 对象，再也定位不到；这个顺序下中断只会留下指向空对象的 D1 行，下次清理还能扫到重试
   for (const t of targets) {
     await deleteMessageObjects(env, t.id, t.bodyR2Key);
     if (t.rawR2Key) {
@@ -472,6 +515,11 @@ export async function purgeMessages(env: Env, viewer: Viewer, ids: number[]): Pr
         console.error('删除原始邮件对象失败:', e);
       }
     }
+  }
+  for (const batch of chunk(targetIds)) {
+    await db.delete(attachmentsTable).where(inArray(attachmentsTable.messageId, batch));
+    await db.delete(stars).where(inArray(stars.messageId, batch));
+    await db.delete(messages).where(inArray(messages.id, batch));
   }
   return targetIds.length;
 }

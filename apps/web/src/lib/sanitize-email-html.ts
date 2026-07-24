@@ -104,6 +104,17 @@ function sanitizeStyleDeclaration(windowObject: Window, cssText: string | null |
   return safe.style.cssText
 }
 
+/**
+ * `<style>` 是 raw-text 元素，序列化时**不转义**内容——CSS 文本里只要出现 `</style`，
+ * HTML 解析器就会在那里提前闭合 style 块，其后的标记变成未经 DOMPurify 处理的活元素。
+ * 而 extractStyleBlocks 的正则要求 `</style\s*>`，认不出 `</style/>`、`</style foo>`
+ * 这些解析器同样接受的变体，于是载荷能以「合法 CSS 值」的身份活过消毒。
+ * 消毒结果最终会序列化回字符串再被 innerHTML 二次解析，所以带终止符的规则整条丢弃。
+ */
+function hasStyleTerminator(css: string): boolean {
+  return /<\/style/i.test(css)
+}
+
 function sanitizeCssRules(windowObject: Window, rules: CSSRuleList | undefined, depth = 0): string {
   if (!rules || depth > 4) return ''
   const output: string[] = []
@@ -114,7 +125,9 @@ function sanitizeCssRules(windowObject: Window, rules: CSSRuleList | undefined, 
       const selector = String(styleRule.selectorText || '')
       if (!selector || /:host|::slotted|@|[\u0000-\u001f\u007f]/i.test(selector)) continue
       const declarations = sanitizeStyleDeclaration(windowObject, styleRule.style?.cssText)
-      if (declarations) output.push(`${selector}{${declarations}}`)
+      if (!declarations) continue
+      const rendered = `${selector}{${declarations}}`
+      if (!hasStyleTerminator(rendered)) output.push(rendered)
       continue
     }
     if (rule.type === 4) {
@@ -246,7 +259,8 @@ export function sanitizeEmailHtml(html: string, options: SanitizeEmailHtmlOption
   template.innerHTML = String(clean)
   if (safeStyles.length) {
     const style = windowObject.document.createElement('style')
-    style.textContent = safeStyles.join('\n')
+    // 二次兜底：任何带 `</style` 的内容都不允许进入 raw-text 元素
+    style.textContent = safeStyles.filter((css) => !hasStyleTerminator(css)).join('\n')
     template.content.prepend(style)
   }
 

@@ -9,6 +9,7 @@ import {
   getUserEpoch,
   sessionExists,
 } from '../services/session.js';
+import { getSettings } from '../services/setting.js';
 import type { AppContext, AuthUser } from '../types.js';
 
 function bearer(c: { req: { header: (k: string) => string | undefined } }): string | null {
@@ -51,10 +52,41 @@ export const requireAuth: MiddlewareHandler<AppContext> = async (c, next) => {
     avatarKey: row.avatarKey,
     twoFactorEnabled: !!row.totpEnabledAt,
   };
+  await assertTwoFactorSatisfied(c, authUser);
+
   c.set('user', authUser);
   c.set('sessionId', claims.sid);
   await next();
 };
+
+/**
+ * 站点开启「要求所有账户开启两步验证」时，未绑定的账号除以下路径外一律拒绝。
+ * 放行的是「完成绑定所必需」的最小集合，否则用户会被锁在门外无法绑定。
+ */
+const TWO_FACTOR_EXEMPT = [
+  /^\/api\/auth\/2fa\//,
+  /^\/api\/auth\/logout$/,
+  /^\/api\/auth\/me$/,
+  /^\/api\/config/,
+];
+
+/**
+ * require2fa 的后端强制。此前这个设置项只下发给前端渲染一条横幅，登录链路里没有任何
+ * 分支——未绑定的账号照旧能拿 7 天 JWT，走 API 的脚本连横幅都看不到，管理员以为已强制、
+ * 实际上口令一泄就是全量沦陷。
+ */
+async function assertTwoFactorSatisfied(
+  c: { env: AppContext['Bindings']; req: { url: string } },
+  user: AuthUser,
+): Promise<void> {
+  // 绝大多数请求在这里就返回，不会多查一次 settings
+  if (user.twoFactorEnabled) return;
+  const path = new URL(c.req.url).pathname;
+  if (TWO_FACTOR_EXEMPT.some((re) => re.test(path))) return;
+  const settings = await getSettings(c.env);
+  if (!settings.security.require2fa) return;
+  throw new AppError('totp_setup_required', '本站要求开启两步验证，请先完成绑定');
+}
 
 /** 需 admin 角色（须在 requireAuth 之后） */
 export const requireAdmin: MiddlewareHandler<AppContext> = async (c, next) => {

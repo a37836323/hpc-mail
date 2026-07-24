@@ -26,6 +26,8 @@ export const ERROR_CODES = [
   'bad_credentials',
   'user_disabled',
   'totp_required',
+  /** 站点强制两步验证但该账号尚未绑定：403（不是 401——401 会让前端清 token 把人踢出登录态，反而没法去绑定） */
+  'totp_setup_required',
   'registration_closed',
   'invite_invalid',
   'address_taken',
@@ -45,6 +47,7 @@ export const ERROR_STATUS: Record<ErrorCode, number> = {
   bad_credentials: 401,
   user_disabled: 403,
   totp_required: 401,
+  totp_setup_required: 403,
   registration_closed: 403,
   invite_invalid: 400,
   address_taken: 409,

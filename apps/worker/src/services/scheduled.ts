@@ -10,7 +10,9 @@ import {
   messages,
   stars,
 } from '../db/schema.js';
+import { chunk, D1_ID_BATCH } from '../lib/d1.js';
 import type { Env } from '../types.js';
+import { dayWindow, minuteWindow, purgeCounters } from './rate-counter.js';
 import { getSettings } from './setting.js';
 import { deleteMessageObjects } from './storage.js';
 
@@ -20,6 +22,8 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const TRASH_RETENTION_DAYS = 7;
 /** 单次清理批量上限，防止单次 cron 运行过久（下一次继续清剩余） */
 const RETENTION_BATCH = 1000;
+/** 单次 cron 最多清几批审计日志（每批 D1_ID_BATCH 行） */
+const LOG_PURGE_BATCHES = 20;
 
 /** 按 where 条件删除邮件（D1 行 + R2 对象：正文/附件/原始 .eml），返回删除条数；限批量 */
 async function purgeMessagesWhere(env: Env, cond: SQL): Promise<number> {
@@ -32,9 +36,8 @@ async function purgeMessagesWhere(env: Env, cond: SQL): Promise<number> {
     .all();
   if (targets.length === 0) return 0;
   const ids = targets.map((t) => t.id);
-  await db.delete(attachmentsTable).where(inArray(attachmentsTable.messageId, ids));
-  await db.delete(stars).where(inArray(stars.messageId, ids));
-  await db.delete(messages).where(inArray(messages.id, ids));
+  // 先删 R2 再删 D1：反过来的话，删除中途中断（CPU 超时等）就留下一批没有任何行指向的
+  // R2 对象，再也定位不到；这个顺序下中断只会留下指向空对象的 D1 行，下次清理还能扫到重试
   for (const t of targets) {
     await deleteMessageObjects(env, t.id, t.bodyR2Key);
     if (t.rawR2Key) {
@@ -44,6 +47,13 @@ async function purgeMessagesWhere(env: Env, cond: SQL): Promise<number> {
         console.error('删除原始邮件对象失败:', e);
       }
     }
+  }
+  // 分批：D1 单条查询最多 100 个绑定参数。RETENTION_BATCH=1000 时整条语句会被 D1 拒绝，
+  // 而 runScheduled 的 try/catch 只打日志——结果是待清理一旦超过 100 封，清理永久卡死、一封删不掉
+  for (const batch of chunk(ids)) {
+    await db.delete(attachmentsTable).where(inArray(attachmentsTable.messageId, batch));
+    await db.delete(stars).where(inArray(stars.messageId, batch));
+    await db.delete(messages).where(inArray(messages.id, batch));
   }
   return ids.length;
 }
@@ -115,7 +125,9 @@ async function runDraftAttachmentCleanup(env: Env): Promise<void> {
       }
     }
   }
-  await db.delete(draftAttachments).where(inArray(draftAttachments.id, stale.map((s) => s.id)));
+  for (const batch of chunk(stale.map((s) => s.id))) {
+    await db.delete(draftAttachments).where(inArray(draftAttachments.id, batch));
+  }
   console.log(`草稿附件清理：删除 ${stale.length} 个过期草稿`);
 }
 
@@ -126,7 +138,18 @@ export async function runScheduled(env: Env): Promise<void> {
   const staleWindow = Math.floor(Date.now() / 60000) - 120;
 
   try {
-    await db.delete(apiRequestLogs).where(lt(apiRequestLogs.createdAt, cutoff));
+    // 限批：无界 DELETE 在积压到几十万行时会超 D1 单语句执行上限，失败又被 catch 吞掉，
+    // 越滚越大；分批删到本次上限为止，剩下的下次继续
+    for (let i = 0; i < LOG_PURGE_BATCHES; i++) {
+      const stale = await db
+        .select({ id: apiRequestLogs.id })
+        .from(apiRequestLogs)
+        .where(lt(apiRequestLogs.createdAt, cutoff))
+        .limit(D1_ID_BATCH)
+        .all();
+      if (stale.length === 0) break;
+      await db.delete(apiRequestLogs).where(inArray(apiRequestLogs.id, stale.map((r) => r.id)));
+    }
   } catch (e) {
     console.error('审计日志清理失败:', e);
   }
@@ -156,5 +179,14 @@ export async function runScheduled(env: Env): Promise<void> {
     await runDraftAttachmentCleanup(env);
   } catch (e) {
     console.error('草稿附件清理失败:', e);
+  }
+  // 计数器：外发/转发配额按天、登录失败与注册限流按分钟窗口，各自回收过期行
+  try {
+    await purgeCounters(env, 'out', dayWindow(new Date(Date.now() - 3 * DAY_MS)));
+    await purgeCounters(env, 'fwd', dayWindow(new Date(Date.now() - 3 * DAY_MS)));
+    await purgeCounters(env, 'login-fail', minuteWindow(15) - 8);
+    await purgeCounters(env, 'reg', minuteWindow(60) - 3);
+  } catch (e) {
+    console.error('计数器清理失败:', e);
   }
 }

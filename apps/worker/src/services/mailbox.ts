@@ -2,6 +2,7 @@ import type { ClaimMailboxRequest, Mailbox, MailboxAvailability, Role } from '@h
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { createDb } from '../db/client.js';
 import { attachments as attachmentsTable, mailboxes, messages, stars, users } from '../db/schema.js';
+import { chunk } from '../lib/d1.js';
 import { AppError } from '../lib/errors.js';
 import type { Env } from '../types.js';
 import { domainPerUserLimit, getDomains, isDomainPublic } from './domain.js';
@@ -122,9 +123,8 @@ async function purgeAddressMessages(env: Env, address: string): Promise<number> 
     .all();
   if (targets.length === 0) return 0;
   const ids = targets.map((t) => t.id);
-  await db.delete(attachmentsTable).where(inArray(attachmentsTable.messageId, ids));
-  await db.delete(stars).where(inArray(stars.messageId, ids));
-  await db.delete(messages).where(inArray(messages.id, ids));
+  // 先删 R2 再删 D1：反过来的话，删除中途中断（CPU 超时等）就留下一批没有任何行指向的
+  // R2 对象，再也定位不到；这个顺序下中断只会留下指向空对象的 D1 行，下次清理还能扫到重试
   for (const t of targets) {
     await deleteMessageObjects(env, t.id, t.bodyR2Key);
     if (t.rawR2Key) {
@@ -134,6 +134,12 @@ async function purgeAddressMessages(env: Env, address: string): Promise<number> 
         console.error('删除原始邮件对象失败:', e);
       }
     }
+  }
+  // 分批：D1 单条查询最多 100 个绑定参数，地址下邮件多时整条语句会被拒
+  for (const batch of chunk(ids)) {
+    await db.delete(attachmentsTable).where(inArray(attachmentsTable.messageId, batch));
+    await db.delete(stars).where(inArray(stars.messageId, batch));
+    await db.delete(messages).where(inArray(messages.id, batch));
   }
   return ids.length;
 }
@@ -171,11 +177,13 @@ export async function releaseMailbox(
   const db = createDb(env);
   const row = await db.select().from(mailboxes).where(eq(mailboxes.id, id)).get();
   if (!row || (!isAdmin && row.userId !== userId)) throw new AppError('not_found', '邮箱不存在');
-  await db.delete(mailboxes).where(eq(mailboxes.id, id));
+  // 先删邮件再释放地址：反过来的话，删除中途失败会留下「地址已回到未认领态、历史邮件还在」
+  // 的状态，下一个认领者就能读到前任的验证码/账单——正是 deleteHistory 要堵的路径
   let deletedMessages = 0;
   if (deleteHistory) {
     deletedMessages = await purgeAddressMessages(env, row.address);
   }
+  await db.delete(mailboxes).where(eq(mailboxes.id, id));
   return { deletedMessages };
 }
 

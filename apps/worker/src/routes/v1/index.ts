@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { ok } from '../../lib/http.js';
 import { apiKeyAuth } from '../../middleware/api-key-auth.js';
-import { getDomains } from '../../services/domain.js';
+import { getVisibleDomains } from '../../services/domain.js';
 import type { AppContext } from '../../types.js';
 import v1Mailboxes from './mailboxes.js';
 import v1Messages from './messages.js';
@@ -26,7 +26,12 @@ app.get('/status', apiKeyAuth, (c) => {
   return ok(c, { status: 'operational', userId: key.userId, role: key.role, scopes: key.scopes });
 });
 
-app.get('/domains', apiKeyAuth, async (c) => ok(c, { domains: await getDomains(c.env) }));
+// 按 key 的角色过滤：普通用户只该看到对其开放的域名。此前这里返回全部系统域名，
+// 既泄露管理员私有域名，AI 拿去认领还会得 403「该域名未对普通用户开放」
+app.get('/domains', apiKeyAuth, async (c) => {
+  const key = c.get('apiKey')!;
+  return ok(c, { domains: await getVisibleDomains(c.env, key.role === 'admin') });
+});
 
 /** OpenAPI 描述（公开，无需 key） */
 app.get('/openapi.json', (c) => c.json(buildOpenApiSpec(new URL(c.req.url).origin)));

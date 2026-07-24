@@ -41,7 +41,8 @@ curl -s -X POST $BASE/api/auth/login \
 
 - **成功**：HTTP 2xx，响应体 `{ "data": ... }`，你要的内容在 `data` 里。
 - **失败**：HTTP 4xx/5xx，响应体 `{ "error": { "code": "...", "message": "..." }, "requestId": "..." }`。读 `error.message` 了解原因，`code` 是机器可读错误码（见文末）。
-- **列表接口**统一游标分页：请求带 `?cursor=&limit=`，返回 `{ "data": { "items": [...], "nextCursor": "字符串或 null" } }`。`nextCursor` 非 null 时，把它作为下一页的 `cursor` 继续拉。
+- **邮件列表**用游标分页：请求带 `?cursor=&limit=`（都可省略，省略即第一页、默认每页 30 条），返回 `{ "data": { "items": [...], "nextCursor": "字符串或 null" } }`。`nextCursor` 非 null 时，把它作为下一页的 `cursor` 继续拉。
+- **注意**：`/api/mailboxes`、`/api/domains`、`/api/api-keys`、`/v1/mailboxes` 这几个**不分页**，`data` 直接就是数组，没有 `items` 字段——别去取 `data.items`。
 
 ## 任务：接收邮件 / 读取验证码（最常见）
 
@@ -114,8 +115,8 @@ curl -s -X POST $BASE/api/messages/send \
 
 - `from` 二选一：`{"localPart":"bot","domain":"hpc.email"}` 或 `{"mailboxId":5}`（用你认领的地址）。
 - 正文 `text`（纯文本）和 `html` 至少给一个；可选 `cc` / `bcc` 数组、`attachments`。
-- **附件结构**：`attachments` 是数组，每项 `{"filename":"a.pdf","contentType":"application/pdf","content":"<base64>"}`，`content` 为不含 `data:` 前缀的 base64；单次 ≤10 个、单文件 ≤50MB、合计 ≤50MB。
-- **外发大小限制**：发到本系统域名之外的邮箱（外部地址）走 Cloudflare 发信通道，单封邮件（含附件、base64 编码后）硬限 5MB。≤5MB 的附件直接内嵌发出；超出则附件自动转为 90 天有效的下载链接注入正文（收件人点链接下载），不会报错。站内 `@<系统域名>` 地址走站内存储，附件内嵌、不受此限。
+- **附件结构**：`attachments` 是数组，每项 `{"filename":"a.pdf","contentType":"application/pdf","content":"<base64>"}`，`content` 为不含 `data:` 前缀的 base64（**允许换行**，`base64 file.pdf` / Python `base64.encodebytes()` 那种 76 字符折行的多行输出可直接用）；单次 ≤10 个、单文件 ≤50MB、合计 ≤50MB。
+- **外发大小限制**：发到本系统域名之外的邮箱（外部地址）走 Cloudflare 发信通道，单封邮件（含附件、base64 编码后）阈值 4MiB —— 因为 base64 会把体积撑大约 1/3，**原始附件超过约 3MB 就会走转链接**。未超阈值的附件直接内嵌发出；超出则附件自动转为 90 天有效的下载链接注入正文（收件人点链接下载），不会报错。注意该链接指向这封「已发送」邮件的附件，发件人若把这封邮件彻底删除，链接会提前失效。站内 `@<系统域名>` 地址走站内存储，附件内嵌、不受此限。
 - 收件人若也是本站域名，即时站内投递；站外地址经 Cloudflare 发送到任意外部邮箱，个别收件人失败会在 `errorDetail` 里注明。
 - **判断是否真的发出去了**：成功响应的 `data` 是一封 outbound 邮件，看它的 `status` 与 `errorDetail`——`status:"failed"` 表示全部失败（此时 HTTP 也是错误码）；`status:"sent"` 但 `errorDetail` 非空表示**部分收件人失败**（`errorDetail` 里列出失败地址与原因），别把它当作全部送达。
 
@@ -164,6 +165,11 @@ curl -s -X POST $BASE/api/messages/star   -H "Authorization: Bearer $TOKEN" -H '
 curl -s -X POST $BASE/api/messages/delete -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"ids":[123]}'
 ```
 
+**管理员注意**：这三个批量接口默认只作用于**你自己认领的地址**下的邮件（防止漏传参数误改他人邮件）。
+管理员要作用于全站，需显式加 `"scope":"all"`，例如 `{"ids":[123],"isRead":true,"scope":"all"}`；
+不加时会正常返回 `200` 但 `changed`/`deleted` 为 `0`。`/v1` 的同名接口用法一致。
+一次最多传 500 个 id。
+
 搜索用 `GET /api/messages` 的 query 参数组合：`direction`（inbound/outbound）、`address`、`domain`、`unread=1`、`starred=1`、`q`（关键词，匹配主题/发件人/**正文**）、`cursor`/`limit`（limit 最大 100）。例：搜正文含 invoice 的未读收件 → `?direction=inbound&unread=1&q=invoice`。
 
 下载附件：邮件详情 `data.attachments[]` 每项有短期签名 `url`，`curl -s "$BASE<url>" -o file` 即可。
@@ -198,7 +204,9 @@ curl -s -X POST $BASE/api/messages/delete -H "Authorization: Bearer $TOKEN" -H '
 | `address_taken` | 409 | 认领的地址已被占用，换一个前缀 |
 | `conflict` | 409 | 资源冲突（如用户名已存在）|
 | `not_found` | 404 | 资源不存在 |
-| `rate_limited` | 429 | 频率超限，稍后重试（响应可能带 `X-RateLimit-*` / `Retry-After`）|
+| `totp_required` | 401 | 该账号开了两步验证，登录请求需带 `totp`（6 位动态码或恢复码）→ 用 `{"username":..,"password":..,"totp":"123456"}` 重试 |
+| `totp_setup_required` | 403 | 站点强制要求两步验证而该账号尚未绑定 → 需先在网页端完成绑定，脚本无法自行绕过（此时除绑定相关接口外都会返回它）|
+| `rate_limited` | 429 | 频率超限，稍后重试（响应带 `X-RateLimit-*`）|
 | `payload_too_large` | 413 | 请求体过大（如附件超限）|
 | `internal` | 500 | 服务端错误，可重试 |
 

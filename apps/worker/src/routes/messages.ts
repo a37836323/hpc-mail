@@ -61,8 +61,15 @@ app.post('/send', async (c) => {
     attachments,
     origin,
   );
-  // 发送成功后回收 token 引用的草稿附件（base64 内联的无草稿，跳过）
-  await consumeDraftAttachments(c.env, user.id, req.attachmentTokens);
+  // 发送成功后回收 token 引用的草稿附件（base64 内联的无草稿，跳过）。
+  // 不能让回收失败翻转整个请求的结果：邮件此刻已经真发出去了，这里再抛 500 会让前端提示
+  // 「发送失败，请重试」，用户一重发、token 又还在，收件人就收到两封。回收失败留给
+  // 24h 的草稿清理任务兜底
+  try {
+    await consumeDraftAttachments(c.env, user.id, req.attachmentTokens);
+  } catch (e) {
+    console.error('草稿附件回收失败（邮件已发送，留给定时清理）:', e);
+  }
   return ok(c, summary, 201);
 });
 

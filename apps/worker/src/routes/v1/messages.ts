@@ -70,7 +70,7 @@ app.post('/read', async (c) => {
   requireScope(c, 'mail.write');
   const key = c.get('apiKey')!;
   const req = await parseBody(c, markReadRequestSchema);
-  const viewer: Viewer = { userId: key.userId, role: key.role };
+  const viewer: Viewer = { userId: key.userId, role: key.role, scope: req.scope };
   const changed = await markMessages(c.env, viewer, req.ids, req.isRead);
   return ok(c, { changed });
 });
@@ -80,7 +80,7 @@ app.post('/delete', async (c) => {
   requireScope(c, 'mail.write');
   const key = c.get('apiKey')!;
   const req = await parseBody(c, deleteMessagesRequestSchema);
-  const viewer: Viewer = { userId: key.userId, role: key.role };
+  const viewer: Viewer = { userId: key.userId, role: key.role, scope: req.scope };
   const deleted = await deleteMessages(c.env, viewer, req.ids);
   return ok(c, { deleted });
 });

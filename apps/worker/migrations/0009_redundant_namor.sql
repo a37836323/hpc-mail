@@ -1,0 +1,2 @@
+CREATE INDEX `idx_messages_address_deleted_id` ON `messages` (`address`,`deleted_at`,`id`);--> statement-breakpoint
+CREATE INDEX `idx_messages_direction_read` ON `messages` (`direction`,`is_read`,`deleted_at`);

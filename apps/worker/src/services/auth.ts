@@ -10,6 +10,7 @@ import { createDb } from '../db/client.js';
 import { users } from '../db/schema.js';
 import { sha256Hex } from '../lib/crypto.js';
 import { AppError } from '../lib/errors.js';
+import { bumpCounter, minuteWindow, readCounter } from './rate-counter.js';
 import { signToken } from '../lib/jwt.js';
 import { hashPassword, verifyPassword } from '../lib/password.js';
 import { hashRecoveryCode, verifyTotp } from '../lib/totp.js';
@@ -27,65 +28,71 @@ const MAX_FAILURES = 5;
 const REGISTER_WINDOW_SECONDS = 60 * 60;
 const MAX_REGISTER_PER_WINDOW = 10;
 
-interface FailureRecord {
-  count: number;
-  blockedUntil: number;
-}
+const LOGIN_FAIL_SCOPE = 'login-fail';
+const REGISTER_SCOPE = 'reg';
 
-async function loginKeys(username: string, ip: string): Promise<string[]> {
+/**
+ * 登录失败计数的两个维度。
+ *
+ * 关键改动：用户名维度的 key 里**掺入了 IP**。原先按纯用户名锁定，攻击者对任意已知
+ * 用户名（seed 出来的 admin 用户名基本可猜）每 15 分钟发 5 次错误密码，就能让该账号
+ * 持续无法登录，受害者换 IP 也没用——这是一条定向 DoS。掺 IP 后攻击者只能锁住自己，
+ * 而防爆破仍由 IP 维度（同一 IP 对任意账号累计）兜住。
+ */
+async function loginSubjects(username: string, ip: string): Promise<string[]> {
   const [idHash, ipHash] = await Promise.all([
-    sha256Hex(`id:${username.toLowerCase()}`),
+    sha256Hex(`id:${username.toLowerCase()}|${ip.toLowerCase()}`),
     sha256Hex(`ip:${ip.toLowerCase()}`),
   ]);
-  return [`login-fail:id:${idHash}`, `login-fail:ip:${ipHash}`];
+  return [`u:${idHash}`, `i:${ipHash}`];
+}
+
+function loginWindow(): number {
+  return minuteWindow(LOGIN_WINDOW_SECONDS / 60);
 }
 
 async function assertLoginAllowed(env: Env, username: string, ip: string): Promise<void> {
-  const now = Math.floor(Date.now() / 1000);
-  const keys = await loginKeys(username, ip);
-  const records = await Promise.all(keys.map((k) => env.kv.get<FailureRecord>(k, { type: 'json' })));
-  if (records.some((r) => r && r.blockedUntil > now)) {
+  const window = loginWindow();
+  const subjects = await loginSubjects(username, ip);
+  const records = await Promise.all(
+    subjects.map((s) => readCounter(env, LOGIN_FAIL_SCOPE, s, window)),
+  );
+  if (records.some((r) => r.count >= MAX_FAILURES)) {
     throw new AppError('rate_limited', '登录尝试过于频繁，请稍后再试');
   }
 }
 
 async function recordLoginFailure(env: Env, username: string, ip: string): Promise<void> {
-  const now = Math.floor(Date.now() / 1000);
-  const keys = await loginKeys(username, ip);
+  const window = loginWindow();
+  const subjects = await loginSubjects(username, ip);
+  await Promise.all(subjects.map((s) => bumpCounter(env, LOGIN_FAIL_SCOPE, s, window)));
+}
+
+async function resetLoginFailures(env: Env, username: string, ip: string): Promise<void> {
+  const window = loginWindow();
+  const subjects = await loginSubjects(username, ip);
+  // 登录成功清零：置回 0 而不是删行（删行要额外一次查询，清理任务会按窗口回收）
   await Promise.all(
-    keys.map(async (key) => {
-      const record = (await env.kv.get<FailureRecord>(key, { type: 'json' })) ?? {
-        count: 0,
-        blockedUntil: 0,
-      };
-      record.count += 1;
-      if (record.count >= MAX_FAILURES) {
-        record.blockedUntil = now + LOGIN_WINDOW_SECONDS;
-      }
-      await env.kv.put(key, JSON.stringify(record), { expirationTtl: LOGIN_WINDOW_SECONDS });
+    subjects.map(async (s) => {
+      const cur = await readCounter(env, LOGIN_FAIL_SCOPE, s, window);
+      if (cur.count > 0) await bumpCounter(env, LOGIN_FAIL_SCOPE, s, window, -cur.count);
     }),
   );
 }
 
-async function resetLoginFailures(env: Env, username: string, ip: string): Promise<void> {
-  const keys = await loginKeys(username, ip);
-  await Promise.all(keys.map((k) => env.kv.delete(k)));
-}
-
 /** 注册按 IP 限流：每 IP 每小时上限（含失败尝试），堵开放模式灌号与邀请码暴力猜测 */
 async function assertRegisterAllowed(env: Env, ip: string): Promise<void> {
-  const key = `register:ip:${await sha256Hex(ip.toLowerCase())}`;
-  const rec = await env.kv.get<{ count: number }>(key, { type: 'json' });
-  if (rec && rec.count >= MAX_REGISTER_PER_WINDOW) {
+  const subject = await sha256Hex(ip.toLowerCase());
+  const window = minuteWindow(REGISTER_WINDOW_SECONDS / 60);
+  const cur = await readCounter(env, REGISTER_SCOPE, subject, window);
+  if (cur.count >= MAX_REGISTER_PER_WINDOW) {
     throw new AppError('rate_limited', '注册尝试过于频繁，请稍后再试');
   }
 }
 
 async function recordRegisterAttempt(env: Env, ip: string): Promise<void> {
-  const key = `register:ip:${await sha256Hex(ip.toLowerCase())}`;
-  const rec = (await env.kv.get<{ count: number }>(key, { type: 'json' })) ?? { count: 0 };
-  rec.count += 1;
-  await env.kv.put(key, JSON.stringify(rec), { expirationTtl: REGISTER_WINDOW_SECONDS });
+  const subject = await sha256Hex(ip.toLowerCase());
+  await bumpCounter(env, REGISTER_SCOPE, subject, minuteWindow(REGISTER_WINDOW_SECONDS / 60));
 }
 
 function toSessionUser(row: typeof users.$inferSelect): SessionUser {

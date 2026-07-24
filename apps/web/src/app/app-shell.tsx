@@ -298,19 +298,22 @@ export function AppShell() {
         </header>
 
         <main className="flex-1 px-4 pb-24 pt-4 md:px-6 md:pb-8">
-          {config?.require2fa && !user.twoFactorEnabled && (
-            <div className="mx-auto mb-4 flex max-w-4xl flex-wrap items-center justify-between gap-3 rounded-lg border border-caution/40 bg-caution-soft/40 px-4 py-3 text-sm">
-              <span className="text-ink">
-                管理员要求所有账户开启两步验证，请尽快在个人设置中完成绑定。
-              </span>
+          {config?.require2fa && !user.twoFactorEnabled ? (
+            // 后端此时会对除 2FA 绑定以外的接口返回 totp_setup_required(403)，
+            // 继续渲染常规页面只会满屏报错——直接换成阻塞式引导
+            <div className="mx-auto mb-4 max-w-4xl rounded-lg border border-caution/40 bg-caution-soft/40 px-4 py-4 text-sm">
+              <p className="font-medium text-ink">本站要求所有账户开启两步验证</p>
+              <p className="mt-1 text-ink-secondary">
+                完成绑定后才能继续使用邮箱功能。绑定入口在「个人设置 - 安全」。
+              </p>
               <NavLink
                 to="/profile"
-                className="shrink-0 rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-on-accent hover:bg-accent-hover"
+                className="mt-3 inline-block rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-on-accent hover:bg-accent-hover"
               >
-                去设置
+                去绑定两步验证
               </NavLink>
             </div>
-          )}
+          ) : null}
           <Suspense fallback={<PageLoader />}>
             <Outlet />
           </Suspense>

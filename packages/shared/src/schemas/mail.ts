@@ -19,31 +19,44 @@ export const emailAddressSchema = z
   .max(254)
   .regex(/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/, '邮箱地址格式非法');
 
+/**
+ * 查询参数里的空串按「没传」处理。skill.md 教的就是 `?cursor=&limit=` 这种形状，
+ * 而 z.coerce.number() 会把 '' 转成 0 再被 min(1) 拒掉——外部调用方照文档拼串直接 400。
+ * 前端不受影响（api/client.ts 本来就跳过空串），纯粹是外部调用方的陷阱。
+ */
+function emptyAsUndefined<T extends z.ZodTypeAny>(schema: T) {
+  return z.preprocess((v) => (v === '' ? undefined : v), schema.optional());
+}
+
+/** 布尔开关参数：接受 1/true/0/false，空串等同未传 */
+function boolFlag() {
+  return z.preprocess(
+    (v) => (v === '' ? undefined : v),
+    z
+      .union([z.literal('1'), z.literal('true'), z.literal('0'), z.literal('false')])
+      .transform((v) => v === '1' || v === 'true')
+      .optional(),
+  );
+}
+
 export const listMessagesQuerySchema = z.object({
   direction: z.enum(MESSAGE_DIRECTIONS).optional(),
   domain: domainSchema.optional(),
   address: emailAddressSchema.optional(),
-  unread: z
-    .union([z.literal('1'), z.literal('true'), z.literal('0'), z.literal('false')])
-    .transform((v) => v === '1' || v === 'true')
-    .optional(),
-  starred: z
-    .union([z.literal('1'), z.literal('true'), z.literal('0'), z.literal('false')])
-    .transform((v) => v === '1' || v === 'true')
-    .optional(),
+  unread: boolFlag(),
+  starred: boolFlag(),
   /** 回收站视图：只看软删除的邮件 */
-  trash: z
-    .union([z.literal('1'), z.literal('true'), z.literal('0'), z.literal('false')])
-    .transform((v) => v === '1' || v === 'true')
-    .optional(),
+  trash: boolFlag(),
   /** 搜索主题 / 发件人 / 正文 */
   q: z.string().trim().max(256).optional(),
   /** admin 专用：'mine' 只看自己认领地址（默认全站） */
   scope: z.enum(['mine', 'all']).optional(),
   /** 增量拉取：只返回 id 大于该值的邮件（配合轮询/长轮询等码，避免漏检） */
   afterId: z.coerce.number().int().positive().optional(),
-  cursor: z.string().max(128).optional(),
-  limit: z.coerce.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE),
+  cursor: emptyAsUndefined(z.string().max(128)),
+  limit: emptyAsUndefined(z.coerce.number().int().min(1).max(MAX_PAGE_SIZE)).default(
+    DEFAULT_PAGE_SIZE,
+  ),
 });
 export type ListMessagesQuery = z.infer<typeof listMessagesQuerySchema>;
 
@@ -58,8 +71,16 @@ export const attachmentFilenameSchema = z
 export const sendAttachmentSchema = z.object({
   filename: attachmentFilenameSchema,
   contentType: z.string().trim().min(3).max(128),
-  /** base64 编码内容 */
-  content: z.string().min(1).regex(/^[A-Za-z0-9+/]+={0,2}$/, '附件需为合法 base64'),
+  /**
+   * base64 编码内容。允许含空白：`base64 file.pdf`、Python `base64.encodebytes()`、
+   * `openssl base64` 产出的都是 76 字符折行的多行 base64，直接拒掉等于逼调用方
+   * 必须知道要加 `-w0`。这里统一去掉空白后再校验，解码前也会去一次。
+   */
+  content: z
+    .string()
+    .min(1)
+    .transform((v) => v.replace(/\s+/g, ''))
+    .refine((v) => /^[A-Za-z0-9+/]+={0,2}$/.test(v), '附件需为合法 base64'),
 });
 
 /** 发件人身份：mailboxId 或 localPart+domain 二选一 */
@@ -145,6 +166,15 @@ export const internalSendMailSchema = z
   })
   .superRefine((v, ctx) => {
     validateSendCommon(v, ctx);
+    // 两路附件合并计数：各自 .max(MAX_ATTACHMENTS) 只管自己，混用会放行到 2 倍
+    if (v.attachments.length + v.attachmentTokens.length > MAX_ATTACHMENTS) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `附件最多 ${MAX_ATTACHMENTS} 个`,
+        path: ['attachments'],
+      });
+    }
+    // 这里只能校验 base64 那路的体积；token 那路的真实大小要查库，由 sendMail 统一兜底
     const total = v.attachments.reduce((sum, a) => sum + Math.ceil((a.content.length * 3) / 4), 0);
     if (total > MAX_ATTACHMENT_TOTAL_BYTES) {
       ctx.addIssue({
@@ -211,14 +241,23 @@ export interface DraftAttachmentMeta {
   size: number;
 }
 
+/**
+ * 变更类操作的作用范围。admin 必须显式传 'all' 才作用全站（防漏传误改他人邮件）。
+ * /api 从 query 读，/v1 没有 query 入口，所以放进 body——此前 /v1 完全传不了 scope，
+ * 未认领任何地址的 admin key 调批量已读/删除只会拿到 200 + changed:0，没有任何信号。
+ */
+const mutationScopeSchema = z.enum(['mine', 'all']).optional();
+
 export const markReadRequestSchema = z.object({
   ids: z.array(z.number().int().positive()).min(1).max(500),
   isRead: z.boolean().default(true),
+  scope: mutationScopeSchema,
 });
 export type MarkReadRequest = z.infer<typeof markReadRequestSchema>;
 
 export const deleteMessagesRequestSchema = z.object({
   ids: z.array(z.number().int().positive()).min(1).max(500),
+  scope: mutationScopeSchema,
 });
 export type DeleteMessagesRequest = z.infer<typeof deleteMessagesRequestSchema>;
 
@@ -229,6 +268,7 @@ export type MessageIdsRequest = DeleteMessagesRequest;
 export const starMessagesRequestSchema = z.object({
   ids: z.array(z.number().int().positive()).min(1).max(500),
   starred: z.boolean().default(true),
+  scope: mutationScopeSchema,
 });
 export type StarMessagesRequest = z.infer<typeof starMessagesRequestSchema>;
 

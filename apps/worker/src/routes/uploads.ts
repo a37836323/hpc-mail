@@ -45,8 +45,9 @@ app.post('/', async (c) => {
   const key = draftKey(user.id, token);
   const stream = c.req.raw.body;
   if (!stream) throw new AppError('validation_failed', '上传内容为空');
-  await c.env.r2.put(key, stream, { httpMetadata: { contentType: mimeType } });
   const db = createDb(c.env);
+  // 先落 D1 占位行再写 R2：反过来的话，put 成功而 insert 失败就留下一个没有任何行指向的
+  // R2 对象，而清理任务是遍历 draft_attachments 表的，永远扫不到它 → 永久计费
   await db.insert(draftAttachments).values({
     userId: user.id,
     token,
@@ -54,8 +55,18 @@ app.post('/', async (c) => {
     mimeType,
     size: declaredSize,
     r2Key: key,
-    status: 'ready',
+    status: 'uploading',
   });
+  try {
+    await c.env.r2.put(key, stream, { httpMetadata: { contentType: mimeType } });
+  } catch (e) {
+    await db.delete(draftAttachments).where(eq(draftAttachments.token, token));
+    throw e;
+  }
+  await db
+    .update(draftAttachments)
+    .set({ status: 'ready' })
+    .where(eq(draftAttachments.token, token));
   return ok(c, { token, filename: filenameParsed.data, size: declaredSize, mimeType }, 201);
 });
 
@@ -65,10 +76,9 @@ app.post('/multipart', async (c) => {
   const req = await parseBody<InitMultipartUploadRequest>(c, initMultipartUploadSchema);
   const token = newDraftToken();
   const key = draftKey(user.id, token);
-  const mpu = await c.env.r2.createMultipartUpload(key, {
-    httpMetadata: { contentType: req.mimeType },
-  });
   const db = createDb(c.env);
+  // 同单片直传：先占位行再建 multipart upload，避免 create 成功、insert 失败时
+  // uploadId 丢失——R2 binding 没有 list-multipart-uploads，丢了就再也 abort 不掉
   await db.insert(draftAttachments).values({
     userId: user.id,
     token,
@@ -76,9 +86,21 @@ app.post('/multipart', async (c) => {
     mimeType: req.mimeType,
     size: req.size,
     r2Key: key,
-    uploadId: mpu.uploadId,
     status: 'uploading',
   });
+  let mpu;
+  try {
+    mpu = await c.env.r2.createMultipartUpload(key, {
+      httpMetadata: { contentType: req.mimeType },
+    });
+  } catch (e) {
+    await db.delete(draftAttachments).where(eq(draftAttachments.token, token));
+    throw e;
+  }
+  await db
+    .update(draftAttachments)
+    .set({ uploadId: mpu.uploadId })
+    .where(eq(draftAttachments.token, token));
   return ok(
     c,
     {
@@ -100,6 +122,11 @@ app.put('/multipart/:token/parts/:partNumber', async (c) => {
   const db = createDb(c.env);
   const row = await db.select().from(draftAttachments).where(eq(draftAttachments.token, token)).get();
   if (!row || row.userId !== user.id) throw new AppError('not_found', '上传会话不存在');
+  // 分片编号不能超出声明大小对应的片数：配合 complete 处的真实大小校验，
+  // 两层一起堵住「声明 1 字节、实际灌几百 GB」
+  if (partNumber > Math.ceil(row.size / MULTIPART_PART_BYTES)) {
+    throw new AppError('validation_failed', '分片编号超出声明的文件大小');
+  }
   if (row.status !== 'uploading' || !row.uploadId) {
     throw new AppError('validation_failed', '该上传会话不可续传');
   }
@@ -123,7 +150,22 @@ app.post('/multipart/:token/complete', async (c) => {
     throw new AppError('validation_failed', '该上传会话不可完成');
   }
   const parts = [...req.parts].sort((a, b) => a.partNumber - b.partNumber);
-  const obj = await c.env.r2.resumeMultipartUpload(row.r2Key, row.uploadId).complete(parts);
+  const mpu = c.env.r2.resumeMultipartUpload(row.r2Key, row.uploadId);
+  const obj = await mpu.complete(parts);
+  // 到这里才知道真实大小：init 校验的是客户端**声明**的 size，uploadPart 不限单片也不限累计，
+  // 只信声明值等于没有上限——任何登录用户都能靠 {size:1} + 猛灌分片在 R2 写出任意大的对象
+  if (obj.size > MAX_ATTACHMENT_FILE_BYTES) {
+    try {
+      await c.env.r2.delete(row.r2Key);
+    } catch (e) {
+      console.error('超限分片对象删除失败:', e);
+    }
+    await db.delete(draftAttachments).where(eq(draftAttachments.id, row.id));
+    throw new AppError(
+      'payload_too_large',
+      `单文件超过 ${Math.floor(MAX_ATTACHMENT_FILE_BYTES / 1024 / 1024)}MB 上限`,
+    );
+  }
   await db
     .update(draftAttachments)
     .set({ status: 'ready', size: obj.size, parts })

@@ -11,7 +11,13 @@ import {
 import { extractCodeByRegex } from '../src/services/code-extract.js';
 import { injectAttachmentLinks } from '../src/services/outbound.js';
 import { ipInAllowList } from '../src/lib/ip-allowlist.js';
-import { foldBase64 } from '../src/lib/mime.js';
+import {
+  encodeBodyBase64,
+  foldBase64,
+  sanitizeFilename,
+  sanitizeMimeType,
+} from '../src/lib/mime.js';
+import { chunk, D1_ID_BATCH, D1_MAX_BOUND_PARAMS, D1_PAIR_BATCH } from '../src/lib/d1.js';
 import { generateCode, generateTotpSecret, verifyTotp } from '../src/lib/totp.js';
 import { AppError } from '../src/lib/errors.js';
 
@@ -201,5 +207,58 @@ describe('injectAttachmentLinks', () => {
     expect(both.html).toContain('<p>富文本</p>');
     expect(both.html).toContain('a.pdf');
     expect(injectAttachmentLinks('文本', '', [])).toEqual({ text: '文本', html: '' });
+  });
+});
+
+describe('chunk（D1 100 绑定参数上限）', () => {
+  it('不超过 size 时原样一批；空数组返回空批次', () => {
+    expect(chunk([1, 2, 3], 90)).toEqual([[1, 2, 3]]);
+    expect(chunk([], 90)).toEqual([]);
+  });
+  it('按 size 切分，每批都不超上限', () => {
+    const ids = Array.from({ length: 500 }, (_, i) => i + 1);
+    const batches = chunk(ids, D1_ID_BATCH);
+    expect(batches.length).toBe(Math.ceil(500 / D1_ID_BATCH));
+    expect(Math.max(...batches.map((b) => b.length))).toBeLessThanOrEqual(D1_ID_BATCH);
+    expect(batches.flat()).toEqual(ids);
+  });
+  it('每批加上其他绑定值仍在 D1 上限内', () => {
+    // 批内 id 数 + 若干附加绑定值（SET 字段、scope 子查询的 ownerId 等）
+    expect(D1_ID_BATCH + 10).toBeLessThanOrEqual(D1_MAX_BOUND_PARAMS);
+    expect(D1_PAIR_BATCH * 2 + 10).toBeLessThanOrEqual(D1_MAX_BOUND_PARAMS);
+  });
+});
+
+describe('MIME 参数清洗', () => {
+  it('剥掉 CRLF 与引号，堵住附件头注入', () => {
+    const evil = 'x.png"\r\nContent-Type: text/html\r\n\r\n<h1>INJECTED</h1>';
+    const cleaned = sanitizeFilename(evil);
+    expect(cleaned).not.toMatch(/[\r\n"]/);
+    expect(cleaned.startsWith('x.png')).toBe(true);
+  });
+  it('清洗后为空时给占位名，不产生 filename=""', () => {
+    expect(sanitizeFilename('\r\n""')).toBe('attachment');
+  });
+  it('限长，避免撑出超 998 字节的头行', () => {
+    expect(sanitizeFilename('a'.repeat(5000)).length).toBeLessThanOrEqual(200);
+  });
+  it('非法 MIME 类型退回通用二进制类型', () => {
+    expect(sanitizeMimeType('image/png')).toBe('image/png');
+    expect(sanitizeMimeType('image/png"\r\nX: y')).toBe('application/octet-stream');
+    expect(sanitizeMimeType('不是类型')).toBe('application/octet-stream');
+  });
+});
+
+describe('encodeBodyBase64（正文行长）', () => {
+  it('长中文正文编码后每行都不超 76 字符', () => {
+    const body = '这是一段很长的中文正文，没有任何换行。'.repeat(200);
+    const lines = encodeBodyBase64(body).split('\r\n');
+    expect(Math.max(...lines.map((l) => l.length))).toBeLessThanOrEqual(76);
+  });
+  it('解码后与原文一致（无损）', () => {
+    const body = '你好 world\n第二行\t制表符 🎉';
+    const raw = encodeBodyBase64(body).replace(/\r\n/g, '');
+    const bytes = Uint8Array.from(atob(raw), (c) => c.charCodeAt(0));
+    expect(new TextDecoder().decode(bytes)).toBe(body);
   });
 });

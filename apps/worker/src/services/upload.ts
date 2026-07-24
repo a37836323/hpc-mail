@@ -1,9 +1,10 @@
+import { MAX_ATTACHMENT_TOTAL_BYTES } from '@hpc-mail/shared';
 import { and, eq, inArray } from 'drizzle-orm';
 import type { Env } from '../types.js';
 import { createDb } from '../db/client.js';
 import { draftAttachments } from '../db/schema.js';
 import { AppError } from '../lib/errors.js';
-import { bytesToBase64, type DecodedAttachment } from './outbound.js';
+import type { DecodedAttachment } from './outbound.js';
 
 /** 草稿附件 R2 key：draft/{userId}/{token}（发送成功后内容迁移到 att/{messageId}/，此处删除） */
 export function draftKey(userId: number, token: string): string {
@@ -34,23 +35,38 @@ export async function resolveDraftAttachments(
     .where(and(eq(draftAttachments.userId, userId), inArray(draftAttachments.token, uniq)))
     .all();
   const byToken = new Map(rows.map((r) => [r.token, r]));
-  const out: DecodedAttachment[] = [];
+
+  // 先用 D1 里的 size 列把总量拦下来，再去 R2 取内容：每个附件都要整包读进内存
+  // （50MB 二进制 + 转 base64 时的临时串就逼近 Workers 128MB isolate 上限），
+  // 等读完再校验等于没校验
+  let declaredTotal = 0;
   for (const token of uniq) {
     const row = byToken.get(token);
     if (!row) throw new AppError('validation_failed', `附件不存在或无权使用：${token}`);
     if (row.status !== 'ready') {
       throw new AppError('validation_failed', `附件尚未上传完成：${row.filename}`);
     }
+    declaredTotal += row.size;
+  }
+  if (declaredTotal > MAX_ATTACHMENT_TOTAL_BYTES) {
+    throw new AppError(
+      'payload_too_large',
+      `附件合计超过 ${Math.floor(MAX_ATTACHMENT_TOTAL_BYTES / 1024 / 1024)}MB 上限`,
+    );
+  }
+
+  const out: DecodedAttachment[] = [];
+  for (const token of uniq) {
+    const row = byToken.get(token)!;
     const obj = await env.r2.get(row.r2Key);
     if (!obj) throw new AppError('not_found', `附件内容不存在：${row.filename}`);
-    const bytes = new Uint8Array(await obj.arrayBuffer());
+    // base64 不在这里算：超限转下载链接时附件根本不进 MIME，提前算纯属多占一份内存
     out.push({
       filename: row.filename,
       mimeType: row.mimeType,
       contentId: '',
       disposition: 'attachment',
-      bytes,
-      base64: bytesToBase64(bytes),
+      bytes: new Uint8Array(await obj.arrayBuffer()),
     });
   }
   return out;

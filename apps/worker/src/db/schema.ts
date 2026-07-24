@@ -87,6 +87,11 @@ export const messages = sqliteTable(
     index('idx_messages_domain').on(t.domain, t.id),
     index('idx_messages_direction').on(t.direction, t.id),
     index('idx_messages_deleted').on(t.deletedAt),
+    // 收件箱主查询（address ∈ 认领地址 + 未删除 + 按 id 倒序）与未读角标的覆盖索引。
+    // D1 不自动跑 ANALYZE，无统计信息时优化器会挑 idx_messages_deleted 沿「未删除」这个
+    // 巨大的等值组倒扫、把地址当残余过滤，代价随全表行数线性增长（20 万行实测 62ms）
+    index('idx_messages_address_deleted_id').on(t.address, t.deletedAt, t.id),
+    index('idx_messages_direction_read').on(t.direction, t.isRead, t.deletedAt),
   ],
 );
 
@@ -216,6 +221,30 @@ export const apiRateLimits = sqliteTable(
     requestCount: integer('request_count').notNull().default(0),
   },
   (t) => [primaryKey({ columns: [t.apiKeyId, t.windowStart] })],
+);
+
+/**
+ * 通用计数器（外发配额 / 转发配额 / 注册限流 / 登录失败）。
+ *
+ * 这些原先都存在 KV 上做 get→+1→put：既非原子，KV 读还有最长 60s 边缘缓存，
+ * 并发请求会读到同一个旧值互相覆盖——防盗号群发的闸门形同虚设。改用 D1 的
+ * `ON CONFLICT DO UPDATE ... RETURNING`（与 api_rate_limits 同一模式）拿原子计数。
+ *
+ * window 的单位由调用方决定（外发配额用 yyyymmdd，登录失败用 15 分钟窗口序号）。
+ */
+export const rateCounters = sqliteTable(
+  'rate_counters',
+  {
+    /** 计数类别，如 out / fwd / reg / login-fail */
+    scope: text('scope').notNull(),
+    /** 计数主体，如 userId、IP hash、用户名 hash */
+    subject: text('subject').notNull(),
+    window: integer('window').notNull(),
+    count: integer('count').notNull().default(0),
+    /** 附加计量，如外发收件人数；不需要时恒为 0 */
+    units: integer('units').notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.scope, t.subject, t.window] })],
 );
 
 /** 管理操作审计：记录 admin 的高危动作（删户/改密/改设置/删域名/邀请/吊销 key），可追溯 */
