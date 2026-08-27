@@ -75,7 +75,14 @@ echo "$v1" | head -1 | jq -e '.requestId' >/dev/null || fail "/v1 错误体缺 r
 
 step "登出后旧 token 失效"
 curl -sS -o /dev/null -X POST "$BASE_URL/api/auth/logout" -H "Authorization: Bearer $TOKEN"
-mcode=$(curl -sS -o /dev/null -w '%{http_code}' "$BASE_URL/api/auth/me" -H "Authorization: Bearer $TOKEN")
+# Cloudflare KV 删除是最终一致的，另一边缘节点可能短暂读到旧会话；允许覆盖其传播窗口，
+# 但超过 75 秒仍未失效就视为真实回归。
+mcode=""
+for _ in $(seq 1 16); do
+  mcode=$(curl -sS -o /dev/null -w '%{http_code}' "$BASE_URL/api/auth/me" -H "Authorization: Bearer $TOKEN")
+  [ "$mcode" = "401" ] && break
+  sleep 5
+done
 TOKEN=""
 [ "$mcode" = "401" ] || fail "登出后 me 返回 $mcode（期望 401）"
 
