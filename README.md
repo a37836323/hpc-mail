@@ -299,14 +299,14 @@ git fetch upstream && git merge upstream/main && git push          # push 即触
 <details>
 <summary><b>需要自己的邮件服务器或第三方发信服务吗？</b></summary>
 
-不需要。收件走 Cloudflare Email Routing，外发走 Workers 的 `send_email` binding，可以发送到任意外部地址。整套系统没有传统 MTA。
+不需要。收件走 Cloudflare Email Routing，外发走 Workers 的 `send_email` binding。发件域名接入 Cloudflare Email Sending 后可以发送到任意外部地址；未接入时只能发送到 Cloudflare 账户中已验证的目标地址。整套系统没有传统 MTA。
 
 </details>
 
 <details>
 <summary><b>要花多少钱？</b></summary>
 
-个人用量通常落在 Cloudflare 免费额度内：Workers 免费版每天 10 万请求，D1 / KV / R2 免费层对邮箱场景都很充裕。两点注意：**Workers AI 验证码兜底默认开启**，超出免费日额度后按量计费（可在管理后台关闭，正则提取不受影响）；R2 首次开通需要绑定支付方式。域名本身的费用除外。相关限额：收件正文超过 256KB 时完整正文落 R2，附件总大小上限 25MB / 单封最多 10 个。
+收件可以使用 Cloudflare 免费额度；向任意外部地址发信需要 Workers Paid（最低 $5/月）并为发件域名接入 Email Sending。当前套餐每月包含 3,000 封，超出后 $0.35/1,000 封；发给账户中已验证目标地址的邮件不计费。D1 / KV / R2 免费层对个人邮箱场景通常很充裕。另有两点注意：**Workers AI 验证码兜底默认开启**，超出免费日额度后按量计费（可在管理后台关闭，正则提取不受影响）；R2 首次开通需要绑定支付方式。域名本身的费用除外。相关限额：收件正文超过 256KB 时完整正文落 R2，附件总大小上限 25MB / 单封最多 10 个；Cloudflare Email Sending 单封外发大小上限为 5MiB，系统会把超限附件转成下载链接。
 
 </details>
 
@@ -320,7 +320,7 @@ git fetch upstream && git merge upstream/main && git push          # push 即触
 <details>
 <summary><b>发不出邮件怎么排查？</b></summary>
 
-外发经 `send_email` binding，要求**发件地址所在域名已开启 Email Routing**；再检查发件域名在后台域名列表中、外发配额未用尽（管理后台可调）。
+外发经 `send_email` binding。向任意外部地址发送时，先检查：① Cloudflare 账户是 Workers Paid；② 发件域名已在 Email Service → Email Sending 中启用且 DNS 显示“已配置”；③ Worker 的 `send_email` binding 为 unrestricted；④ 发件域名已在后台域名列表中、外发配额未用尽（管理后台可调）。如果只开启 Email Routing 而没有接入 Email Sending，只能发给 Cloudflare 账户中已验证的目标地址。
 
 </details>
 

@@ -7,7 +7,7 @@ export interface Env {
   r2: R2Bucket;
   ai: Ai;
   assets: Fetcher;
-  /** send_email binding：Cloudflare 原生发信（仅已验证 destination） */
+  /** send_email binding：域名接入 Email Sending 后可发任意外部地址 */
   email: SendEmail;
   /** [vars] ai_model：验证码兜底模型 */
   ai_model: string;
