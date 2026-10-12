@@ -17,6 +17,10 @@ on:
         type: boolean
         default: false
         description: '危险：清空线上 D1 全部表与 KV 后从零迁移（仅首次上线）'
+      reset_admin_password:
+        type: boolean
+        default: false
+        description: '将指定管理员密码重置为 ADMIN_PASSWORD Secret，并注销其旧会话'
 
 concurrency:
   group: hpc-mail-production
@@ -175,7 +179,13 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           ADMIN_USERNAME: ${{ vars.ADMIN_USERNAME }}
           ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
-        run: node apps/worker/scripts/seed-admin.mjs
+          RESET_ADMIN_PASSWORD: ${{ github.event_name == 'workflow_dispatch' && inputs.reset_admin_password && 'true' || 'false' }}
+        run: |
+          if [ "$RESET_ADMIN_PASSWORD" = 'true' ]; then
+            node apps/worker/scripts/seed-admin.mjs --reset
+          else
+            node apps/worker/scripts/seed-admin.mjs
+          fi
 
       - name: 等待新版本全球生效
         env:

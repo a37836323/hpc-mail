@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // 幂等 admin 引导：库内无 admin 时插入（CI 部署后执行；本地传 --local）
+// 显式传 --reset 时，覆盖指定 admin 的密码并递增用户代，使旧会话失效。
 // 哈希格式与 worker src/lib/password.ts 完全一致：pbkdf2-sha256$100000$<salt>$<hash>（base64url）
 import { execFileSync } from 'node:child_process';
 import { webcrypto as crypto } from 'node:crypto';
@@ -39,15 +40,46 @@ const bits = await crypto.subtle.deriveBits(
 );
 const hash = `pbkdf2-sha256$${ITERATIONS}$${toB64url(salt)}$${toB64url(new Uint8Array(bits))}`;
 
-const sql = `INSERT INTO users (username, password_hash, role, status)
+const seedSql = `INSERT INTO users (username, password_hash, role, status)
 SELECT '${username}', '${hash}', 'admin', 'active'
 WHERE NOT EXISTS (SELECT 1 FROM users WHERE role = 'admin');`;
 
 const target = process.argv.includes('--local') ? '--local' : '--remote';
-execFileSync(
-  'npx',
-  // 'db' 是 wrangler.toml 里的 D1 binding 名——按 binding 解析对一键部署（资源名可能不同）与 CI 都成立
-  ['wrangler', 'd1', 'execute', 'db', target, '--command', sql],
-  { stdio: 'inherit', cwd: new URL('..', import.meta.url).pathname },
+const workerDir = new URL('..', import.meta.url).pathname;
+const wrangler = (...args) =>
+  execFileSync('npx', ['wrangler', ...args], {
+    cwd: workerDir,
+    encoding: 'utf8',
+  });
+
+// 'db'/'kv' 是 wrangler.toml 里的 binding 名，兼容一键部署自动创建的资源和 CI 注入的资源。
+wrangler('d1', 'execute', 'db', target, '--command', seedSql);
+
+if (!process.argv.includes('--reset')) {
+  console.log(`admin 引导完成（已存在则跳过）：${username}`);
+  process.exit(0);
+}
+
+const resetSql = `UPDATE users
+SET password_hash = '${hash}', status = 'active'
+WHERE username = '${username}' AND role = 'admin';
+SELECT id FROM users WHERE username = '${username}' AND role = 'admin' LIMIT 1;`;
+const resetResult = JSON.parse(
+  wrangler('d1', 'execute', 'db', target, '--json', '--command', resetSql),
 );
-console.log(`admin 引导完成（已存在则跳过）：${username}`);
+const statements = Array.isArray(resetResult) ? resetResult : [];
+const userId = statements.flatMap((statement) => statement.results ?? []).at(-1)?.id;
+if (!Number.isInteger(userId)) {
+  console.error(`未找到要重置的 admin：${username}`);
+  process.exit(1);
+}
+
+const epochKey = `uepoch:${userId}`;
+let currentEpoch = 0;
+try {
+  currentEpoch = Number(wrangler('kv', 'key', 'get', epochKey, '--binding', 'kv', target, '--text').trim()) || 0;
+} catch {
+  // KV 中没有该 key 时用户代默认为 0。
+}
+wrangler('kv', 'key', 'put', epochKey, String(currentEpoch + 1), '--binding', 'kv', target);
+console.log(`admin 密码已重置，旧会话已失效：${username}`);
